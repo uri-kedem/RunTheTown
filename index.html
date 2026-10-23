@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>RunTheTown</title>
+    <link rel="icon" type="image/png" href="img/favicon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
+    <link rel="apple-touch-icon" href="img/icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RunTheTown" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body data-view="home">
+    <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
+         tour.png / tour-white.png (the runner before the cathedral: Sightseeing tour), favicon.png. -->
+
+    <!-- Side toolbar: a rail on desktop, a drawer on phones -->
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+    <nav class="rail" id="rail" aria-label="Main menu">
+      <button type="button" class="rail-logo" data-nav="home" aria-label="RunTheTown home">
+        <img class="logo" src="img/logo-white.png" alt="RunTheTown" />
+      </button>
+      <button type="button" class="rail-item" data-nav="run">
+        <img class="ic mark" src="img/mark-white.png" alt="" /><span>Running mode</span>
+      </button>
+      <button type="button" class="rail-item" data-nav="tour">
+        <img class="ic mark tour" src="img/tour-white.png" alt="" /><span>Sightseeing tour</span>
+      </button>
+      <button type="button" class="rail-item" data-nav="install" id="railInstall">
+        <svg viewBox="0 0 24 24" class="ic"><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M12 7v7m-3-3 3 3 3-3M10 18h4" /></svg><span>Install on your phone</span>
+      </button>
+      <button type="button" class="rail-item" data-nav="terms">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></svg><span>Terms &amp; policy</span>
+      </button>
+      <div class="rail-foot">Map data &copy; OpenStreetMap</div>
+    </nav>
+
+    <!-- Cover page -->
+    <section class="home" id="home">
+      <div class="home-bar">
+        <img class="logo" src="img/logo.png" alt="RunTheTown" />
+        <button type="button" class="menu-btn" id="homeMenu" aria-label="Menu"><span></span><span></span><span></span></button>
+      </div>
+      <svg class="home-art" viewBox="0 0 800 600" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7f3" /><stop offset="1" stop-color="#e8f3ff" /></linearGradient>
+        </defs>
+        <rect width="800" height="600" fill="url(#sky)" />
+        <g fill="none" stroke="#dbeafe" stroke-width="2">
+          <path d="M-20 140H820M-20 260H820M-20 380H820M-20 500H820M120-20V620M260-20V620M400-20V620M540-20V620M680-20V620" />
+        </g>
+        <path d="M60 520 Q60 400 180 400 T300 300 T440 260 T560 160 T700 120" fill="none" stroke="#bfdbfe" stroke-width="26" stroke-linecap="round" />
+        <path d="M60 520 Q60 400 180 400 T300 300 T440 260 T560 160 T700 120" fill="none" stroke="var(--brand)" stroke-width="10" stroke-linecap="round" stroke-dasharray="1 0" />
+        <g fill="#fff" stroke="var(--brand)" stroke-width="5"><circle cx="180" cy="400" r="9" /><circle cx="300" cy="300" r="9" /><circle cx="440" cy="260" r="9" /><circle cx="560" cy="160" r="9" /></g>
+        <circle cx="60" cy="520" r="16" fill="var(--brand)" stroke="#fff" stroke-width="6" />
+        <circle cx="700" cy="120" r="14" fill="#0f172a" stroke="#fff" stroke-width="6" />
+      </svg>
+      <div class="hero">
+        <img class="hero-logo" src="img/logo.png" alt="" aria-hidden="true" />
+        <div class="eyebrow">Routes for runners in a new city</div>
+        <h1>Land in a new town.<br />Run it like a local.</h1>
+        <p class="lede">Tell us your distance and what you like, and RunTheTown draws loops on promenades, parks and waterfronts, finds the athletics tracks nearby, and reads the turns into your earphones.</p>
+        <div class="modes">
+          <button type="button" class="mode-card" data-nav="run">
+            <span class="mode-ic run"><img src="img/mark-white.png" alt="" /></span>
+            <span class="mode-title">Running mode</span>
+            <span class="mode-text">Loops for your distance on smooth, car-free paths, with as few turns and traffic lights as possible, and voice guidance while you run.</span>
+            <span class="mode-cta">Start a run</span>
+          </button>
+          <button type="button" class="mode-card" data-nav="tour">
+            <span class="mode-ic tour"><img src="img/tour-white.png" alt="" /></span>
+            <span class="mode-title">Sightseeing tour</span>
+            <span class="mode-text">See the city while you run: museums, monuments, the old town and the viewpoints, with each landmark called out as you pass it.</span>
+            <span class="mode-cta">Plan a tour</span>
+          </button>
+        </div>
+        <ul class="perks">
+          <li>No sign-up · <button type="button" class="link" data-nav="install">add it to your home screen</button></li>
+          <li>Works in any city, in English</li>
+          <li>Athletics tracks and big parks marked around you</li>
+        </ul>
+        <div class="home-foot"><button type="button" class="link" data-nav="terms">Terms &amp; policy</button> · Map data &copy; OpenStreetMap contributors</div>
+      </div>
+    </section>
+
+    <!-- Terms & policy -->
+    <section class="page" id="terms" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="termsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title">Terms &amp; policy</div>
+      </div>
+      <div class="page-body">
+        <p class="page-note">RunTheTown is an early version (an MVP) made for testing. This page explains what it does with your data and what you agree to by using it. Have it reviewed by a lawyer before a public launch.</p>
+        <h2>Run at your own risk</h2>
+        <p>Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.</p>
+        <h2>Your location</h2>
+        <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never sent to a RunTheTown server (there is none) and never stored by us. To fetch map data and look up places, the app sends coordinates to the public services below; they receive the area you are looking at, not your identity.</p>
+        <h2>No account, no tracking</h2>
+        <p>There is no sign-up and no analytics. Downloaded map pieces, elevation data and place details are cached in your browser for up to 14 days so a city loads faster the next time; clearing the site data removes them.</p>
+        <h2>Services used</h2>
+        <ul>
+          <li><b>OpenFreeMap</b> for the street and park data, <b>Esri</b> for the background map pictures.</li>
+          <li><b>Overpass API</b> for traffic lights and crossings (best effort).</li>
+          <li><b>Open-Meteo</b> for elevation.</li>
+          <li><b>Photon (komoot)</b> and <b>Nominatim</b> for address search and for finding tracks, stadiums and parks.</li>
+          <li><b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article.</li>
+        </ul>
+        <p>Each of these has its own terms and privacy policy. Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database License.</p>
+        <h2>Fair use</h2>
+        <p>These are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.</p>
+        <h2>Changes</h2>
+        <p>This page may change as the app grows. Continued use after a change means you accept the new version.</p>
+      </div>
+    </section>
+
+    <!-- Install on your phone (PWA) -->
+    <section class="page" id="install" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="installBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title">Install on your phone</div>
+      </div>
+      <div class="page-body">
+        <p class="page-note" id="installInstalled" hidden>You are running the installed app. Nothing more to do.</p>
+        <p>RunTheTown installs straight from the browser, with no app store: it gets its own icon on your home screen, opens full screen, keeps the map pieces you downloaded, and voice guidance and GPS work as in any app.</p>
+        <div id="installIos">
+          <h2>iPhone and iPad (Safari)</h2>
+          <ol class="steps">
+            <li>Open this page in <b>Safari</b> (other browsers on iPhone cannot install apps).</li>
+            <li>Tap the <b>Share</b> button <svg class="inline-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-8 4-4 4 4" /><path d="M5 11v9h14v-9" /></svg> at the bottom of the screen.</li>
+            <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+          </ol>
+          <p class="page-note">Keep the screen on while you run: an installed web app on iPhone stops receiving GPS when the phone is locked. The app asks the phone to keep the screen awake during a run.</p>
+        </div>
+        <div id="installAndroid">
+          <h2>Android (Chrome)</h2>
+          <p><button type="button" class="primary" id="installBtn" hidden>Install RunTheTown</button></p>
+          <ol class="steps">
+            <li>Tap the <b>⋮</b> menu at the top right of Chrome.</li>
+            <li>Tap <b>Add to Home screen</b> (or <b>Install app</b>), then <b>Install</b>.</li>
+          </ol>
+        </div>
+        <h2>On a computer</h2>
+        <p>Chrome and Edge show an install icon at the right end of the address bar; the app then opens in its own window.</p>
+      </div>
+    </section>
+
+    <div id="map" aria-label="Map"></div>
+
+    <header class="topbar">
+      <button type="button" class="brand" id="appMenu" aria-label="Menu">
+        <img class="logo" src="img/logo-white.png" alt="RunTheTown" />
+        <span class="mode-badge" id="modeBadge">Running mode</span>
+        <span class="burger"><span></span><span></span><span></span></span>
+      </button>
+      <form class="search" id="searchForm" autocomplete="off">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input id="searchInput" type="text" placeholder="Search hotel, address or place" aria-label="Search for a start point"
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" spellcheck="false" />
+        <button type="button" id="clearBtn" class="clear-btn" aria-label="Clear search" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+        </button>
+        <button type="button" id="locateBtn" class="icon-btn" title="Use my location" aria-label="Use my location">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7.5" /></svg>
+        </button>
+      </form>
+      <ul class="search-results" id="searchResults" role="listbox" hidden></ul>
+    </header>
+
+    <section class="sheet" id="sheet">
+      <div class="handle"></div>
+
+      <!-- Preferences -->
+      <div id="prefsView">
+        <div class="start-line" id="startLine">Tap the map or search to set your start point</div>
+        <div class="spots-hint" id="spotsHint" hidden></div>
+        <div class="places" id="spotsPrefs" hidden></div>
+
+        <div class="field">
+          <div class="field-head"><label for="distanceInput">Distance</label><span class="hint">1–42.2 km</span></div>
+          <div class="distance-value" id="distanceBox">
+            <input id="distanceInput" type="text" inputmode="decimal" autocomplete="off" value="5" placeholder="10"
+              aria-label="Distance in kilometers" aria-describedby="distanceMsg" />
+            <span>km</span>
+          </div>
+          <div class="distance-msg" id="distanceMsg" aria-live="polite"></div>
+        </div>
+
+        <!-- Running mode: the landscape options. Sightseeing tour: only the tour itself, as the mode. -->
+        <div class="field" id="landscapeField">
+          <div class="field-head"><label id="landscapeLabel">Landscape</label><span class="hint" id="landscapeHint">pick any</span></div>
+          <div class="chips" id="landscape">
+            <button type="button" data-pref="green" aria-pressed="false"><i class="dot green"></i>Parks &amp; green</button>
+            <button type="button" data-pref="water" aria-pressed="false"><i class="dot water"></i>Waterfront</button>
+            <button type="button" data-pref="quiet" aria-pressed="false"><i class="dot quiet"></i>Quiet streets</button>
+            <button type="button" data-pref="sights" aria-pressed="false"><i class="dot sights"></i>Sightseeing</button>
+          </div>
+          <div class="tour-note" id="tourNote" hidden>Routes pass the city&rsquo;s monumental landmarks, named on the map and announced on the run.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><label>Terrain</label></div>
+          <div class="segmented" id="terrain" role="radiogroup">
+            <button type="button" data-terrain="flat" role="radio" aria-checked="false">Flat</button>
+            <button type="button" data-terrain="any" role="radio" aria-checked="true" class="on">Any</button>
+            <button type="button" data-terrain="hilly" role="radio" aria-checked="false">Hilly</button>
+          </div>
+        </div>
+
+        <button type="button" class="primary" id="goBtn" disabled>Find my routes</button>
+      </div>
+
+      <!-- Results -->
+      <div id="resultsView" hidden>
+        <div class="results-head">
+          <button type="button" class="back" id="backBtn" aria-label="Back to preferences">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>
+          </button>
+          <div>
+            <div class="results-title">Your routes</div>
+            <div class="results-sub" id="resultsSub"></div>
+          </div>
+        </div>
+        <div class="cards" id="cards"></div>
+        <div class="places" id="places" hidden></div>
+        <div class="run-actions">
+          <button type="button" class="primary" id="startRunBtn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>Start run with voice guidance
+          </button>
+          <button type="button" class="ghost" id="demoRunBtn">Try a demo run (simulated, no GPS needed)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live navigation -->
+    <div class="nav" id="navView" hidden>
+      <div class="nav-top">
+        <div class="nav-banner" id="navBanner">
+          <div class="nav-arrow" id="navArrow"></div>
+          <div class="nav-main">
+            <div class="nav-dist" id="navDist"></div>
+            <div class="nav-text" id="navText">Starting…</div>
+            <div class="nav-street" id="navStreet"></div>
+          </div>
+          <button type="button" class="nav-demo" id="navDemo" hidden title="Tap to change the demo speed">DEMO ×6</button>
+        </div>
+        <div class="nav-alert" id="navAlert" hidden></div>
+        <div class="nav-caption" id="navCaption" aria-live="polite"></div>
+      </div>
+      <button type="button" class="recenter" id="recenterBtn" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 21l8-4 8 4z" /></svg>Re-center
+      </button>
+      <div class="nav-bottom">
+        <div class="nav-progress"><i id="navProgress"></i></div>
+        <div class="nav-stats">
+          <div><b id="statTime">0:00</b><span>time</span></div>
+          <div><b id="statDist">0.00</b><span>km run</span></div>
+          <div><b id="statPace">–:––</b><span>min/km</span></div>
+          <div><b id="statLeft">0.0</b><span>km to go</span></div>
+        </div>
+        <div class="nav-buttons">
+          <button type="button" id="muteBtn" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" /><path class="on" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /><path class="off" d="m16 9 6 6M22 9l-6 6" /></svg><span>Mute</span>
+          </button>
+          <button type="button" id="pauseBtn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path class="on" d="M8 5v14M16 5v14" /><path class="off" d="M7 4v16l13-8z" /></svg><span>Pause</span>
+          </button>
+          <button type="button" id="endBtn" class="danger"><span>End run</span></button>
+        </div>
+        <div class="nav-note" id="navNote"></div>
+      </div>
+      <div class="nav-finish" id="navFinish" hidden>
+        <div class="finish-card">
+          <div class="finish-title">Run complete</div>
+          <div class="finish-stats" id="finishStats"></div>
+          <button type="button" class="primary" id="finishDone">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Laps: how far? -->
+    <div class="ask" id="lapsAsk" hidden>
+      <div class="ask-card">
+        <div class="ask-title" id="lapsAskTitle">Laps</div>
+        <div class="ask-sub">How many kilometers do you want to run?</div>
+        <div class="distance-value" id="lapsBox">
+          <input id="lapsKm" type="text" inputmode="decimal" autocomplete="off" placeholder="–" aria-label="Distance in kilometers" />
+          <span>km</span>
+        </div>
+        <div class="chips quick" id="lapsQuick">
+          <button type="button" data-km="3">3 km</button>
+          <button type="button" data-km="5">5 km</button>
+          <button type="button" data-km="8">8 km</button>
+          <button type="button" data-km="10">10 km</button>
+        </div>
+        <div class="distance-msg" id="lapsMsg" aria-live="polite"></div>
+        <div class="ask-actions">
+          <button type="button" class="ghost" id="lapsCancel">Cancel</button>
+          <button type="button" class="primary" id="lapsGo" disabled>Plan laps</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status" hidden>
+      <div class="spinner"></div>
+      <span id="statusText">Working…</span>
+    </div>
+    <div class="toast" id="toast" hidden></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/bundle.js?v=01fae27d"></script>
+  </body>
+</html>
