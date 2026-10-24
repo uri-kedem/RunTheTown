@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = '4bd7cf35';
+const CACHE_VERSION = '06bc73a3';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -12,24 +12,24 @@ const SHELL = [
   './css/style.css',
   './js/bundle.js',
   './manifest.webmanifest',
-  './img/logo.png',
-  './img/logo-white.png',
-  './img/mark.png',
-  './img/mark-white.png',
-  './img/tour.png',
-  './img/tour-white.png',
-  './img/mark-orange.png',
-  './img/tour-orange.png',
-  './img/mark-outline.png',
-  './img/tour-outline.png',
-  './img/install-outline.png',
-  './img/terms-outline.png',
-  './img/install-icon.png',
-  './img/terms-icon.png',
-  './img/favicon.png',
-  './img/icon-180.png',
-  './img/icon-192.png',
-  './img/icon-512.png',
+  './img/logo.5e459302.png',
+  './img/logo-white.0ef39459.png',
+  './img/mark.2e286dc3.png',
+  './img/mark-white.9eeeb348.png',
+  './img/tour.5ad49c6a.png',
+  './img/tour-white.0727a68d.png',
+  './img/mark-orange.ae309202.png',
+  './img/tour-orange.a8aa45ff.png',
+  './img/mark-outline.ea7ffd72.png',
+  './img/tour-outline.5fa6603a.png',
+  './img/install-outline.2d915cdb.png',
+  './img/terms-outline.3b878224.png',
+  './img/install-icon.af1a2869.png',
+  './img/terms-icon.d8a112dd.png',
+  './img/favicon.ca38a771.png',
+  './img/icon-180.920e3c57.png',
+  './img/icon-192.9505f1e4.png',
+  './img/icon-512.2861d845.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
 ];
