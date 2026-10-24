@@ -20,9 +20,11 @@ import hashlib
 idx = root / 'index.html'
 sw = root / 'sw.js'
 css = (root / 'css' / 'style.css').read_text()
-plain_html = re.sub(r'(js/bundle\.js|css/style\.css)\?v=[0-9a-f]+', r'\1', idx.read_text())
+plain_html = re.sub(r'((?:js/bundle\.js|css/style\.css|img/[\w-]+\.png))\?v=[0-9a-f]+', r'\1', idx.read_text())
 plain_sw = re.sub(r"const CACHE_VERSION = '[^']*';", "const CACHE_VERSION = '';", sw.read_text())
-h = hashlib.sha1(('v2' + out + css + plain_html + plain_sw).encode()).hexdigest()[:8]  # 'v2': stylesheet is cache-busted too
-idx.write_text(plain_html.replace('js/bundle.js"', f'js/bundle.js?v={h}"').replace('css/style.css"', f'css/style.css?v={h}"'))
+imgs = b''.join(p.read_bytes() for p in sorted((root / 'img').glob('*.png')))  # a changed icon is a new build too
+h = hashlib.sha1(('v3' + out + css + plain_html + plain_sw).encode() + imgs).hexdigest()[:8]
+# every asset the page names gets the build stamp, so a changed icon shows on the first load
+idx.write_text(re.sub(r'(src|href)="((?:js/bundle\.js|css/style\.css|img/[\w-]+\.png))"', lambda m: f'{m.group(1)}="{m.group(2)}?v={h}"', plain_html))
 sw.write_text(plain_sw.replace("const CACHE_VERSION = '';", f"const CACHE_VERSION = '{h}';"))
 print('build', h)
