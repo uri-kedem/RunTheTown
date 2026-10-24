@@ -360,8 +360,7 @@ body[data-view='app'] .home { display: none; }
 .rail-item:hover, .rail-item.on { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .rail-item.on { box-shadow: inset 3px 0 0 var(--brand); }
 .rail-item .ic { width: 24px; height: 24px; flex: none; color: var(--brand); stroke-width: 2; }
-.rail-item .ic.mark { width: 30px; height: 30px; margin: -3px; object-fit: contain; } /* the R from the logo, a touch larger than the line icons */
-.rail-item .ic.mark.tour { width: 40px; height: 40px; margin: -8px -8px -8px -8px; } /* the cathedral scene needs more room to read */
+.rail-item .ic.mark { width: 36px; height: 36px; margin: -6px 0; object-fit: contain; flex: 0 0 36px; } /* all menu marks share one box; the artwork is left-aligned inside it */
 .rail-foot { margin-top: auto; font-size: 11px; color: #64748b; padding: 0 10px; }
 .drawer-backdrop { position: fixed; inset: 0; z-index: 1390; background: rgba(15, 23, 42, 0.5); }
 .menu-btn { border: 0; background: var(--ink); width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; gap: 4px; padding: 0; cursor: pointer; }
@@ -430,7 +429,7 @@ body[data-view='app'] .home { display: none; }
 }
 
 /* Menu icons drawn by the user: phone and document, brand orange on transparency */
-.rail-item .ic.mark.install, .rail-item .ic.mark.terms { width: 34px; height: 34px; margin: -2px 0; }
+
 
 /* Install page */
 .steps { padding-left: 22px; margin: 0 0 12px; }
