@@ -5125,7 +5125,11 @@ function setMode(mode) {
   $('tourNote').hidden = !tour;
   $('modeBadge').textContent = tour ? 'Sightseeing tour' : 'Running mode';
   $('goBtn').textContent = tour ? 'Find my sightseeing routes' : 'Find my routes';
-  for (const b of rail.querySelectorAll('.rail-item')) b.classList.toggle('on', b.dataset.nav === mode);
+  highlightNav(mode);
+}
+// The menu marks whatever is on screen: a mode, a page, or nothing on the cover.
+function highlightNav(target) {
+  for (const b of rail.querySelectorAll('.rail-item')) b.classList.toggle('on', b.dataset.nav === target);
 }
 // Installed-app support (PWA): the service worker keeps the app shell on the phone;
 // the "Install on your phone" page shows the steps for this device, or the real
@@ -5165,11 +5169,13 @@ function navigate(target) {
     $('terms').hidden = true;
     $('install').hidden = true;
     setView('home');
+    highlightNav(null);
     return;
   }
   if (target === 'terms' || target === 'install') {
     for (const id of ['terms', 'install']) $(id).hidden = id !== target;
     $(target).scrollTop = 0;
+    highlightNav(target);
     return;
   }
   $('terms').hidden = true;
@@ -5185,11 +5191,12 @@ document.addEventListener('click', (e) => {
 $('homeMenu').addEventListener('click', () => openDrawer(true));
 $('appMenu').addEventListener('click', () => openDrawer(true));
 $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
-$('termsBack').addEventListener('click', () => ($('terms').hidden = true));
-$('installBack').addEventListener('click', () => ($('install').hidden = true));
+$('termsBack').addEventListener('click', () => { $('terms').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+$('installBack').addEventListener('click', () => { $('install').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 installSetup();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); } });
 setMode('run');
+highlightNav(null); // the cover page is open: no menu item is "current" yet
 
 // Expose for testing/debugging.
 window.__rtt = { state, engine, map, setStart, nav, voice, navigate };
