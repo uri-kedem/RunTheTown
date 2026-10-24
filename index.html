@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
-    <link rel="icon" type="image/png" href="img/favicon.png?v=9838b7d9" />
+    <link rel="icon" type="image/png" href="img/favicon.png?v=4bd7cf35" />
     <link rel="manifest" href="manifest.webmanifest" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
-    <link rel="apple-touch-icon" href="img/icon-180.png?v=9838b7d9" />
+    <link rel="apple-touch-icon" href="img/icon-180.png?v=4bd7cf35" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=9838b7d9" />
+    <link rel="stylesheet" href="css/style.css?v=4bd7cf35" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -26,19 +26,19 @@
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
     <nav class="rail" id="rail" aria-label="Main menu">
       <button type="button" class="rail-logo" data-nav="home" aria-label="RunTheTown home">
-        <img class="logo" src="img/logo-white.png?v=9838b7d9" alt="RunTheTown" />
+        <img class="logo" src="img/logo-white.png?v=4bd7cf35" alt="RunTheTown" />
       </button>
       <button type="button" class="rail-item" data-nav="run">
-        <img class="ic mark" src="img/mark-outline.png?v=9838b7d9" alt="" /><span>Running mode</span>
+        <img class="ic mark" src="img/mark-outline.png?v=4bd7cf35" alt="" /><span>Running mode</span>
       </button>
       <button type="button" class="rail-item" data-nav="tour">
-        <img class="ic mark tour" src="img/tour-outline.png?v=9838b7d9" alt="" /><span>Sightseeing tour</span>
+        <img class="ic mark tour" src="img/tour-outline.png?v=4bd7cf35" alt="" /><span>Sightseeing tour</span>
       </button>
       <button type="button" class="rail-item" data-nav="install" id="railInstall">
-        <img class="ic mark install" src="img/install-outline.png?v=9838b7d9" alt="" /><span>Install on your phone</span>
+        <img class="ic mark install" src="img/install-outline.png?v=4bd7cf35" alt="" /><span>Install on your phone</span>
       </button>
       <button type="button" class="rail-item" data-nav="terms">
-        <img class="ic mark terms" src="img/terms-outline.png?v=9838b7d9" alt="" /><span>Terms &amp; policy</span>
+        <img class="ic mark terms" src="img/terms-outline.png?v=4bd7cf35" alt="" /><span>Terms &amp; policy</span>
       </button>
       <div class="rail-foot">Map data &copy; OpenStreetMap</div>
     </nav>
@@ -46,7 +46,7 @@
     <!-- Cover page -->
     <section class="home" id="home">
       <div class="home-bar">
-        <img class="logo" src="img/logo.png?v=9838b7d9" alt="RunTheTown" />
+        <img class="logo" src="img/logo.png?v=4bd7cf35" alt="RunTheTown" />
         <button type="button" class="menu-btn" id="homeMenu" aria-label="Menu"><span></span><span></span><span></span></button>
       </div>
       <svg class="home-art" viewBox="0 0 800 600" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
@@ -64,19 +64,19 @@
         <circle cx="700" cy="120" r="14" fill="#0f172a" stroke="#fff" stroke-width="6" />
       </svg>
       <div class="hero">
-        <img class="hero-logo" src="img/logo.png?v=9838b7d9" alt="" aria-hidden="true" />
+        <img class="hero-logo" src="img/logo.png?v=4bd7cf35" alt="" aria-hidden="true" />
         <div class="eyebrow">Routes for runners in a new city</div>
         <h1>Land in a new town.<br />Run it like a local.</h1>
         <p class="lede">Tell us your distance and what you like, and RunTheTown draws loops on promenades, parks and waterfronts, finds the athletics tracks nearby, and reads the turns into your earphones.</p>
         <div class="modes">
           <button type="button" class="mode-card" data-nav="run">
-            <span class="mode-ic run"><img src="img/mark-orange.png?v=9838b7d9" alt="" /></span>
+            <span class="mode-ic run"><img src="img/mark-orange.png?v=4bd7cf35" alt="" /></span>
             <span class="mode-title">Running mode</span>
             <span class="mode-text">Loops for your distance on smooth, car-free paths, with as few turns and traffic lights as possible, and voice guidance while you run.</span>
             <span class="mode-cta">Start a run</span>
           </button>
           <button type="button" class="mode-card" data-nav="tour">
-            <span class="mode-ic tour"><img src="img/tour-orange.png?v=9838b7d9" alt="" /></span>
+            <span class="mode-ic tour"><img src="img/tour-orange.png?v=4bd7cf35" alt="" /></span>
             <span class="mode-title">Sightseeing tour</span>
             <span class="mode-text">See the city while you run: museums, monuments, the old town and the viewpoints, with each landmark called out as you pass it.</span>
             <span class="mode-cta">Plan a tour</span>
@@ -156,7 +156,7 @@
 
     <header class="topbar">
       <button type="button" class="brand" id="appMenu" aria-label="Menu">
-        <img class="logo" src="img/logo-white.png?v=9838b7d9" alt="RunTheTown" />
+        <img class="logo" src="img/logo-white.png?v=4bd7cf35" alt="RunTheTown" />
         <span class="mode-badge" id="modeBadge">Running mode</span>
         <span class="burger"><span></span><span></span><span></span></span>
       </button>
@@ -315,6 +315,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=9838b7d9"></script>
+    <script src="js/bundle.js?v=4bd7cf35"></script>
   </body>
 </html>
