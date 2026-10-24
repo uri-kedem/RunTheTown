@@ -430,6 +430,9 @@ body[data-view='app'] .home { display: none; }
   .status { left: calc(50% + 110px); }
 }
 
+/* Menu icons drawn by the user: phone and document, brand orange on transparency */
+.rail-item .ic.mark.install, .rail-item .ic.mark.terms { width: 34px; height: 34px; margin: -2px 0; }
+
 /* Install page */
 .steps { padding-left: 22px; margin: 0 0 12px; }
 .steps li { margin: 0 0 6px; }

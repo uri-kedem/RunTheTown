@@ -20,7 +20,7 @@
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
-         tour.png / tour-white.png (the runner before the cathedral: Sightseeing tour), favicon.png. -->
+         tour.png / tour-white.png (the runner before the cathedral: Sightseeing tour), install-icon.png / terms-icon.png (orange line icons for the menu), favicon.png, icon-*.png (home-screen icons). -->
 
     <!-- Side toolbar: a rail on desktop, a drawer on phones -->
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
@@ -35,10 +35,10 @@
         <img class="ic mark tour" src="img/tour-white.png" alt="" /><span>Sightseeing tour</span>
       </button>
       <button type="button" class="rail-item" data-nav="install" id="railInstall">
-        <svg viewBox="0 0 24 24" class="ic"><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M12 7v7m-3-3 3 3 3-3M10 18h4" /></svg><span>Install on your phone</span>
+        <img class="ic mark install" src="img/install-icon.png" alt="" /><span>Install on your phone</span>
       </button>
       <button type="button" class="rail-item" data-nav="terms">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></svg><span>Terms &amp; policy</span>
+        <img class="ic mark terms" src="img/terms-icon.png" alt="" /><span>Terms &amp; policy</span>
       </button>
       <div class="rail-foot">Map data &copy; OpenStreetMap</div>
     </nav>
@@ -315,6 +315,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=01fae27d"></script>
+    <script src="js/bundle.js?v=266e84d9"></script>
   </body>
 </html>

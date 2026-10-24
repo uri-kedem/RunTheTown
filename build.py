@@ -17,10 +17,12 @@ print('wrote js/bundle.js', len(out), 'bytes')
 # (the service worker's cache name), so phones that installed the app pick up a new
 # build on their next visit.
 import hashlib
-h = hashlib.sha1(out.encode()).hexdigest()[:8]
 idx = root / 'index.html'
-html = re.sub(r'js/bundle\.js\?v=[0-9a-f]+', f'js/bundle.js?v={h}', idx.read_text())
-idx.write_text(html)
 sw = root / 'sw.js'
-sw.write_text(re.sub(r"const CACHE_VERSION = '[^']*';", f"const CACHE_VERSION = '{h}';", sw.read_text()))
+css = (root / 'css' / 'style.css').read_text()
+plain_html = re.sub(r'js/bundle\.js\?v=[0-9a-f]+', 'js/bundle.js', idx.read_text())
+plain_sw = re.sub(r"const CACHE_VERSION = '[^']*';", "const CACHE_VERSION = '';", sw.read_text())
+h = hashlib.sha1((out + css + plain_html + plain_sw).encode()).hexdigest()[:8]
+idx.write_text(plain_html.replace('js/bundle.js"', f'js/bundle.js?v={h}"'))
+sw.write_text(plain_sw.replace("const CACHE_VERSION = '';", f"const CACHE_VERSION = '{h}';"))
 print('build', h)
