@@ -386,10 +386,9 @@ body[data-view='app'] .home { display: none; }
 .mode-card:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(15, 23, 42, 0.14); }
 .mode-ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff; }
 .mode-ic svg { width: 28px; height: 28px; }
-.mode-ic img { width: 36px; height: 36px; object-fit: contain; }
-.mode-ic.run { background: var(--brand); }
-.mode-ic.tour { background: var(--brand); } /* same orange tile as Running mode */
-.mode-ic.tour img { width: 42px; height: 42px; } /* the cathedral scene is finer than the R, so it gets more room */
+.mode-ic img { width: 48px; height: 48px; object-fit: contain; }
+.mode-ic.run, .mode-ic.tour { background: transparent; } /* the orange marks sit straight on the card, no tile */
+.mode-ic.tour img { width: 54px; height: 54px; margin: -3px; } /* the cathedral scene is finer than the R, so it gets more room */
 .mode-title { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .mode-text { font-size: 14px; line-height: 1.45; color: var(--ink-2); }
 .mode-cta { justify-self: start; margin-top: 4px; font-weight: 700; font-size: 14px; color: var(--brand); }

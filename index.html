@@ -20,7 +20,7 @@
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
-         tour.png / tour-white.png (the runner before the cathedral: Sightseeing tour), install-icon.png / terms-icon.png (orange line icons for the menu), favicon.png, icon-*.png (home-screen icons). -->
+         tour.png / tour-white.png (the runner before the cathedral: Sightseeing tour), mark-orange.png / tour-orange.png (the same marks in brand orange: menu and cover cards), install-icon.png / terms-icon.png (orange line icons for the menu), favicon.png, icon-*.png (home-screen icons). -->
 
     <!-- Side toolbar: a rail on desktop, a drawer on phones -->
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
@@ -29,10 +29,10 @@
         <img class="logo" src="img/logo-white.png" alt="RunTheTown" />
       </button>
       <button type="button" class="rail-item" data-nav="run">
-        <img class="ic mark" src="img/mark-white.png" alt="" /><span>Running mode</span>
+        <img class="ic mark" src="img/mark-orange.png" alt="" /><span>Running mode</span>
       </button>
       <button type="button" class="rail-item" data-nav="tour">
-        <img class="ic mark tour" src="img/tour-white.png" alt="" /><span>Sightseeing tour</span>
+        <img class="ic mark tour" src="img/tour-orange.png" alt="" /><span>Sightseeing tour</span>
       </button>
       <button type="button" class="rail-item" data-nav="install" id="railInstall">
         <img class="ic mark install" src="img/install-icon.png" alt="" /><span>Install on your phone</span>
@@ -70,13 +70,13 @@
         <p class="lede">Tell us your distance and what you like, and RunTheTown draws loops on promenades, parks and waterfronts, finds the athletics tracks nearby, and reads the turns into your earphones.</p>
         <div class="modes">
           <button type="button" class="mode-card" data-nav="run">
-            <span class="mode-ic run"><img src="img/mark-white.png" alt="" /></span>
+            <span class="mode-ic run"><img src="img/mark-orange.png" alt="" /></span>
             <span class="mode-title">Running mode</span>
             <span class="mode-text">Loops for your distance on smooth, car-free paths, with as few turns and traffic lights as possible, and voice guidance while you run.</span>
             <span class="mode-cta">Start a run</span>
           </button>
           <button type="button" class="mode-card" data-nav="tour">
-            <span class="mode-ic tour"><img src="img/tour-white.png" alt="" /></span>
+            <span class="mode-ic tour"><img src="img/tour-orange.png" alt="" /></span>
             <span class="mode-title">Sightseeing tour</span>
             <span class="mode-text">See the city while you run: museums, monuments, the old town and the viewpoints, with each landmark called out as you pass it.</span>
             <span class="mode-cta">Plan a tour</span>
@@ -315,6 +315,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=266e84d9"></script>
+    <script src="js/bundle.js?v=3a5b8cd7"></script>
   </body>
 </html>
