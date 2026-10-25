@@ -1,5 +1,6 @@
 // Offline engine test on a synthetic city. Run: node tests/test-planner.mjs
 import { RouteEngine } from '../js/engine.js';
+import { stopsText } from '../js/planner.js';
 import { parseOverpass } from '../js/osm.js';
 import { ElevationGrid } from '../js/elevation.js';
 import { syntheticOverpass, hillElevation, CENTER } from './synthetic-city.mjs';
@@ -49,6 +50,7 @@ check(plain.some((r) => r.stats.promFrac >= 0.15), 'plain routes use the pedestr
 check(plain.every((r) => !r.highlights.some((h) => /%|turn/.test(h))), 'cards show no landscape percentages or turn counts');
 check(plain.every((r) => r.highlights.some((h) => /^\d+ m climb · \d+ m descent$/.test(h)) && r.highlights.some((h) => /traffic light/.test(h) && /road crossing/.test(h))), 'cards state climb & descent, traffic lights and road crossings');
 console.log('   card: ' + plain[0].highlights.join(' | '));
+check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road crossings' && !/light|unknown/.test(stopsText({ stopsKnown: false, signals: 0, crossings: 0 })), 'with the traffic-light source down, the card says nothing about lights');
 
 // Unmarked tracks: the city has a dirt track, an unpaved wadi trail, a mountain-bike
 // singletrack and a bare (surface-less) trail through a wood, all cutting diagonally

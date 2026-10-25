@@ -392,7 +392,6 @@ $('goBtn').addEventListener('click', async () => {
     state.routes = routes;
     showRoutes(routes);
     if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
-    else if (routes.stopsUnknown) toast('Traffic-light data is unavailable right now (busy servers), so routes avoid busy junctions instead.');
   } catch (err) {
     console.error(err);
     toast(err.message || 'Something went wrong. Please try again.');

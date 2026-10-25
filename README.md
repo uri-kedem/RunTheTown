@@ -118,8 +118,8 @@ for locked-screen guidance and the app stores.
      traffic lights and the number of road crossings (marked crosswalks and busy roads to cross), plus the
      landmarks on a sightseeing tour, and the elevation profile. The landscape mix shapes the route and
      its name ("Park loop", "Waterfront loop") but is not shown as percentages. When the traffic-light
-     query failed (busy Overpass servers) the card says "Traffic lights unknown (map servers busy)"
-     rather than claiming there are none; when elevation could not be fetched, the climb line is left out.
+     query failed (busy Overpass servers) the card leaves traffic lights out and lists only the road
+     crossings, with no notice; when elevation could not be fetched, the climb line is left out.
 9. **Sightseeing:** landmarks come from the same map tiles, but only the guidebook kind: museums,
    monuments and memorials, castles, palaces and forts, historic and archaeological sites, famous theatres,
    viewpoints, major attractions and notable public art. Neighbourhood synagogues and churches, commercial

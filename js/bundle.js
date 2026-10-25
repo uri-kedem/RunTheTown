@@ -2586,8 +2586,10 @@ function climbText(s) {
  */
 function stopsText(s) {
   const n = (k, one, many) => (k === 0 ? `no ${many}` : k === 1 ? `1 ${one}` : `${k} ${many}`);
-  const lights = s.stopsKnown === false ? 'traffic lights unknown (map servers busy)' : n(s.signals, 'traffic light', 'traffic lights');
-  const t = `${lights} · ${n(s.crossings, 'road crossing', 'road crossings')}`;
+  // When the traffic-light source is down, the card simply says nothing about lights.
+  const t = s.stopsKnown === false
+    ? n(s.crossings, 'road crossing', 'road crossings')
+    : `${n(s.signals, 'traffic light', 'traffic lights')} · ${n(s.crossings, 'road crossing', 'road crossings')}`;
   return t[0].toUpperCase() + t.slice(1);
 }
 
@@ -4645,7 +4647,6 @@ $('goBtn').addEventListener('click', async () => {
     state.routes = routes;
     showRoutes(routes);
     if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
-    else if (routes.stopsUnknown) toast('Traffic-light data is unavailable right now (busy servers), so routes avoid busy junctions instead.');
   } catch (err) {
     console.error(err);
     toast(err.message || 'Something went wrong. Please try again.');
