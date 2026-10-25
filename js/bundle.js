@@ -1233,9 +1233,13 @@ function samePoint(a, b) {
 }
 
 // ---- elevation.js ----
-// Elevation grid from the free Open-Meteo elevation API (~90 m DEM), sampled
-// with bilinear interpolation.
+// Elevation grid, sampled with bilinear interpolation. The heights come from the
+// Terrarium terrain tiles on AWS (Mapzen/Nextzen data, ~30 m, no key, no rate limit;
+// each 256 px tile encodes metres as R*256 + G + B/256 - 32768). The free Open-Meteo
+// API is the fallback: it throttles after a few hundred points a minute, which is
+// why routes on the phone kept coming back without a climb line.
 
+const TERRARIUM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 const API = 'https://api.open-meteo.com/v1/elevation';
 const BATCH = 100;
 
@@ -1263,7 +1267,73 @@ class ElevationGrid {
   }
 }
 
-async function fetchElevationGrid(proj, radius, { n = 24, signal, fetchImpl = fetch } = {}) {
+async function fetchElevationGrid(proj, radius, { n = 40, signal, fetchImpl = fetch } = {}) {
+  if (typeof createImageBitmap === 'function' && typeof document !== 'undefined') {
+    try {
+      return await fetchTerrariumGrid(proj, radius, { n, signal, fetchImpl });
+    } catch (err) {
+      console.warn('Terrain tiles unavailable, trying Open-Meteo:', err);
+    }
+  }
+  return fetchOpenMeteoGrid(proj, radius, { n: Math.min(n, 24), signal, fetchImpl });
+}
+
+// Web-Mercator tile numbers for a point.
+function tileXY(lat, lon, z) {
+  const s = Math.sin((lat * Math.PI) / 180);
+  const k = 2 ** z;
+  return [((lon + 180) / 360) * k, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * k];
+}
+
+async function fetchTerrariumGrid(proj, radius, { n, signal, fetchImpl }) {
+  const z = radius <= 3500 ? 13 : radius <= 9000 ? 12 : 11; // ~16 / 32 / 64 m per pixel at mid latitudes
+  const step = (2 * radius) / (n - 1);
+  const need = new Map(); // "x/y" -> promise of ImageData
+  const tileOf = (lat, lon) => {
+    const [fx, fy] = tileXY(lat, lon, z);
+    const tx = Math.floor(fx);
+    const ty = Math.floor(fy);
+    const key = `${tx}/${ty}`;
+    if (!need.has(key)) {
+      need.set(key, (async () => {
+        const res = await fetchImpl(`${TERRARIUM}/${z}/${tx}/${ty}.png`, { signal });
+        if (!res.ok) throw new Error(`terrain tile ${res.status}`);
+        const bmp = await createImageBitmap(await res.blob());
+        const c = document.createElement('canvas');
+        c.width = bmp.width;
+        c.height = bmp.height;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        return ctx.getImageData(0, 0, c.width, c.height);
+      })());
+    }
+    return [key, (fx - tx) * 256, (fy - ty) * 256];
+  };
+  const samples = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const [lat, lon] = proj.toLatLon(c * step - radius, r * step - radius);
+      samples.push(tileOf(lat, lon));
+    }
+  }
+  const tiles = new Map();
+  const keys = [...need.keys()];
+  const imgs = await Promise.all(keys.map((k) => need.get(k))); // one failure fails the lot, cleanly
+  keys.forEach((k, i) => tiles.set(k, imgs[i]));
+  const values = new Float32Array(samples.length);
+  samples.forEach(([key, px, py], i) => {
+    const img = tiles.get(key);
+    const x = Math.min(255, Math.max(0, Math.round(px)));
+    const y = Math.min(255, Math.max(0, Math.round(py)));
+    const o = (y * img.width + x) * 4;
+    const d = img.data;
+    const h = d[o] * 256 + d[o + 1] + d[o + 2] / 256 - 32768;
+    values[i] = Number.isFinite(h) && h > -1000 ? h : 0;
+  });
+  return new ElevationGrid(proj, radius, n, values);
+}
+
+async function fetchOpenMeteoGrid(proj, radius, { n, signal, fetchImpl }) {
   const pts = [];
   const step = (2 * radius) / (n - 1);
   for (let r = 0; r < n; r++) {
@@ -1968,9 +2038,11 @@ function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
     let c = table[g.hw[e]];
     if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
-      c *= 1 - (prefs.green ? 0.5 : 0.1) * g.green[e];
-      c *= 1 - (prefs.water ? 0.55 : 0.1) * g.water[e];
-      c *= 1 - 0.3 * g.prom[e]; // promenades and car-free paths: smooth running, always preferred
+      // Parks and waterfronts always pull the route in (more when asked for);
+      // promenades, boardwalks and park paths most of all: they are the point of the app.
+      c *= 1 - (prefs.green ? 0.5 : 0.25) * g.green[e];
+      c *= 1 - (prefs.water ? 0.55 : 0.25) * g.water[e];
+      c *= 1 - 0.45 * g.prom[e];
     }
     let f = c;
     let b = c;
@@ -2102,7 +2174,20 @@ async function planLoops(g, opts) {
   }
   candidates.sort((a, b) => b.score - a.score);
 
+  // Option 1 is the promenade run: of every loop and there-and-back, the one with the
+  // most promenade, boardwalk, park path and waterfront under its feet (loops win ties;
+  // a there-and-back is fine when that is where the promenade is). Then the best
+  // distinct loops fill the remaining slots, so the runner always gets `count` options.
   const chosen = [];
+  const promenadeOf = (r) => {
+    const s = r.stats;
+    // With a landscape picked, that landscape counts as much as the promenade itself.
+    const landscape = prefs.water ? s.waterFrac : prefs.green ? s.greenFrac : 0.5 * Math.max(s.waterFrac, s.greenFrac);
+    return s.promFrac + landscape - (r.type === 'outback' ? 0.08 : 0);
+  };
+  const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
+  const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
+  if (promenade && promenadeOf(promenade) >= 0.25 && !prefs.sights) chosen.push(promenade); // a tour is ranked by its landmarks instead
   for (const limit of [0.45, 0.7, 1.01]) {
     for (const c of candidates) {
       if (chosen.length >= count) break;
@@ -2110,14 +2195,13 @@ async function planLoops(g, opts) {
       if (chosen.every((o) => overlap(g, c, o) < limit)) chosen.push(c);
     }
   }
-  // Offer a there-and-back on the most beautiful stretch when it's clearly more
-  // scenic than every loop (e.g. the loop has to come back through plain streets).
-  const bestLoopScenic = Math.max(0, ...chosen.map((c) => c.stats.scenicFrac));
-  const scenicOutbacks = outbacks.filter(
-    (o) => o.stats.scenicFrac >= 0.3 && o.stats.scenicFrac >= bestLoopScenic + 0.1,
-  );
+  for (const o of outbacks) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(o) && chosen.every((c) => overlap(g, o, c) < 0.7)) chosen.push(o);
+  }
   if (!chosen.length) chosen.push(...outbacks.slice(0, count));
-  else if (scenicOutbacks.length) chosen.push(scenicOutbacks[0]);
+  // Order: the promenade run first, then by score.
+  chosen.sort((a, b) => (chosen[0] === promenade && (a === promenade || b === promenade) ? (a === promenade ? -1 : 1) : b.score - a.score));
 
   const out = chosen.map((c) => describe(g, c, start, prefs));
   // Keep names distinct: fall back to a finer compass direction, then a suffix.
@@ -2192,8 +2276,8 @@ function findAnchors(g, { start, comp, D, prefs }) {
   const slots = new Array(8 * ideals.length).fill(null);
   for (let i = 0; i < g.n; i++) {
     if (g.comp[i] !== comp) continue;
-    // Water and parks when asked for; proper promenades always.
-    const attr = Math.max(prefs.water ? g._nodeWater[i] : 0, prefs.green ? g._nodeGreen[i] : 0, g._nodeProm[i] >= 1 ? 1 : 0);
+    // Promenades, waterfronts and parks always draw loops toward them (a little more when asked for).
+    const attr = Math.max(g._nodeWater[i] * (prefs.water ? 1 : 0.85), g._nodeGreen[i] * (prefs.green ? 1 : 0.85), g._nodeProm[i] >= 1 ? 1 : 0);
     if (attr < 0.66) continue;
     const dx = g.x[i] - sx;
     const dy = g.y[i] - sy;
@@ -2333,8 +2417,8 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
-  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e]);
-  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0));
+  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e], g.prom[e]);
+  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e]);
 }
 
 function routeStats(g, route, D, prefs = {}) {
@@ -2395,10 +2479,10 @@ function scoreRoute(s, prefs, terrain) {
   if (prefs.green) score += s.greenFrac;
   if (prefs.water) score += s.waterFrac;
   if (prefs.quiet) score += 0.8 * s.quietFrac;
-  if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.3 * (s.greenFrac + s.waterFrac + s.quietFrac);
+  if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.5 * (s.greenFrac + s.waterFrac) + 0.3 * s.quietFrac;
   score -= 0.6 * s.busyFrac;
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
-  score += 0.3 * s.promFrac; // smooth, car-free running
+  score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;
@@ -4187,6 +4271,7 @@ const state = {
   selected: 0,
   spots: [], // running spots around the start, found before any search
   mode: 'run', // 'run' | 'tour'
+  runStyle: 'streets', // Running mode: 'streets' (loops from here) | 'laps' (a track, stadium or park loop nearby)
 };
 
 const engine = new RouteEngine();
@@ -4275,8 +4360,9 @@ function previewSpots() {
     if (!state.routes.length) drawPlaces(spots, $('spotsPrefs'));
     hint.hidden = false;
     hint.textContent = spots.length
-      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap a pin for details${spots.some((p) => p.ring) ? ' or laps' : ''}`
+      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap one to plan your laps`
       : final ? 'No athletics tracks or stadiums within 8 km of here' : 'Looking for running tracks and parks nearby…';
+    $('spotsEmpty').hidden = !(final && !spots.length);
   };
   previewSpots.timer = setTimeout(async () => {
     try {
@@ -4596,7 +4682,7 @@ function showRoutes(routes) {
       <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
-    card.addEventListener('click', () => selectRoute(i, { fit: true }));
+    card.addEventListener('click', () => { selectRoute(i, { fit: true }); openRouteAsk(i); });
     cards.appendChild(card);
   });
   drawRoutes();
@@ -4640,14 +4726,15 @@ function drawPlaces(places, list = $('places')) {
         marker.setPopupContent(placePopup(p, i, p._details));
       });
     });
-    if (i >= (list === $('spotsPrefs') ? 3 : 6)) return; // the nearest few in the list, all on the map
+    if (i >= 6) return; // the nearest few in the list, all on the map
     const row = document.createElement('button');
     row.type = 'button';
     row.className = `place ${p.kind}`;
     row.innerHTML = `<i>${PLACE_ICON[p.kind]}</i><span><b>${escapeHtml(p.name)}</b><small>${placeText(p)} · ${fmtKmShort(p.fromStart)} away</small></span>`;
     row.addEventListener('click', () => {
       map.setView(p.entry, Math.max(map.getZoom(), 15));
-      marker.openPopup();
+      if (list === $('spotsPrefs') && state.runStyle === 'laps' && p.ring) runAtPlace(i);
+      else marker.openPopup();
     });
     list.appendChild(row);
   });
@@ -4724,18 +4811,14 @@ function planLaps() {
   // The chosen distance becomes the app's distance too, so the next search matches.
   $('distanceInput').value = String(km);
   readDistance();
-  let idx = state.routes.findIndex((r) => r.type === 'laps' && r.place.name === place.name && Math.abs(r.place.wantedKm - km) < 0.05);
-  if (idx < 0) {
-    const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
-    if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
-    route.place.wantedKm = km;
-    const routes = state.routes.length ? state.routes : Object.assign([], { places: drawnPlaces });
-    routes.push(route);
-    idx = routes.length - 1;
-    state.routes = routes;
-    showRoutes(routes);
-  }
-  selectRoute(idx, { fit: true });
+  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
+  if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
+  route.place.wantedKm = km;
+  // The lap run is the one route on offer; the spots stay on the map.
+  const routes = Object.assign([route], { places: drawnPlaces });
+  state.routes = routes;
+  showRoutes(routes);
+  selectRoute(0, { fit: true });
 }
 $('lapsKm').addEventListener('input', readLapsKm);
 $('lapsKm').addEventListener('keydown', (e) => { if (e.key === 'Enter') planLaps(); if (e.key === 'Escape') closeLapsAsk(); });
@@ -4755,7 +4838,7 @@ function drawRoutes() {
   state.routes.forEach((r, i) => {
     const casing = L.polyline(r.latlngs, { color: '#fff', weight: 9, opacity: 0.9, lineJoin: 'round' });
     const line = L.polyline(r.latlngs, { color: COLORS[i], weight: 5, opacity: 0.9, lineJoin: 'round' });
-    for (const l of [casing, line]) l.on('click', () => selectRoute(i));
+    for (const l of [casing, line]) l.on('click', () => { selectRoute(i); openRouteAsk(i); });
     r._layers = { casing, line };
     casing.addTo(routeLayer);
     line.addTo(routeLayer);
@@ -4882,8 +4965,39 @@ const navLayer = L.layerGroup();
 const nav = { active: null }; // { navigator, source, route, color, demo, ... }
 const DEMO_RATES = [1, 6, 15];
 
-$('startRunBtn').addEventListener('click', () => startRun({ demo: false }));
-$('demoRunBtn').addEventListener('click', () => startRun({ demo: true }));
+// The route pop-up: name, distance, the facts, and the Start button.
+function openRouteAsk(i) {
+  const r = state.routes[i];
+  if (!r) return;
+  $('routeAskName').textContent = r.name;
+  $('routeAskDist').textContent = (r.distance / 1000).toFixed(2);
+  $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
+  $('routeAsk').hidden = false;
+}
+function closeRouteAsk() {
+  $('routeAsk').hidden = true;
+}
+$('routeAskClose').addEventListener('click', closeRouteAsk);
+$('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk')) closeRouteAsk(); });
+$('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
+$('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
+
+// Running mode: run the streets (loops from here) or run in laps (a spot nearby).
+function setRunStyle(style) {
+  state.runStyle = style;
+  $('prefsView').dataset.style = style;
+  for (const b of $('runStyle').querySelectorAll('button')) {
+    const on = b.dataset.style === style;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  if (style === 'laps' && state.start && !state.spots.length && !$('spotsEmpty').hidden) toast('No running spots were found near this start.');
+}
+$('runStyle').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-style]');
+  if (b) setRunStyle(b.dataset.style);
+});
+setRunStyle('streets');
 
 function arrowSvg(type, dir) {
   const flip = dir === 'left' ? ' transform="translate(24 0) scale(-1 1)"' : '';
@@ -5194,7 +5308,7 @@ $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
 $('termsBack').addEventListener('click', () => { $('terms').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('installBack').addEventListener('click', () => { $('install').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 installSetup();
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 

@@ -19,7 +19,8 @@ for (const [km, prefs] of [[5, {}], [8, { sights: true }], [10, { water: true }]
     check(c.every((x) => typeof x.text === 'string' && Number.isFinite(x.lat)), 'cues have text and position');
     const turns = c.filter((x) => x.type !== 'depart' && x.type !== 'arrive');
     check(turns.length >= 3 && turns.length <= r.distance / 60, `sensible number of turns (${turns.length})`);
-    check(turns.filter((x) => x.street).length >= turns.length * 0.5, 'most turns name a street');
+    // The synthetic park's footpaths have no names, so a route through the park names fewer turns.
+    if (r.stats.greenFrac < 0.3) check(turns.filter((x) => x.street).length >= turns.length * 0.5, 'most turns name a street');
     if (r.type === 'outback') check(turns.some((x) => x.type === 'uturn' && Math.abs(x.at - r.distance / 2) < r.distance * 0.1), 'out & back has a u-turn near halfway');
   }
 }

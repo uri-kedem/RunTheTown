@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=06bc73a3" />
+    <link rel="stylesheet" href="css/style.css?v=e5fc62b0" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -180,10 +180,25 @@
       <!-- Preferences -->
       <div id="prefsView">
         <div class="start-line" id="startLine">Tap the map or search to set your start point</div>
+
+        <!-- Running mode: streets (loops from here) or laps (a track, stadium or park loop nearby) -->
+        <div class="field" id="runStyleField">
+          <div class="field-head"><label>How do you want to run?</label></div>
+          <div class="run-styles" id="runStyle" role="radiogroup">
+            <button type="button" data-style="streets" role="radio" aria-checked="true" class="on">
+              <b>Run the streets</b><small>Loops from here on promenades, parks and quiet streets</small>
+            </button>
+            <button type="button" data-style="laps" role="radio" aria-checked="false">
+              <b>Run in laps</b><small>A track, stadium or park loop nearby, with the way there and back</small>
+            </button>
+          </div>
+        </div>
+
         <div class="spots-hint" id="spotsHint" hidden></div>
         <div class="places" id="spotsPrefs" hidden></div>
+        <div class="spots-empty" id="spotsEmpty" hidden>No athletics track, stadium or park loop was found within 8 km of this start. Try another start, or run the streets.</div>
 
-        <div class="field">
+        <div class="field streets-only">
           <div class="field-head"><label for="distanceInput">Distance</label><span class="hint">1–42.2 km</span></div>
           <div class="distance-value" id="distanceBox">
             <input id="distanceInput" type="text" inputmode="decimal" autocomplete="off" value="5" placeholder="10"
@@ -194,7 +209,7 @@
         </div>
 
         <!-- Running mode: the landscape options. Sightseeing tour: only the tour itself, as the mode. -->
-        <div class="field" id="landscapeField">
+        <div class="field streets-only" id="landscapeField">
           <div class="field-head"><label id="landscapeLabel">Landscape</label><span class="hint" id="landscapeHint">pick any</span></div>
           <div class="chips" id="landscape">
             <button type="button" data-pref="green" aria-pressed="false"><i class="dot green"></i>Parks &amp; green</button>
@@ -205,7 +220,7 @@
           <div class="tour-note" id="tourNote" hidden>Routes pass the city&rsquo;s monumental landmarks, named on the map and announced on the run.</div>
         </div>
 
-        <div class="field">
+        <div class="field streets-only">
           <div class="field-head"><label>Terrain</label></div>
           <div class="segmented" id="terrain" role="radiogroup">
             <button type="button" data-terrain="flat" role="radio" aria-checked="false">Flat</button>
@@ -214,7 +229,7 @@
           </div>
         </div>
 
-        <button type="button" class="primary" id="goBtn" disabled>Find my routes</button>
+        <button type="button" class="primary streets-only" id="goBtn" disabled>Find my routes</button>
       </div>
 
       <!-- Results -->
@@ -229,15 +244,26 @@
           </div>
         </div>
         <div class="cards" id="cards"></div>
+        <div class="results-note">Tap a route to start it.</div>
         <div class="places" id="places" hidden></div>
-        <div class="run-actions">
-          <button type="button" class="primary" id="startRunBtn">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>Start run with voice guidance
-          </button>
-          <button type="button" class="ghost" id="demoRunBtn">Try a demo run (simulated, no GPS needed)</button>
-        </div>
       </div>
     </section>
+
+    <!-- Tapping a route: its facts and the one button that matters -->
+    <div class="ask" id="routeAsk" hidden>
+      <div class="ask-card route-card-pop">
+        <div class="ask-title" id="routeAskName"></div>
+        <div class="route-pop-dist"><b id="routeAskDist"></b> km</div>
+        <ul class="route-pop-facts" id="routeAskFacts"></ul>
+        <button type="button" class="primary" id="startRunBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>Start run with voice guidance
+        </button>
+        <div class="route-pop-foot">
+          <button type="button" class="link" id="routeAskClose">Back to the routes</button>
+          <button type="button" class="link" id="demoRunBtn">Demo run (no GPS)</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Live navigation -->
     <div class="nav" id="navView" hidden>
@@ -315,6 +341,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=06bc73a3"></script>
+    <script src="js/bundle.js?v=e5fc62b0"></script>
   </body>
 </html>

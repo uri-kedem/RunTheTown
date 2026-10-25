@@ -19,9 +19,11 @@ export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
     let c = table[g.hw[e]];
     if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
-      c *= 1 - (prefs.green ? 0.5 : 0.1) * g.green[e];
-      c *= 1 - (prefs.water ? 0.55 : 0.1) * g.water[e];
-      c *= 1 - 0.3 * g.prom[e]; // promenades and car-free paths: smooth running, always preferred
+      // Parks and waterfronts always pull the route in (more when asked for);
+      // promenades, boardwalks and park paths most of all: they are the point of the app.
+      c *= 1 - (prefs.green ? 0.5 : 0.25) * g.green[e];
+      c *= 1 - (prefs.water ? 0.55 : 0.25) * g.water[e];
+      c *= 1 - 0.45 * g.prom[e];
     }
     let f = c;
     let b = c;
@@ -153,7 +155,20 @@ export async function planLoops(g, opts) {
   }
   candidates.sort((a, b) => b.score - a.score);
 
+  // Option 1 is the promenade run: of every loop and there-and-back, the one with the
+  // most promenade, boardwalk, park path and waterfront under its feet (loops win ties;
+  // a there-and-back is fine when that is where the promenade is). Then the best
+  // distinct loops fill the remaining slots, so the runner always gets `count` options.
   const chosen = [];
+  const promenadeOf = (r) => {
+    const s = r.stats;
+    // With a landscape picked, that landscape counts as much as the promenade itself.
+    const landscape = prefs.water ? s.waterFrac : prefs.green ? s.greenFrac : 0.5 * Math.max(s.waterFrac, s.greenFrac);
+    return s.promFrac + landscape - (r.type === 'outback' ? 0.08 : 0);
+  };
+  const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
+  const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
+  if (promenade && promenadeOf(promenade) >= 0.25 && !prefs.sights) chosen.push(promenade); // a tour is ranked by its landmarks instead
   for (const limit of [0.45, 0.7, 1.01]) {
     for (const c of candidates) {
       if (chosen.length >= count) break;
@@ -161,14 +176,13 @@ export async function planLoops(g, opts) {
       if (chosen.every((o) => overlap(g, c, o) < limit)) chosen.push(c);
     }
   }
-  // Offer a there-and-back on the most beautiful stretch when it's clearly more
-  // scenic than every loop (e.g. the loop has to come back through plain streets).
-  const bestLoopScenic = Math.max(0, ...chosen.map((c) => c.stats.scenicFrac));
-  const scenicOutbacks = outbacks.filter(
-    (o) => o.stats.scenicFrac >= 0.3 && o.stats.scenicFrac >= bestLoopScenic + 0.1,
-  );
+  for (const o of outbacks) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(o) && chosen.every((c) => overlap(g, o, c) < 0.7)) chosen.push(o);
+  }
   if (!chosen.length) chosen.push(...outbacks.slice(0, count));
-  else if (scenicOutbacks.length) chosen.push(scenicOutbacks[0]);
+  // Order: the promenade run first, then by score.
+  chosen.sort((a, b) => (chosen[0] === promenade && (a === promenade || b === promenade) ? (a === promenade ? -1 : 1) : b.score - a.score));
 
   const out = chosen.map((c) => describe(g, c, start, prefs));
   // Keep names distinct: fall back to a finer compass direction, then a suffix.
@@ -243,8 +257,8 @@ function findAnchors(g, { start, comp, D, prefs }) {
   const slots = new Array(8 * ideals.length).fill(null);
   for (let i = 0; i < g.n; i++) {
     if (g.comp[i] !== comp) continue;
-    // Water and parks when asked for; proper promenades always.
-    const attr = Math.max(prefs.water ? g._nodeWater[i] : 0, prefs.green ? g._nodeGreen[i] : 0, g._nodeProm[i] >= 1 ? 1 : 0);
+    // Promenades, waterfronts and parks always draw loops toward them (a little more when asked for).
+    const attr = Math.max(g._nodeWater[i] * (prefs.water ? 1 : 0.85), g._nodeGreen[i] * (prefs.green ? 1 : 0.85), g._nodeProm[i] >= 1 ? 1 : 0);
     if (attr < 0.66) continue;
     const dx = g.x[i] - sx;
     const dy = g.y[i] - sy;
@@ -384,8 +398,8 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 export function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
-  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e]);
-  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0));
+  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e], g.prom[e]);
+  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e]);
 }
 
 export function routeStats(g, route, D, prefs = {}) {
@@ -446,10 +460,10 @@ export function scoreRoute(s, prefs, terrain) {
   if (prefs.green) score += s.greenFrac;
   if (prefs.water) score += s.waterFrac;
   if (prefs.quiet) score += 0.8 * s.quietFrac;
-  if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.3 * (s.greenFrac + s.waterFrac + s.quietFrac);
+  if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.5 * (s.greenFrac + s.waterFrac) + 0.3 * s.quietFrac;
   score -= 0.6 * s.busyFrac;
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
-  score += 0.3 * s.promFrac; // smooth, car-free running
+  score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;

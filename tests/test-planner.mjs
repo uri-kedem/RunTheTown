@@ -36,10 +36,12 @@ async function run(label, opts, { all = false } = {}) {
 const best = (rs, key) => Math.max(...rs.map((r) => r.stats[key]));
 
 for (const km of [3, 5, 10, 15]) {
-  const rs = await run(`${km} km, no preferences`, { distanceKm: km, prefs: {}, terrain: 'any' });
-  check(rs.length === 3, 'returns 3 options');
+  const rs = await run(`${km} km, no preferences`, { distanceKm: km, prefs: {}, terrain: 'any' }, { all: true });
+  check(rs.length === 3, 'returns exactly 3 options');
+  const promOf = (r) => r.stats.promFrac + 0.5 * Math.max(r.stats.waterFrac, r.stats.greenFrac);
+  check(promOf(rs[0]) >= Math.max(...rs.map(promOf)) - 0.09, 'the first option is the promenade / park / waterfront run');
   check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.08), 'all within 8% of target distance');
-  check(rs.every((r) => r.stats.repeatFrac < 0.2), 'little back-tracking');
+  check(loopsOnly(rs).every((r) => r.stats.repeatFrac < 0.2), 'little back-tracking on the loops');
 }
 
 const plain = await run('6 km plain', { distanceKm: 6, prefs: {}, terrain: 'any' });
@@ -112,13 +114,14 @@ const flat = await run('8 km flat', { distanceKm: 8, prefs: {}, terrain: 'flat' 
 const hilly = await run('8 km hilly', { distanceKm: 8, prefs: {}, terrain: 'hilly' });
 check(hilly[0].stats.gain > flat[0].stats.gain * 1.5, 'hilly gives clearly more climbing than flat');
 
-// Out & back: the river is too far for a loop to spend much time on it, so a
-// there-and-back along the water should be offered as an extra option.
+// Out & back: the river is too far for a loop to spend much time on it, so the
+// promenade option (first) is a there-and-back along the water.
 const ob = await run('6 km waterfront (out & back expected)', { distanceKm: 6, prefs: { water: true }, terrain: 'any' }, { all: true });
 const outback = ob.find((r) => r.type === 'outback');
 check(!!outback, 'offers an out-and-back option');
+check(ob.length === 3, 'still exactly 3 options');
 check(outback && Math.abs(outback.distance - 6000) / 6000 < 0.03, 'out-and-back within 3% of distance');
-check(outback && outback.stats.scenicFrac >= Math.max(...ob.filter((r) => r.type === 'loop').map((r) => r.stats.scenicFrac)) + 0.1, 'out-and-back is clearly more scenic');
+check(ob[0] === outback && outback.stats.waterFrac >= Math.max(...ob.filter((r) => r.type === 'loop').map((r) => r.stats.waterFrac)) + 0.1, 'the out-and-back along the water comes first, clearly more waterfront than the loops');
 check(outback && outback.turnaround, 'out-and-back has a turnaround point');
 const lat0 = outback.latlngs[0], latN = outback.latlngs[outback.latlngs.length - 1];
 check(Math.abs(lat0[0] - latN[0]) < 1e-9 && Math.abs(lat0[1] - latN[1]) < 1e-9, 'out-and-back returns to start');

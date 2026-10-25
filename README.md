@@ -52,6 +52,9 @@ for locked-screen guidance and the app stores.
 
 ## How it works
 
+0. **Running mode** asks how you want to run: **Run the streets** (loops from here, the flow below) or
+   **Run in laps** (the tracks, stadiums and park loops within 8 km are listed; tap one, say how far, and
+   the app plans the way there, the laps and the way back as the one route on offer).
 1. **Start point** comes from GPS, a tap on the map, or the search box. Search suggests places as you type
    (Photon, built on OpenStreetMap). It handles hotels, streets and landmarks, in English or Hebrew, and
    ranks results near you first.
@@ -87,9 +90,16 @@ for locked-screen guidance and the app stores.
    (`js/cache.js`), so coming back to a city is instant.
 5. **Landscape grid:** parks are filled and waterfronts are buffered onto a 25 m grid, so every path segment
    knows whether it's green or along the water (`js/landscape.js`).
-6. **Elevation** comes from Open-Meteo as a coarse grid, fetched one request at a time with retry,
-   because the free API rejects bursts (`js/elevation.js`).
-7. **Route design** (`js/planner.js`):
+6. **Elevation** comes from the Terrarium terrain tiles on AWS (Mapzen data, ~30 m, no key, no rate
+   limit: 4 PNG tiles decoded in the browser, `js/elevation.js`); Open-Meteo is the fallback. Open-Meteo
+   used to be the only source and throttled after one plan, which is why cards on the phone came back
+   without a climb line.
+7. **Route design** (`js/planner.js`): exactly three options, and the first one is always the
+   **promenade run**: of every loop and there-and-back found, the one with the most promenade, boardwalk,
+   park path and waterfront under its feet (a there-and-back is fine when that is where the promenade
+   is; on a Sightseeing tour the landmarks rank first instead). Every route prefers promenades, parks
+   and waterfronts in the search itself (costs ×0.55 on promenades, ×0.75 in parks and along water,
+   more when the landscape is picked) and in the ranking (promenade share weighs most).
    - round loops in 10 directions, resized until they hit the target distance;
    - when fewer than three round loops fit (a town hemmed in by sea and desert, like Eilat), long thin
      loops along the town's axis are tried before falling back to an out-and-back;
@@ -102,6 +112,8 @@ for locked-screen guidance and the app stores.
    extra "virtual distance" when searching for routes: about 250 m for a traffic light and 50 m for a
    crosswalk. It only counts when the runner actually has to stop, so running along a road past a
    zebra crossing is free, while crossing the road at it isn't.
+   - **Tapping a route** opens a pop-up with its name, distance, the facts below and one button, "Start run
+     with voice guidance" (a demo run without GPS is a small link under it).
    - **The route card** states what a runner plans around: metres of climb and descent, the number of
      traffic lights and the number of road crossings (marked crosswalks and busy roads to cross), plus the
      landmarks on a sightseeing tour, and the elevation profile. The landscape mix shapes the route and

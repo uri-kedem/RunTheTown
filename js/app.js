@@ -18,6 +18,7 @@ const state = {
   selected: 0,
   spots: [], // running spots around the start, found before any search
   mode: 'run', // 'run' | 'tour'
+  runStyle: 'streets', // Running mode: 'streets' (loops from here) | 'laps' (a track, stadium or park loop nearby)
 };
 
 const engine = new RouteEngine();
@@ -106,8 +107,9 @@ function previewSpots() {
     if (!state.routes.length) drawPlaces(spots, $('spotsPrefs'));
     hint.hidden = false;
     hint.textContent = spots.length
-      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap a pin for details${spots.some((p) => p.ring) ? ' or laps' : ''}`
+      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap one to plan your laps`
       : final ? 'No athletics tracks or stadiums within 8 km of here' : 'Looking for running tracks and parks nearby…';
+    $('spotsEmpty').hidden = !(final && !spots.length);
   };
   previewSpots.timer = setTimeout(async () => {
     try {
@@ -427,7 +429,7 @@ function showRoutes(routes) {
       <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
-    card.addEventListener('click', () => selectRoute(i, { fit: true }));
+    card.addEventListener('click', () => { selectRoute(i, { fit: true }); openRouteAsk(i); });
     cards.appendChild(card);
   });
   drawRoutes();
@@ -471,14 +473,15 @@ function drawPlaces(places, list = $('places')) {
         marker.setPopupContent(placePopup(p, i, p._details));
       });
     });
-    if (i >= (list === $('spotsPrefs') ? 3 : 6)) return; // the nearest few in the list, all on the map
+    if (i >= 6) return; // the nearest few in the list, all on the map
     const row = document.createElement('button');
     row.type = 'button';
     row.className = `place ${p.kind}`;
     row.innerHTML = `<i>${PLACE_ICON[p.kind]}</i><span><b>${escapeHtml(p.name)}</b><small>${placeText(p)} · ${fmtKmShort(p.fromStart)} away</small></span>`;
     row.addEventListener('click', () => {
       map.setView(p.entry, Math.max(map.getZoom(), 15));
-      marker.openPopup();
+      if (list === $('spotsPrefs') && state.runStyle === 'laps' && p.ring) runAtPlace(i);
+      else marker.openPopup();
     });
     list.appendChild(row);
   });
@@ -555,18 +558,14 @@ function planLaps() {
   // The chosen distance becomes the app's distance too, so the next search matches.
   $('distanceInput').value = String(km);
   readDistance();
-  let idx = state.routes.findIndex((r) => r.type === 'laps' && r.place.name === place.name && Math.abs(r.place.wantedKm - km) < 0.05);
-  if (idx < 0) {
-    const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
-    if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
-    route.place.wantedKm = km;
-    const routes = state.routes.length ? state.routes : Object.assign([], { places: drawnPlaces });
-    routes.push(route);
-    idx = routes.length - 1;
-    state.routes = routes;
-    showRoutes(routes);
-  }
-  selectRoute(idx, { fit: true });
+  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
+  if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
+  route.place.wantedKm = km;
+  // The lap run is the one route on offer; the spots stay on the map.
+  const routes = Object.assign([route], { places: drawnPlaces });
+  state.routes = routes;
+  showRoutes(routes);
+  selectRoute(0, { fit: true });
 }
 $('lapsKm').addEventListener('input', readLapsKm);
 $('lapsKm').addEventListener('keydown', (e) => { if (e.key === 'Enter') planLaps(); if (e.key === 'Escape') closeLapsAsk(); });
@@ -586,7 +585,7 @@ function drawRoutes() {
   state.routes.forEach((r, i) => {
     const casing = L.polyline(r.latlngs, { color: '#fff', weight: 9, opacity: 0.9, lineJoin: 'round' });
     const line = L.polyline(r.latlngs, { color: COLORS[i], weight: 5, opacity: 0.9, lineJoin: 'round' });
-    for (const l of [casing, line]) l.on('click', () => selectRoute(i));
+    for (const l of [casing, line]) l.on('click', () => { selectRoute(i); openRouteAsk(i); });
     r._layers = { casing, line };
     casing.addTo(routeLayer);
     line.addTo(routeLayer);
@@ -713,8 +712,39 @@ const navLayer = L.layerGroup();
 const nav = { active: null }; // { navigator, source, route, color, demo, ... }
 const DEMO_RATES = [1, 6, 15];
 
-$('startRunBtn').addEventListener('click', () => startRun({ demo: false }));
-$('demoRunBtn').addEventListener('click', () => startRun({ demo: true }));
+// The route pop-up: name, distance, the facts, and the Start button.
+function openRouteAsk(i) {
+  const r = state.routes[i];
+  if (!r) return;
+  $('routeAskName').textContent = r.name;
+  $('routeAskDist').textContent = (r.distance / 1000).toFixed(2);
+  $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
+  $('routeAsk').hidden = false;
+}
+function closeRouteAsk() {
+  $('routeAsk').hidden = true;
+}
+$('routeAskClose').addEventListener('click', closeRouteAsk);
+$('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk')) closeRouteAsk(); });
+$('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
+$('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
+
+// Running mode: run the streets (loops from here) or run in laps (a spot nearby).
+function setRunStyle(style) {
+  state.runStyle = style;
+  $('prefsView').dataset.style = style;
+  for (const b of $('runStyle').querySelectorAll('button')) {
+    const on = b.dataset.style === style;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  if (style === 'laps' && state.start && !state.spots.length && !$('spotsEmpty').hidden) toast('No running spots were found near this start.');
+}
+$('runStyle').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-style]');
+  if (b) setRunStyle(b.dataset.style);
+});
+setRunStyle('streets');
 
 function arrowSvg(type, dir) {
   const flip = dir === 'left' ? ' transform="translate(24 0) scale(-1 1)"' : '';
@@ -1025,7 +1055,7 @@ $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
 $('termsBack').addEventListener('click', () => { $('terms').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('installBack').addEventListener('click', () => { $('install').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 installSetup();
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 
