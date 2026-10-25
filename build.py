@@ -43,9 +43,13 @@ sw = root / 'sw.js'
 man = root / 'manifest.webmanifest'
 css = (root / 'css' / 'style.css').read_text()
 plain_html = publish_refs(re.sub(r'(js/bundle\.js|css/style\.css)\?v=[0-9a-f]+', r'\1', idx.read_text()))
+plain_html = re.sub(r'<span id="buildTag" data-build="[^"]*">[^<]*</span>', '<span id="buildTag" data-build="dev">dev</span>', plain_html)
 plain_sw = publish_refs(re.sub(r"const CACHE_VERSION = '[^']*';", "const CACHE_VERSION = '';", sw.read_text()))
 man.write_text(publish_refs(man.read_text()))
 h = hashlib.sha1(('v4' + out + css + plain_html + plain_sw).encode()).hexdigest()[:8]
-idx.write_text(re.sub(r'(src|href)="(js/bundle\.js|css/style\.css)"', lambda m: f'{m.group(1)}="{m.group(2)}?v={h}"', plain_html))
+stamped = re.sub(r'(src|href)="(js/bundle\.js|css/style\.css)"', lambda m: f'{m.group(1)}="{m.group(2)}?v={h}"', plain_html)
+# The build number is shown in the menu ("Version 1a2b3c4d"), so anyone can tell which build they see.
+stamped = re.sub(r'<span id="buildTag" data-build="[^"]*">[^<]*</span>', f'<span id="buildTag" data-build="{h}">{h}</span>', stamped)
+idx.write_text(stamped)
 sw.write_text(plain_sw.replace("const CACHE_VERSION = '';", f"const CACHE_VERSION = '{h}';"))
 print('build', h, '| artwork:', ', '.join(sorted(fingerprint.values())))
