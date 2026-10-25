@@ -100,7 +100,8 @@ export function tileQuery(t, mode = 'full') {
     '.r >;out skel qt;' +
     '(way["leisure"~"^(park|garden|nature_reserve|recreation_ground|golf_course|marina)$"];' +
     'relation["leisure"~"^(park|garden|nature_reserve)$"];' +
-    'way["landuse"~"^(forest|grass|meadow|recreation_ground|village_green)$"];relation["landuse"="forest"];' +
+    'way["landuse"~"^(forest|grass|meadow|recreation_ground|village_green|military|railway|quarry|industrial|garages)$"];relation["landuse"~"^(forest|military)$"];' +
+    'way["amenity"~"^(hospital|school|college|university|prison)$"];way["military"];' +
     'way["natural"~"^(wood|scrub|heath|grassland|wetland|water|beach|coastline)$"];relation["natural"~"^(wood|water)$"];' +
     'way["waterway"~"^(river|canal|stream|riverbank)$"];);out geom qt;'
   );
@@ -215,6 +216,10 @@ export function classifyFeature(tags = {}) {
 // Open country (woods, scrub, heath, nature reserves): a bare path here is a dirt trail.
 export function wildFeature(tags = {}) {
   if (/^(wood|scrub|heath|grassland|wetland)$/.test(tags.natural || '') || tags.landuse === 'forest' || tags.leisure === 'nature_reserve') return { kind: 'wild', shape: 'area', buffer: 20 };
+  // Land a runner cannot pass through (its paths leave the network) and fenced compounds
+  // (their small paths and alleys are a last resort).
+  if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 

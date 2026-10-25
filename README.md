@@ -85,6 +85,11 @@ for locked-screen guidance and the app stores.
      connect the network but are never run along by choice; a trunk along the water earns no "scenic"
      credit and no out-and-back with more than 10% trunk is offered (Tiberias' lakeside Route 90).
      Motorways are never used. With the fix, Eilat gives three loops at 8, 10 and 12 km with 1–4% trunk.
+   - **No private or closed ground.** Ways tagged `access=private` (or `no`) are out, like `foot=no`.
+     Any small way (alley, footpath, service road, side street) that runs mostly through an army base,
+     railway land, a quarry or a prison (`landuse`/`military`/`amenity=prison` polygons, grid layer
+     `closed`) is out of the network. Inside a fenced compound — factory, hospital, school, campus,
+     garages (grid layer `compound`) — such ways count as a last resort, like a bare path.
    - Long runs (over 15 km) also skip service alleys and steps.
 4. **On-device cache:** map tiles, traffic lights and elevation are saved in the browser for 14 days
    (`js/cache.js`), so coming back to a city is instant.

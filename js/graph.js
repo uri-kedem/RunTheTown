@@ -69,22 +69,36 @@ export class Graph {
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
     let skippedWild = 0;
-    for (const road of osm.roads) {
-      // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the network at all.
-      if (road.tags.rough && grid) {
+    let skippedClosed = 0;
+    for (let road of osm.roads) {
+      // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
+      // network at all. Any way that runs mostly through closed ground (army base, railway
+      // land, quarry, prison) is out too, and a small way (alley, footpath, service road)
+      // inside a fenced compound (factory, hospital, school, campus) is a last resort.
+      if (grid) {
+        const small = /^(service|footway|path|cycleway|pedestrian|steps|living_street|residential|unclassified|road)$/.test(road.tags.highway);
         let cnt = 0;
         let wild = 0;
+        let closed = 0;
+        let compound = 0;
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
           const [x, y] = proj.toXY(p[0], p[1]);
           cnt++;
           if (grid.at('wild', x, y)) wild++;
+          if (grid.at('closed', x, y)) closed++;
+          if (grid.at('compound', x, y)) compound++;
         }
-        if (cnt && wild / cnt >= 0.5) {
+        if (cnt && road.tags.rough && wild / cnt >= 0.5) {
           skippedWild++;
           continue;
         }
+        if (cnt && small && closed / cnt >= 0.5) {
+          skippedClosed++;
+          continue;
+        }
+        if (cnt && small && compound / cnt >= 0.5) road = { ...road, tags: { ...road.tags, rough: 1 } };
       }
       const cls = highwayClass(road.tags.highway);
       let nid = -1;
@@ -124,6 +138,7 @@ export class Graph {
     this.n = n;
     this.m = m;
     this.skippedWild = skippedWild; // bare paths left out for running through open country
+    this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);

@@ -157,7 +157,8 @@ function tileQuery(t, mode = 'full') {
     '.r >;out skel qt;' +
     '(way["leisure"~"^(park|garden|nature_reserve|recreation_ground|golf_course|marina)$"];' +
     'relation["leisure"~"^(park|garden|nature_reserve)$"];' +
-    'way["landuse"~"^(forest|grass|meadow|recreation_ground|village_green)$"];relation["landuse"="forest"];' +
+    'way["landuse"~"^(forest|grass|meadow|recreation_ground|village_green|military|railway|quarry|industrial|garages)$"];relation["landuse"~"^(forest|military)$"];' +
+    'way["amenity"~"^(hospital|school|college|university|prison)$"];way["military"];' +
     'way["natural"~"^(wood|scrub|heath|grassland|wetland|water|beach|coastline)$"];relation["natural"~"^(wood|water)$"];' +
     'way["waterway"~"^(river|canal|stream|riverbank)$"];);out geom qt;'
   );
@@ -272,6 +273,10 @@ function classifyFeature(tags = {}) {
 // Open country (woods, scrub, heath, nature reserves): a bare path here is a dirt trail.
 function wildFeature(tags = {}) {
   if (/^(wood|scrub|heath|grassland|wetland)$/.test(tags.natural || '') || tags.landuse === 'forest' || tags.leisure === 'nature_reserve') return { kind: 'wild', shape: 'area', buffer: 20 };
+  // Land a runner cannot pass through (its paths leave the network) and fenced compounds
+  // (their small paths and alleys are a last resort).
+  if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 
@@ -641,7 +646,7 @@ async function fetchVectorTiles(tiles, { cache = null, onProgress = () => {}, fe
 // side streets fall apart into islands. The planner prices them above primaries.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
-  if (p.foot === 'no' || (p.access === 'no' && p.foot !== 'yes')) return null;
+  if (p.foot === 'no' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
   const unpaved = p.surface === 'unpaved';
   switch (p.class) {
@@ -673,7 +678,8 @@ function highwayFor(p, long) {
 const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
-  if (p.foot === 'no' || (p.access === 'no' && p.foot !== 'yes')) return 'no foot access';
+  if (p.foot === 'no' || p.access === 'no') return 'no foot access';
+  if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
   if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
   if (p.class === 'track') return 'dirt track';
@@ -821,6 +827,15 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       const sight = sightFromPoi(f.props);
       if (!sight) continue;
       sights.push({ ...sight, lat, lon });
+    }
+    // Land a runner cannot pass through: army bases, railway land, quarries ('closed':
+    // its paths leave the network) and fenced compounds — factories, hospitals, schools,
+    // campuses, garages ('compound': its small paths and alleys are a last resort).
+    for (const f of layers.landuse?.features || []) {
+      if (f.type !== 3) continue;
+      const c = f.props.class;
+      if (/^(military|railway|quarry|prison)$/.test(c)) features.push({ kind: 'closed', shape: 'area', buffer: 5, rings: f.geom.map(toLatLon), relation: true });
+      else if (/^(industrial|hospital|school|college|university|garages|bus_station|dam)$/.test(c)) features.push({ kind: 'compound', shape: 'area', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
     }
     // Athletics tracks are 'track' areas in the landuse layer (no names there).
     for (const f of layers.landuse?.features || []) {
@@ -1083,6 +1098,8 @@ class LandscapeGrid {
     this.green = new Uint8Array(this.n * this.n);
     this.water = new Uint8Array(this.n * this.n);
     this.wild = new Uint8Array(this.n * this.n); // woods, scrub, heath: open country, where a bare path is a dirt trail
+    this.closed = new Uint8Array(this.n * this.n); // army bases, railway land, quarries, prisons: no way through
+    this.compound = new Uint8Array(this.n * this.n); // factories, hospitals, schools, campuses, garages: fenced, avoid
     this.body = null; // filled water areas (sea, lakes), from vector tiles
   }
 
@@ -1097,7 +1114,7 @@ class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : this.water;
   }
 
   // 1 if (x, y) lies in that layer, else 0.
@@ -1433,22 +1450,36 @@ class Graph {
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
     let skippedWild = 0;
-    for (const road of osm.roads) {
-      // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the network at all.
-      if (road.tags.rough && grid) {
+    let skippedClosed = 0;
+    for (let road of osm.roads) {
+      // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
+      // network at all. Any way that runs mostly through closed ground (army base, railway
+      // land, quarry, prison) is out too, and a small way (alley, footpath, service road)
+      // inside a fenced compound (factory, hospital, school, campus) is a last resort.
+      if (grid) {
+        const small = /^(service|footway|path|cycleway|pedestrian|steps|living_street|residential|unclassified|road)$/.test(road.tags.highway);
         let cnt = 0;
         let wild = 0;
+        let closed = 0;
+        let compound = 0;
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
           const [x, y] = proj.toXY(p[0], p[1]);
           cnt++;
           if (grid.at('wild', x, y)) wild++;
+          if (grid.at('closed', x, y)) closed++;
+          if (grid.at('compound', x, y)) compound++;
         }
-        if (cnt && wild / cnt >= 0.5) {
+        if (cnt && road.tags.rough && wild / cnt >= 0.5) {
           skippedWild++;
           continue;
         }
+        if (cnt && small && closed / cnt >= 0.5) {
+          skippedClosed++;
+          continue;
+        }
+        if (cnt && small && compound / cnt >= 0.5) road = { ...road, tags: { ...road.tags, rough: 1 } };
       }
       const cls = highwayClass(road.tags.highway);
       let nid = -1;
@@ -1488,6 +1519,7 @@ class Graph {
     this.n = n;
     this.m = m;
     this.skippedWild = skippedWild; // bare paths left out for running through open country
+    this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);

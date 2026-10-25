@@ -266,7 +266,7 @@ export async function fetchVectorTiles(tiles, { cache = null, onProgress = () =>
 // side streets fall apart into islands. The planner prices them above primaries.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
-  if (p.foot === 'no' || (p.access === 'no' && p.foot !== 'yes')) return null;
+  if (p.foot === 'no' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
   const unpaved = p.surface === 'unpaved';
   switch (p.class) {
@@ -298,7 +298,8 @@ function highwayFor(p, long) {
 const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
-  if (p.foot === 'no' || (p.access === 'no' && p.foot !== 'yes')) return 'no foot access';
+  if (p.foot === 'no' || p.access === 'no') return 'no foot access';
+  if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
   if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
   if (p.class === 'track') return 'dirt track';
@@ -446,6 +447,15 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       const sight = sightFromPoi(f.props);
       if (!sight) continue;
       sights.push({ ...sight, lat, lon });
+    }
+    // Land a runner cannot pass through: army bases, railway land, quarries ('closed':
+    // its paths leave the network) and fenced compounds — factories, hospitals, schools,
+    // campuses, garages ('compound': its small paths and alleys are a last resort).
+    for (const f of layers.landuse?.features || []) {
+      if (f.type !== 3) continue;
+      const c = f.props.class;
+      if (/^(military|railway|quarry|prison)$/.test(c)) features.push({ kind: 'closed', shape: 'area', buffer: 5, rings: f.geom.map(toLatLon), relation: true });
+      else if (/^(industrial|hospital|school|college|university|garages|bus_station|dam)$/.test(c)) features.push({ kind: 'compound', shape: 'area', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
     }
     // Athletics tracks are 'track' areas in the landuse layer (no names there).
     for (const f of layers.landuse?.features || []) {

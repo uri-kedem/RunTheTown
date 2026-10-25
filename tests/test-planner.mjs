@@ -59,7 +59,8 @@ check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road cro
   const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
   const xy = ([la, lo]) => [(lo - CENTER[1]) * kx, (la - CENTER[0]) * ky];
   const onLine = (p, a, b) => { const [x, y] = p; const cross = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]); const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (Math.abs(cross) / len > 3) return false; const t = ((x - a[0]) * (b[0] - a[0]) + (y - a[1]) * (b[1] - a[1])) / (len * len); return t > -0.01 && t < 1.01; };
-  const BAD = [[[-800, -800], [800, 800]], [[-800, 800], [800, -800]], [[900, -1500], [1500, -900]], [[900, -900], [1700, -100]]];
+  // ... plus the footpath through the army base, the private drive and (as a last resort only) the factory alley.
+  const BAD = [[[-800, -800], [800, 800]], [[-800, 800], [800, -800]], [[900, -1500], [1500, -900]], [[900, -900], [1700, -100]], [[-1700, -1700], [-900, -900]], [[-800, -1250], [-300, -1250]], [[300, -1700], [1100, -900]]];
   const GOOD = [[-1500, -900], [-900, -1500]];
   const usesLine = (r, [a, b]) => { const pts = r.latlngs.map(xy); let n = 0; for (let i = 1; i < pts.length; i++) if (onLine(pts[i - 1], a, b) && onLine(pts[i], a, b) && Math.abs(pts[i][0] - pts[i - 1][0]) > 50 && Math.abs(pts[i][1] - pts[i - 1][1]) > 50) n++; return n; };
   let bad = 0, good = 0, tested = 0;
@@ -67,7 +68,7 @@ check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road cro
     const rs = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs, terrain: 'any' });
     for (const r of rs) { tested++; for (const L of BAD) bad += usesLine(r, L); good += usesLine(r, GOOD); }
   }
-  check(bad === 0, `no route uses the dirt track, the unpaved trail, the singletrack or the wood trail (${tested} routes checked)`);
+  check(bad === 0, `no route uses the dirt track, the unpaved trail, the singletrack, the wood trail, the army-base path, the private drive or the factory alley (${tested} routes checked)`);
   console.log(`   the paved garden path of the same shape is allowed (used in ${good} segments)`);
   const area = engine.area || engine.lastArea;
   const g = area?.graph;
@@ -75,6 +76,8 @@ check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road cro
     let rough = 0; for (let e = 0; e < g.m; e++) rough += g.rough[e];
     console.log(`   graph: ${g.m} edges, ${rough} rough (bare paths of unknown surface), ${g.skippedWild} bare paths dropped in open country`);
     check(rough > 0 && g.skippedWild >= 1, 'the bare park path stays (penalised) while the bare wood trail is dropped');
+    check(g.skippedClosed >= 1, `the path through the army base is not in the network (${g.skippedClosed} ways dropped on closed ground)`);
+    console.log(`   dropped as private: ${area?.audit?.dropped?.private ?? 'n/a'}`);
   }
 }
 

@@ -108,6 +108,15 @@ export function syntheticOverpass({ size = 7000, spacing = 100, riverX = 2000, s
     way(diag(900, -900, 1700, -100), { highway: 'path', name: 'Wood Trail' });
     way(diag(-1500, 300, -700, 1100), { highway: 'path', name: 'Park Path' });
 
+    // Places a runner cannot or should not pass: an army base south-west of the centre
+    // with a paved footpath straight through it (a tempting short cut), a private service
+    // road on the block east of it, and a factory compound with an alley through it.
+    geomWay([[-1700, -1700], [-900, -1700], [-900, -900], [-1700, -900], [-1700, -1700]], { landuse: 'military' });
+    way(diag(-1700, -1700, -900, -900), { highway: 'footway', surface: 'asphalt', name: 'Base Path' });
+    way([[-800, -1200], [-700, -1200], [-600, -1200], [-500, -1200], [-400, -1200], [-300, -1200]].map(([x, y]) => [x, y - 50]), { highway: 'service', access: 'private', name: 'Private Drive' });
+    geomWay([[300, -1700], [1100, -1700], [1100, -900], [300, -900], [300, -1700]], { landuse: 'industrial' });
+    way(diag(300, -1700, 1100, -900), { highway: 'service', surface: 'asphalt', name: 'Factory Alley' });
+
     // An Eilat-like quarter east of the river: its streets hang off a trunk road
     // (Route 90 runs through Eilat as the main boulevard) and reach the rest of
     // town only over the trunk's bridge. Without the trunk it would be stranded.

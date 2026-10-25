@@ -10,6 +10,8 @@ export class LandscapeGrid {
     this.green = new Uint8Array(this.n * this.n);
     this.water = new Uint8Array(this.n * this.n);
     this.wild = new Uint8Array(this.n * this.n); // woods, scrub, heath: open country, where a bare path is a dirt trail
+    this.closed = new Uint8Array(this.n * this.n); // army bases, railway land, quarries, prisons: no way through
+    this.compound = new Uint8Array(this.n * this.n); // factories, hospitals, schools, campuses, garages: fenced, avoid
     this.body = null; // filled water areas (sea, lakes), from vector tiles
   }
 
@@ -24,7 +26,7 @@ export class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : this.water;
   }
 
   // 1 if (x, y) lies in that layer, else 0.
