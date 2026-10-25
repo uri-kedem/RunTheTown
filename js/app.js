@@ -902,6 +902,7 @@ function endRun() {
   map.removeLayer(navLayer);
   routeLayer.addTo(map);
   document.body.classList.remove('navigating');
+  window.dispatchEvent(new Event('rtt:runended')); // a build update that waited for the run can reload now
   $('navView').hidden = true;
   $('recenterBtn').hidden = true;
   resetEnd();
@@ -1019,7 +1020,17 @@ function installSetup() {
   });
   window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; $('railInstall').hidden = true; });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker not registered:', err));
+    // A new build shows on the first open: once the new service worker has taken over
+    // (it skips waiting and claims the page), reload so the page runs the new files.
+    // Never while a run is on: the reload waits for the run to end.
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) { hadController = true; return; } // first install, nothing to swap
+      const reload = () => location.reload();
+      if (document.body.classList.contains('navigating')) window.addEventListener('rtt:runended', reload, { once: true });
+      else reload();
+    });
+    navigator.serviceWorker.register('sw.js').then((reg) => reg.update().catch(() => {})).catch((err) => console.warn('Service worker not registered:', err));
   }
 }
 
