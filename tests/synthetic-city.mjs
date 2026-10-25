@@ -117,6 +117,14 @@ export function syntheticOverpass({ size = 7000, spacing = 100, riverX = 2000, s
     geomWay([[300, -1700], [1100, -1700], [1100, -900], [300, -900], [300, -1700]], { landuse: 'industrial' });
     way(diag(300, -1700, 1100, -900), { highway: 'service', surface: 'asphalt', name: 'Factory Alley' });
 
+    // A marina east of the river, off the boulevard: a basin with pontoons (footways over
+    // the water, not for runners) and a quay promenade along its edge (fine).
+    geomWay([[2100, -400], [2500, -400], [2500, 0], [2100, 0], [2100, -400]], { natural: 'water' });
+    const quay = []; for (let y = 0; y >= -400; y -= 50) quay.push([2080, y]);
+    way(quay, { highway: 'footway', name: 'Marina Quay' });
+    way([[2080, 0], [2100, 0]], { highway: 'footway' }); // the quay joins the boulevard
+    for (const y of [-100, -250]) way([[2080, y], [2150, y], [2250, y], [2350, y], [2450, y]], { highway: 'footway', name: `Pontoon ${-y}` });
+
     // An Eilat-like quarter east of the river: its streets hang off a trunk road
     // (Route 90 runs through Eilat as the main boulevard) and reach the rest of
     // town only over the trunk's bridge. Without the trunk it would be stranded.

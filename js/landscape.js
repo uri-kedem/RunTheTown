@@ -26,7 +26,18 @@ export class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : this.water;
+  }
+
+  // 1 if (x, y) lies well inside that layer: its cell and the four neighbours (a quay
+  // at the water's edge is not "deep" in the water; a pontoon 30 m out is).
+  deep(kind, x, y) {
+    const c = this.col(x);
+    const r = this.row(y);
+    if (c < 1 || r < 1 || c >= this.n - 1 || r >= this.n - 1) return 0;
+    const a = this.layer(kind);
+    const n = this.n;
+    return a[r * n + c] && a[r * n + c - 1] && a[r * n + c + 1] && a[(r - 1) * n + c] && a[(r + 1) * n + c] ? 1 : 0;
   }
 
   // 1 if (x, y) lies in that layer, else 0.

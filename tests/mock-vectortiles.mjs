@@ -111,6 +111,7 @@ export function makeMockMapBackend(dataset, { seaX = null, vtFailRate = 0, vtDow
       else if (el.tags.leisure === 'track') polys.push({ layer: 'landuse', props: { class: 'track' }, g });
       else if (/^(military|railway|quarry|industrial|garages)$/.test(el.tags.landuse || '')) polys.push({ layer: 'landuse', props: { class: el.tags.landuse }, g });
       else if (/^(hospital|school|college|university)$/.test(el.tags.amenity || '')) polys.push({ layer: 'landuse', props: { class: el.tags.amenity }, g });
+      else if (el.tags.natural === 'water') polys.push({ layer: 'water', props: { class: 'lake' }, g });
       else if (el.tags.waterway) lines.push({ layer: 'waterway', props: { class: el.tags.waterway }, g });
       else if (el.tags.natural === 'coastline') {
         // The sea west of the coastline, as an ocean polygon (like OpenMapTiles' water layer).

@@ -90,6 +90,11 @@ for locked-screen guidance and the app stores.
      railway land, a quarry or a prison (`landuse`/`military`/`amenity=prison` polygons, grid layer
      `closed`) is out of the network. Inside a fenced compound — factory, hospital, school, campus,
      garages (grid layer `compound`) — such ways count as a last resort, like a bare path.
+   - **Nothing over the water.** A footway, service road, path or stairs with most of its nodes deep
+     inside a water body (`LandscapeGrid.deep`: the cell and its four neighbours are water) is a marina
+     pontoon, jetty or pier and is dropped (`Graph.skippedAfloat`) — the Tel Aviv marina by the Hilton
+     used to show up in routes. The quay along the edge keeps its land nodes and stays. Marina grounds
+     from Overpass (`leisure=marina`) count as a compound.
    - Long runs (over 15 km) also skip service alleys and steps.
 4. **On-device cache:** map tiles, traffic lights and elevation are saved in the browser for 14 days
    (`js/cache.js`), so coming back to a city is instant.

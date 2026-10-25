@@ -70,6 +70,7 @@ export class Graph {
     const nameIdx = new Map();
     let skippedWild = 0;
     let skippedClosed = 0;
+    let skippedAfloat = 0;
     for (let road of osm.roads) {
       // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
       // network at all. Any way that runs mostly through closed ground (army base, railway
@@ -81,6 +82,8 @@ export class Graph {
         let wild = 0;
         let closed = 0;
         let compound = 0;
+        let afloat = 0;
+        const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
@@ -89,6 +92,13 @@ export class Graph {
           if (grid.at('wild', x, y)) wild++;
           if (grid.at('closed', x, y)) closed++;
           if (grid.at('compound', x, y)) compound++;
+          if (canFloat && grid.body && grid.deep('body', x, y)) afloat++;
+        }
+        // A footway or service road that lies over the water is a marina pontoon, jetty or
+        // pier: not a running route (a promenade along the edge keeps most nodes on land).
+        if (cnt >= 2 && canFloat && afloat / cnt >= 0.6) {
+          skippedAfloat++;
+          continue;
         }
         if (cnt && road.tags.rough && wild / cnt >= 0.5) {
           skippedWild++;
@@ -139,6 +149,7 @@ export class Graph {
     this.m = m;
     this.skippedWild = skippedWild; // bare paths left out for running through open country
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
+    this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);

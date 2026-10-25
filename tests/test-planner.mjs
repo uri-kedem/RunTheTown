@@ -77,6 +77,8 @@ check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road cro
     console.log(`   graph: ${g.m} edges, ${rough} rough (bare paths of unknown surface), ${g.skippedWild} bare paths dropped in open country`);
     check(rough > 0 && g.skippedWild >= 1, 'the bare park path stays (penalised) while the bare wood trail is dropped');
     check(g.skippedClosed >= 1, `the path through the army base is not in the network (${g.skippedClosed} ways dropped on closed ground)`);
+    const named = (nm) => { let n = 0; for (let e = 0; e < g.m; e++) if (g.names[g.edgeName[e]]?.name === nm) n++; return n; };
+    check(g.skippedAfloat >= 2 && named('Pontoon 100') === 0 && named('Pontoon 250') === 0 && named('Marina Quay') > 0, `the marina pontoons are out, the quay stays (${g.skippedAfloat} afloat ways dropped, quay edges ${named('Marina Quay')})`);
     console.log(`   dropped as private: ${area?.audit?.dropped?.private ?? 'n/a'}`);
   }
 }

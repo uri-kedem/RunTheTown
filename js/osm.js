@@ -219,7 +219,7 @@ export function wildFeature(tags = {}) {
   // Land a runner cannot pass through (its paths leave the network) and fenced compounds
   // (their small paths and alleys are a last resort).
   if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
-  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '') || tags.leisure === 'marina') return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 
@@ -257,7 +257,8 @@ export function parseOverpass(json) {
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;
     const cls = classifyFeature(el.tags);
-    if (!cls) continue;
+    const wild = wildFeature(el.tags); // open country, closed ground, fenced compounds
+    if (!cls && !wild) continue;
     let rings = [];
     if (el.type === 'way' && el.geometry) {
       rings = [el.geometry.filter(Boolean).map((p) => [p.lat, p.lon])];
@@ -268,8 +269,7 @@ export function parseOverpass(json) {
     }
     rings = rings.filter((r) => r.length >= 2);
     if (rings.length) {
-      features.push({ ...cls, rings, relation: el.type === 'relation' });
-      const wild = wildFeature(el.tags);
+      if (cls) features.push({ ...cls, rings, relation: el.type === 'relation' });
       if (wild) features.push({ ...wild, rings, relation: el.type === 'relation' });
     }
   }

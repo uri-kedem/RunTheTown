@@ -276,7 +276,7 @@ function wildFeature(tags = {}) {
   // Land a runner cannot pass through (its paths leave the network) and fenced compounds
   // (their small paths and alleys are a last resort).
   if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
-  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '') || tags.leisure === 'marina') return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 
@@ -314,7 +314,8 @@ function parseOverpass(json) {
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;
     const cls = classifyFeature(el.tags);
-    if (!cls) continue;
+    const wild = wildFeature(el.tags); // open country, closed ground, fenced compounds
+    if (!cls && !wild) continue;
     let rings = [];
     if (el.type === 'way' && el.geometry) {
       rings = [el.geometry.filter(Boolean).map((p) => [p.lat, p.lon])];
@@ -325,8 +326,7 @@ function parseOverpass(json) {
     }
     rings = rings.filter((r) => r.length >= 2);
     if (rings.length) {
-      features.push({ ...cls, rings, relation: el.type === 'relation' });
-      const wild = wildFeature(el.tags);
+      if (cls) features.push({ ...cls, rings, relation: el.type === 'relation' });
       if (wild) features.push({ ...wild, rings, relation: el.type === 'relation' });
     }
   }
@@ -1114,7 +1114,18 @@ class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : this.water;
+  }
+
+  // 1 if (x, y) lies well inside that layer: its cell and the four neighbours (a quay
+  // at the water's edge is not "deep" in the water; a pontoon 30 m out is).
+  deep(kind, x, y) {
+    const c = this.col(x);
+    const r = this.row(y);
+    if (c < 1 || r < 1 || c >= this.n - 1 || r >= this.n - 1) return 0;
+    const a = this.layer(kind);
+    const n = this.n;
+    return a[r * n + c] && a[r * n + c - 1] && a[r * n + c + 1] && a[(r - 1) * n + c] && a[(r + 1) * n + c] ? 1 : 0;
   }
 
   // 1 if (x, y) lies in that layer, else 0.
@@ -1451,6 +1462,7 @@ class Graph {
     const nameIdx = new Map();
     let skippedWild = 0;
     let skippedClosed = 0;
+    let skippedAfloat = 0;
     for (let road of osm.roads) {
       // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
       // network at all. Any way that runs mostly through closed ground (army base, railway
@@ -1462,6 +1474,8 @@ class Graph {
         let wild = 0;
         let closed = 0;
         let compound = 0;
+        let afloat = 0;
+        const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
@@ -1470,6 +1484,13 @@ class Graph {
           if (grid.at('wild', x, y)) wild++;
           if (grid.at('closed', x, y)) closed++;
           if (grid.at('compound', x, y)) compound++;
+          if (canFloat && grid.body && grid.deep('body', x, y)) afloat++;
+        }
+        // A footway or service road that lies over the water is a marina pontoon, jetty or
+        // pier: not a running route (a promenade along the edge keeps most nodes on land).
+        if (cnt >= 2 && canFloat && afloat / cnt >= 0.6) {
+          skippedAfloat++;
+          continue;
         }
         if (cnt && road.tags.rough && wild / cnt >= 0.5) {
           skippedWild++;
@@ -1520,6 +1541,7 @@ class Graph {
     this.m = m;
     this.skippedWild = skippedWild; // bare paths left out for running through open country
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
+    this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);
