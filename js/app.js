@@ -402,7 +402,9 @@ $('goBtn').addEventListener('click', async () => {
   }
 });
 
+let lastTapped = -1; // the route the runner tapped last: a second tap on it opens the pop-up
 function showRoutes(routes) {
+  lastTapped = -1;
   $('prefsView').hidden = true;
   $('resultsView').hidden = false;
   const bits = [`${state.distanceKm} km`];
@@ -428,7 +430,8 @@ function showRoutes(routes) {
       <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
-    card.addEventListener('click', () => { selectRoute(i, { fit: true }); openRouteAsk(i); });
+    // First tap picks the route (map and card light up); a second tap on it opens the pop-up.
+    card.addEventListener('click', () => { const again = lastTapped === i; lastTapped = i; selectRoute(i, { fit: true }); if (again) openRouteAsk(i); });
     cards.appendChild(card);
   });
   drawRoutes();
@@ -584,7 +587,7 @@ function drawRoutes() {
   state.routes.forEach((r, i) => {
     const casing = L.polyline(r.latlngs, { color: '#fff', weight: 9, opacity: 0.9, lineJoin: 'round' });
     const line = L.polyline(r.latlngs, { color: COLORS[i], weight: 5, opacity: 0.9, lineJoin: 'round' });
-    for (const l of [casing, line]) l.on('click', () => { selectRoute(i); openRouteAsk(i); });
+    for (const l of [casing, line]) l.on('click', () => { const again = lastTapped === i; lastTapped = i; selectRoute(i); if (again) openRouteAsk(i); });
     r._layers = { casing, line };
     casing.addTo(routeLayer);
     line.addTo(routeLayer);
