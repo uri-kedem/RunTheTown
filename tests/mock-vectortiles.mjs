@@ -87,6 +87,7 @@ function classify(tags) {
   if (tags.mtb_scale) props.mtb_scale = tags.mtb_scale;
   if (tags.access === 'private' || tags.access === 'no') props.access = tags.access;
   if (tags.foot) props.foot = tags.foot;
+  if (tags.bicycle) props.bicycle = tags.bicycle;
   return props;
 }
 

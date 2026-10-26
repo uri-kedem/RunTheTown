@@ -93,10 +93,19 @@ for locked-screen guidance and the app stores.
    - **Nothing over the water.** A footway, service road, path or stairs with most of its nodes deep
      inside a water body (`LandscapeGrid.deep`: the cell and its four neighbours are water) is a marina
      pontoon, jetty or pier and is dropped (`Graph.skippedAfloat`) — the Tel Aviv marina by the Hilton
-     used to show up in routes. Marina basins (`leisure=marina`, fetched with the traffic-light query
-     since the tiles cannot tell a harbour from a lake) also mark a `dock` layer 35 m wide: an unnamed
-     footway, service road, stairs or living street hugging the basin is the dock quay (Tel Aviv's runs
-     behind the clubhouses with no way through) and is dropped; the named promenade inland stays.
+     used to show up in routes. Marina basins also mark a `dock` layer (the basin plus a ~50 m rim):
+     a harbour is found from the tiles alone — a small water polygon that lies in or touches the sea
+     (`LandscapeGrid.markHarbours`; Tel Aviv's marina is a `lake` polygon inside the ocean polygon) —
+     and, when the traffic-light query answers in time, from `leisure=marina` in Overpass too. An
+     unnamed footway, service road, stairs or living street with 60% of its nodes on the dock is the
+     dock quay (Tel Aviv's runs behind the clubhouses with no way through) and is dropped; the named
+     promenade inland stays. Checked on the real Tel Aviv tiles (scratch test, 4 tiles around the Hilton).
+   - **Bike routes are promenades.** A car-free bike route — a cycleway open to walkers, or a footway,
+     path or pedestrian street with `bicycle=designated` (OpenFreeMap tiles carry `bicycle`/`foot`) — is
+     a made, continuous path (`tags.bike`, `Graph.bike`): never a "rough" trail even with no surface tag
+     (Tel Aviv's Yarkon and tayelet sections are `highway=path` + `bicycle=designated`), promenade credit
+     0.6 anywhere and 1 along the water or through a park. Long bike routes trace the boardwalks, so the
+     planner now follows them end to end.
    - **The sea first.** The `sea` grid layer (ocean polygons + beaches, ~100 m inland) is kept apart from
      rivers and lakes: seaside edges cost ×0.7 on top of the water bonus, score `+0.6·seaFrac`, and the
      first option gets `seaBoost` (+1.2 once 30% of the run is by the sea) — so from Ramat Aviv the beach

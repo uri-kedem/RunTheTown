@@ -2,7 +2,7 @@
 // attributes, a spatial index for snapping, and Dijkstra shortest paths.
 
 import { haversine } from './geo.js';
-import { STOP, stopKind } from './osm.js';
+import { STOP, stopKind, isBikeRoute } from './osm.js';
 
 // Extra "virtual meters" for having to stop: a traffic light is worth a ~250 m
 // detour, a crosswalk ~50 m. Runners hate stopping more than running a bit more.
@@ -26,10 +26,14 @@ function promenadeOf(tags) {
   if (h === 'steps') return 0;
   if (h === 'pedestrian') return 1;
   const nm = `${tags['name:en'] || ''} ${tags.name || ''} ${tags.local || ''}`;
-  if (!PROMENADE_NAME.test(nm)) return 0;
+  // A car-free bike route (shared foot-and-bike path, cycleway open to walkers) is a made,
+  // continuous path: along the water or through a park it is the promenade itself (see the
+  // Graph constructor, which raises it to 1 there); elsewhere it is still a good run.
+  const bike = tags.bike || isBikeRoute(h, tags.bicycle, tags.foot) ? 0.6 : 0;
+  if (!PROMENADE_NAME.test(nm)) return bike;
   if (/^(footway|path|cycleway|track|living_street)$/.test(h)) return 1; // the walkway of a boulevard, a tayelet
   if (/^(residential|unclassified|road)$/.test(h)) return 0.5;
-  return 0; // a busy road called "Avenue" is still a busy road
+  return bike; // a busy road called "Avenue" is still a busy road
 }
 
 function highwayClass(tag) {
@@ -66,6 +70,7 @@ export class Graph {
     const ename = [];
     const eprom = [];
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
+    const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
     let skippedWild = 0;
@@ -133,6 +138,7 @@ export class Graph {
       }
       const rough = road.tags.rough ? 1 : 0;
       const prom = rough ? 0 : promenadeOf(road.tags);
+      const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
       const crossNodes = isCrossing ? [] : null;
       let prev = -1;
@@ -146,6 +152,7 @@ export class Graph {
           ename.push(nid);
           eprom.push(prom);
           erough.push(rough);
+          ebike.push(bike);
         }
         prev = cur;
       }
@@ -183,6 +190,7 @@ export class Graph {
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
     this.rough = Uint8Array.from(erough);
+    this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
     for (let e = 0; e < m; e++) {
@@ -203,7 +211,11 @@ export class Graph {
         this.green[e] = g / 3;
         this.water[e] = Math.max(w, sea) / 3;
         this.sea[e] = sea / 3;
-        if (ehw[e] === HW.PATH && !erough[e]) this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0);
+        if (ehw[e] === HW.PATH && !erough[e]) {
+          // A bike route along the water or through a park is the promenade / park path itself.
+          const bike = ebike[e] && (this.water[e] >= 0.5 || this.green[e] >= 0.5) ? 1 : 0;
+          this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0, bike);
+        }
       }
     }
 

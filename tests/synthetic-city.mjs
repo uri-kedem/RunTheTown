@@ -162,10 +162,25 @@ export function syntheticOverpass({ size = 7000, spacing = 100, riverX = 2000, s
     const promenade = [];
     const x0 = Math.ceil(seaX / spacing) * spacing;
     for (let y = -half; y <= half; y += 200) coast.push([seaX - 60, y]);
-    for (let y = -half; y <= half; y += spacing) promenade.push([seaX - 20, y]);
+    // A harbour basin cut into the coast (a water polygon lying in the sea, like Tel Aviv's
+    // marina in the tiles) with an unnamed dock quay along its inner edge; the promenade
+    // detours inland around it. Only in cities big enough to hold it.
+    const harbour = half >= 3000 ? { y0: 2000, y1: 2300, x1: seaX + 100 } : null;
+    const inHarbour = (y) => harbour && y >= harbour.y0 && y <= harbour.y1;
+    for (let y = -half; y <= half; y += spacing) promenade.push([inHarbour(y) ? harbour.x1 + 60 : seaX - 20, y]);
     geomWay(coast, { natural: 'coastline' });
-    way(promenade, { highway: 'footway' });
-    for (let y = -half; y <= half; y += spacing) way([[seaX - 20, y], [x0, y]], { highway: 'footway' });
+    // The beach promenade is mapped like Tel Aviv's: a shared foot-and-bike path with no
+    // surface tag (a bike route, not a dirt trail).
+    way(promenade, { highway: 'path', bicycle: 'designated', foot: 'designated' });
+    for (let y = -half; y <= half; y += spacing) if (!inHarbour(y)) way([[seaX - 20, y], [x0, y]], { highway: 'footway' });
+    if (harbour) {
+      const { y0, y1, x1 } = harbour;
+      geomWay([[seaX - 200, y0], [x1, y0], [x1, y1], [seaX - 200, y1], [seaX - 200, y0]], { natural: 'water' });
+      const quay = []; for (let y = y0; y <= y1; y += 50) quay.push([x1 + 15, y]);
+      way(quay, { highway: 'footway' }); // the dock quay, 15 m from the water
+      way([[x1 + 15, y0], [x1 + 60, y0]], { highway: 'footway' });
+      way([[x1 + 15, y1], [x1 + 60, y1]], { highway: 'footway' });
+    }
   }
 
   // Landmarks (points of interest), a few with Hebrew-only names.

@@ -16,6 +16,7 @@ export class LandscapeGrid {
     this.dock = new Uint8Array(this.n * this.n); // marina basins and their quays: no running there
     this.sea = new Uint8Array(this.n * this.n); // land by the sea: beaches and seaside promenades (the best of all water)
     this.seaBody = null; // the sea itself (ocean polygons), filled
+    this.lakeBody = null; // lakes, ponds, harbour basins (every other water polygon), filled
   }
 
   col(x) {
@@ -62,6 +63,9 @@ export class LandscapeGrid {
         if (f.kind === 'sea') {
           this.seaBody ||= new Uint8Array(this.n * this.n);
           this.fillPolygon(rings, this.seaBody);
+        } else {
+          this.lakeBody ||= new Uint8Array(this.n * this.n);
+          this.fillPolygon(rings, this.lakeBody);
         }
         continue;
       }
@@ -78,7 +82,53 @@ export class LandscapeGrid {
   // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {
     if (this.seaBody) this.flood(this.seaBody, this.sea, reach + 1);
+    if (this.seaBody && this.lakeBody) this.markHarbours();
     if (this.body) this.flood(this.body, this.water, reach);
+  }
+
+  // A small water polygon that lies in or touches the sea is a harbour or marina basin
+  // (the tiles call it a lake, and the ocean polygon usually covers it too): its rim,
+  // 2 cells (~50 m) wide, is dock — quays and pontoons, not running routes. Big lagoons
+  // and anything inland are left alone.
+  markHarbours(maxCells = 800) {
+    const n = this.n;
+    const b = this.lakeBody;
+    const sea = this.seaBody;
+    const seen = new Uint8Array(n * n);
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let s0 = 0; s0 < n * n; s0++) {
+      if (!b[s0] || seen[s0]) continue;
+      // Flood this lake-class body.
+      const cells = [s0];
+      seen[s0] = 1;
+      let touchesSea = !!sea[s0];
+      for (let k = 0; k < cells.length && cells.length <= maxCells; k++) {
+        const i = cells[k];
+        const r = (i / n) | 0;
+        const c = i - r * n;
+        for (const [dr, dc] of nb) {
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= n || cc >= n) continue;
+          const j = rr * n + cc;
+          if (sea[j]) touchesSea = true;
+          if (!b[j] || seen[j]) continue;
+          seen[j] = 1;
+          cells.push(j);
+        }
+      }
+      if (!touchesSea || cells.length > maxCells) continue;
+      // Mark the basin and a 2-cell rim around it.
+      for (const i of cells) {
+        const r = (i / n) | 0;
+        const c = i - r * n;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr >= 0 && cc >= 0 && rr < n && cc < n) this.dock[rr * n + cc] = 1;
+        }
+      }
+    }
   }
 
   flood(b, out, reach) {

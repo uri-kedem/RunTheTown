@@ -286,6 +286,22 @@ for (const km of [4, 8, 12]) {
     check(rs.length === 3 && rs[0].stats.seaFrac >= 0.15 && /sea/i.test(rs[0].name), `${km} km from home: the first option runs the beach promenade`);
     check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.1), 'within 10% of the distance');
   }
+  {
+    // The beach promenade is a bare-surface path with bikes designated: a bike route, so not rough,
+    // and it counts as the promenade (prom 1) — never a ×3 trail.
+    const g = eng.area.graph;
+    let promEdges = 0, roughBike = 0, bikeEdges = 0;
+    for (let e = 0; e < g.m; e++) if (g.bike[e]) { bikeEdges++; if (g.rough[e]) roughBike++; if (g.prom[e] >= 1 && g.sea[e] > 0) promEdges++; }
+    check(bikeEdges > 50 && roughBike === 0 && promEdges > 50, `the seafront bike route is a promenade, not a trail (${bikeEdges} bike edges, ${roughBike} rough, ${promEdges} seaside promenade edges)`);
+  }
+  {
+    // The harbour basin on the coast is found from the tiles alone (a water polygon in the
+    // sea): its unnamed quay is out of the network, the promenade detour around it is in.
+    const g = eng.area.graph;
+    let quay = 0, detour = 0;
+    for (let i = 0; i < g.n; i++) { if (g.y[i] > 2010 && g.y[i] < 2290) { if (Math.abs(g.x[i] - (-3000 + 115)) < 2) quay++; if (Math.abs(g.x[i] - (-3000 + 160)) < 2) detour++; } }
+    check(quay === 0 && detour > 0, `the harbour quay is out, the promenade detour stays (quay nodes ${quay}, detour nodes ${detour})`);
+  }
   const short = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 4, prefs: {}, terrain: 'any' });
   check(short.length === 3 && short.every((r) => r.stats.seaFrac === 0), '4 km from home: the sea is out of reach, three routes anyway');
 }

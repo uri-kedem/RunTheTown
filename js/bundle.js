@@ -93,7 +93,20 @@ function runnableTags(tags) {
   const surf = surfaceKind(tags);
   if (surf === 'unpaved') return null;
   if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : null;
-  return { highway: h, rough: h === 'path' && surf !== 'paved' ? 1 : 0 };
+  // A shared foot-and-bike path (bicycle=designated) is a made surface: promenades, boardwalks
+  // and park paths are mapped that way, and they run on for kilometres.
+  const bike = isBikeRoute(h, tags.bicycle, tags.foot);
+  return { highway: h, rough: h === 'path' && surf !== 'paved' && !bike ? 1 : 0, bike };
+}
+
+// 1 for a car-free way that is part of a bike route: a cycleway open to walkers, or a
+// footway / path / pedestrian street where bikes are designated. Long continuous bike
+// routes trace the promenades and boardwalks of a city.
+function isBikeRoute(highway, bicycle, foot) {
+  if (foot === 'no') return 0;
+  if (highway === 'cycleway') return 1;
+  if (/^(footway|path|pedestrian|living_street)$/.test(highway || '') && /^(designated|yes)$/.test(bicycle || '')) return 1;
+  return 0;
 }
 // Long runs cover a much bigger area. They skip separately-mapped sidewalks
 // (the street itself is the route), service alleys, tracks and steps, and keep
@@ -330,7 +343,7 @@ function parseOverpass(json) {
   for (const el of json.elements || []) {
     if (el.type === 'way' && el.nodes && !el.geometry && el.tags?.highway) {
       const run = runnableTags(el.tags);
-      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough } : el.tags });
+      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike } : el.tags });
       continue;
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;
@@ -414,6 +427,7 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
 // Overpass servers. Tiles are z14 (~2 km), decoded here with a small
 // Mapbox-Vector-Tile reader, and turned into the same { nodes, roads,
 // features } structure the graph builder uses.
+
 
 const VT_ZOOM = 14;
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
@@ -677,7 +691,7 @@ async function fetchVectorTiles(tiles, { cache = null, onProgress = () => {}, fe
 // side streets fall apart into islands. The planner prices them above primaries.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
-  if (p.foot === 'no' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
+  if (p.foot === 'no' || p.foot === 'private' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
   const unpaved = p.surface === 'unpaved';
   switch (p.class) {
@@ -706,10 +720,10 @@ function highwayFor(p, long) {
   }
 }
 // 1 for a way whose surface is unknown and whose kind is usually a trail (highway=path).
-const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' ? 1 : 0);
+const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' && !isBikeRoute(highway, p.bicycle, p.foot) ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
-  if (p.foot === 'no' || p.access === 'no') return 'no foot access';
+  if (p.foot === 'no' || p.foot === 'private' || p.access === 'no') return 'no foot access';
   if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
   if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
@@ -801,12 +815,16 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
         continue;
       }
       const rough = roughFor(highway, f.props);
-      const kind = rough ? `${highway} (rough)` : highway;
+      const bike = isBikeRoute(highway, f.props.bicycle, f.props.foot);
+      const kind = rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
       audit.kept[kind] = (audit.kept[kind] || 0) + 1;
+      const tags = { highway };
+      if (rough) tags.rough = 1;
+      if (bike) tags.bike = 1;
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {
-          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags: rough ? { highway, rough } : { highway } });
+          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags });
           cur = null;
         };
         for (let i = 0; i + 1 < line.length; i++) {
@@ -1141,6 +1159,7 @@ class LandscapeGrid {
     this.dock = new Uint8Array(this.n * this.n); // marina basins and their quays: no running there
     this.sea = new Uint8Array(this.n * this.n); // land by the sea: beaches and seaside promenades (the best of all water)
     this.seaBody = null; // the sea itself (ocean polygons), filled
+    this.lakeBody = null; // lakes, ponds, harbour basins (every other water polygon), filled
   }
 
   col(x) {
@@ -1187,6 +1206,9 @@ class LandscapeGrid {
         if (f.kind === 'sea') {
           this.seaBody ||= new Uint8Array(this.n * this.n);
           this.fillPolygon(rings, this.seaBody);
+        } else {
+          this.lakeBody ||= new Uint8Array(this.n * this.n);
+          this.fillPolygon(rings, this.lakeBody);
         }
         continue;
       }
@@ -1203,7 +1225,53 @@ class LandscapeGrid {
   // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {
     if (this.seaBody) this.flood(this.seaBody, this.sea, reach + 1);
+    if (this.seaBody && this.lakeBody) this.markHarbours();
     if (this.body) this.flood(this.body, this.water, reach);
+  }
+
+  // A small water polygon that lies in or touches the sea is a harbour or marina basin
+  // (the tiles call it a lake, and the ocean polygon usually covers it too): its rim,
+  // 2 cells (~50 m) wide, is dock — quays and pontoons, not running routes. Big lagoons
+  // and anything inland are left alone.
+  markHarbours(maxCells = 800) {
+    const n = this.n;
+    const b = this.lakeBody;
+    const sea = this.seaBody;
+    const seen = new Uint8Array(n * n);
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let s0 = 0; s0 < n * n; s0++) {
+      if (!b[s0] || seen[s0]) continue;
+      // Flood this lake-class body.
+      const cells = [s0];
+      seen[s0] = 1;
+      let touchesSea = !!sea[s0];
+      for (let k = 0; k < cells.length && cells.length <= maxCells; k++) {
+        const i = cells[k];
+        const r = (i / n) | 0;
+        const c = i - r * n;
+        for (const [dr, dc] of nb) {
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= n || cc >= n) continue;
+          const j = rr * n + cc;
+          if (sea[j]) touchesSea = true;
+          if (!b[j] || seen[j]) continue;
+          seen[j] = 1;
+          cells.push(j);
+        }
+      }
+      if (!touchesSea || cells.length > maxCells) continue;
+      // Mark the basin and a 2-cell rim around it.
+      for (const i of cells) {
+        const r = (i / n) | 0;
+        const c = i - r * n;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr >= 0 && cc >= 0 && rr < n && cc < n) this.dock[rr * n + cc] = 1;
+        }
+      }
+    }
   }
 
   flood(b, out, reach) {
@@ -1466,10 +1534,14 @@ function promenadeOf(tags) {
   if (h === 'steps') return 0;
   if (h === 'pedestrian') return 1;
   const nm = `${tags['name:en'] || ''} ${tags.name || ''} ${tags.local || ''}`;
-  if (!PROMENADE_NAME.test(nm)) return 0;
+  // A car-free bike route (shared foot-and-bike path, cycleway open to walkers) is a made,
+  // continuous path: along the water or through a park it is the promenade itself (see the
+  // Graph constructor, which raises it to 1 there); elsewhere it is still a good run.
+  const bike = tags.bike || isBikeRoute(h, tags.bicycle, tags.foot) ? 0.6 : 0;
+  if (!PROMENADE_NAME.test(nm)) return bike;
   if (/^(footway|path|cycleway|track|living_street)$/.test(h)) return 1; // the walkway of a boulevard, a tayelet
   if (/^(residential|unclassified|road)$/.test(h)) return 0.5;
-  return 0; // a busy road called "Avenue" is still a busy road
+  return bike; // a busy road called "Avenue" is still a busy road
 }
 
 function highwayClass(tag) {
@@ -1506,6 +1578,7 @@ class Graph {
     const ename = [];
     const eprom = [];
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
+    const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
     let skippedWild = 0;
@@ -1573,6 +1646,7 @@ class Graph {
       }
       const rough = road.tags.rough ? 1 : 0;
       const prom = rough ? 0 : promenadeOf(road.tags);
+      const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
       const crossNodes = isCrossing ? [] : null;
       let prev = -1;
@@ -1586,6 +1660,7 @@ class Graph {
           ename.push(nid);
           eprom.push(prom);
           erough.push(rough);
+          ebike.push(bike);
         }
         prev = cur;
       }
@@ -1623,6 +1698,7 @@ class Graph {
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
     this.rough = Uint8Array.from(erough);
+    this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
     for (let e = 0; e < m; e++) {
@@ -1643,7 +1719,11 @@ class Graph {
         this.green[e] = g / 3;
         this.water[e] = Math.max(w, sea) / 3;
         this.sea[e] = sea / 3;
-        if (ehw[e] === HW.PATH && !erough[e]) this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0);
+        if (ehw[e] === HW.PATH && !erough[e]) {
+          // A bike route along the water or through a park is the promenade / park path itself.
+          const bike = ebike[e] && (this.water[e] >= 0.5 || this.green[e] >= 0.5) ? 1 : 0;
+          this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0, bike);
+        }
       }
     }
 

@@ -4,6 +4,8 @@
 // Mapbox-Vector-Tile reader, and turned into the same { nodes, roads,
 // features } structure the graph builder uses.
 
+import { isBikeRoute } from './osm.js';
+
 export const VT_ZOOM = 14;
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
 const VT_CONCURRENCY = 6;
@@ -266,7 +268,7 @@ export async function fetchVectorTiles(tiles, { cache = null, onProgress = () =>
 // side streets fall apart into islands. The planner prices them above primaries.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
-  if (p.foot === 'no' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
+  if (p.foot === 'no' || p.foot === 'private' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
   const unpaved = p.surface === 'unpaved';
   switch (p.class) {
@@ -295,10 +297,10 @@ function highwayFor(p, long) {
   }
 }
 // 1 for a way whose surface is unknown and whose kind is usually a trail (highway=path).
-const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' ? 1 : 0);
+const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' && !isBikeRoute(highway, p.bicycle, p.foot) ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
-  if (p.foot === 'no' || p.access === 'no') return 'no foot access';
+  if (p.foot === 'no' || p.foot === 'private' || p.access === 'no') return 'no foot access';
   if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
   if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
@@ -390,12 +392,16 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
         continue;
       }
       const rough = roughFor(highway, f.props);
-      const kind = rough ? `${highway} (rough)` : highway;
+      const bike = isBikeRoute(highway, f.props.bicycle, f.props.foot);
+      const kind = rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
       audit.kept[kind] = (audit.kept[kind] || 0) + 1;
+      const tags = { highway };
+      if (rough) tags.rough = 1;
+      if (bike) tags.bike = 1;
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {
-          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags: rough ? { highway, rough } : { highway } });
+          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags });
           cur = null;
         };
         for (let i = 0; i + 1 < line.length; i++) {

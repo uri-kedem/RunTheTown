@@ -36,7 +36,20 @@ export function runnableTags(tags) {
   const surf = surfaceKind(tags);
   if (surf === 'unpaved') return null;
   if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : null;
-  return { highway: h, rough: h === 'path' && surf !== 'paved' ? 1 : 0 };
+  // A shared foot-and-bike path (bicycle=designated) is a made surface: promenades, boardwalks
+  // and park paths are mapped that way, and they run on for kilometres.
+  const bike = isBikeRoute(h, tags.bicycle, tags.foot);
+  return { highway: h, rough: h === 'path' && surf !== 'paved' && !bike ? 1 : 0, bike };
+}
+
+// 1 for a car-free way that is part of a bike route: a cycleway open to walkers, or a
+// footway / path / pedestrian street where bikes are designated. Long continuous bike
+// routes trace the promenades and boardwalks of a city.
+export function isBikeRoute(highway, bicycle, foot) {
+  if (foot === 'no') return 0;
+  if (highway === 'cycleway') return 1;
+  if (/^(footway|path|pedestrian|living_street)$/.test(highway || '') && /^(designated|yes)$/.test(bicycle || '')) return 1;
+  return 0;
 }
 // Long runs cover a much bigger area. They skip separately-mapped sidewalks
 // (the street itself is the route), service alleys, tracks and steps, and keep
@@ -273,7 +286,7 @@ export function parseOverpass(json) {
   for (const el of json.elements || []) {
     if (el.type === 'way' && el.nodes && !el.geometry && el.tags?.highway) {
       const run = runnableTags(el.tags);
-      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough } : el.tags });
+      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike } : el.tags });
       continue;
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;
