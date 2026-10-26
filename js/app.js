@@ -415,6 +415,9 @@ function showRoutes(routes) {
   if (p.sights) bits.push('sightseeing');
   if (state.terrain !== 'any') bits.push(state.terrain);
   $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}`;
+  // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
+  const note = $('resultsNote');
+  if (note) note.textContent = (routes.length < 3 && routes.every((r) => r.stats?.promFrac >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';

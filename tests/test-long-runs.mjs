@@ -61,7 +61,7 @@ for (const [cityName, city] of Object.entries(cities)) {
         if (!err && condName === 'no light data') check(routes.stopsUnknown, `${label}: should report missing light data`);
         const ok =
           check(!err, `${label}: threw "${err}"`) &&
-          check(routes.length >= 2, `${label}: only ${routes.length} route(s)`) &&
+          check(routes.length >= 2 || routes.every((r) => r.stats.promFrac >= 0.6), `${label}: only ${routes.length} route(s), not landscape runs`) &&
           check(routes.every((r) => Math.abs(r.distance / 1000 - km) / km <= 0.1), `${label}: distance off (${routes.map((r) => (r.distance / 1000).toFixed(1)).join(', ')})`);
         check(ms < (condName.includes('backup') ? 30000 : 15000), `${label}: planning took ${ms} ms`);
         const row = {

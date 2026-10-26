@@ -179,6 +179,19 @@ export async function planLoops(g, opts) {
     return s.promFrac + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0);
   };
   const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
+  // Landscape runs only: when any run keeps LANDSCAPE_SHARE of its length on park paths,
+  // boardwalks and promenades, nothing else is offered — a run that is 80% streets is no
+  // fun, even if it touches the beach. Fewer than `count` options is fine then.
+  const scenicPool = prefs.sights ? [] : pool.filter((r) => r.stats.promFrac >= LANDSCAPE_SHARE).sort((a, b) => promenadeOf(b) - promenadeOf(a));
+  if (scenicPool.length) {
+    for (const limit of [0.5, 0.7]) {
+      for (const r of scenicPool) {
+        if (chosen.length >= count) break;
+        if (!chosen.includes(r) && chosen.every((o) => overlap(g, r, o) < limit)) chosen.push(r);
+      }
+    }
+    return finish(g, chosen, start, prefs);
+  }
   const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
   if (promenade && promenadeOf(promenade) >= 0.25 && !prefs.sights) chosen.push(promenade); // a tour is ranked by its landmarks instead
   for (const limit of [0.45, 0.7, 1.01]) {
@@ -195,7 +208,13 @@ export async function planLoops(g, opts) {
   if (!chosen.length) chosen.push(...outbacks.slice(0, count));
   // Order: the promenade run first, then by score.
   chosen.sort((a, b) => (chosen[0] === promenade && (a === promenade || b === promenade) ? (a === promenade ? -1 : 1) : b.score - a.score));
+  return finish(g, chosen, start, prefs);
+}
 
+// A run is a landscape run when this share of it is park path, boardwalk or promenade.
+export const LANDSCAPE_SHARE = 0.6;
+
+function finish(g, chosen, start, prefs) {
   const out = chosen.map((c) => describe(g, c, start, prefs));
   // Keep names distinct: fall back to a finer compass direction, then a suffix.
   const used = new Set();

@@ -106,6 +106,11 @@ for locked-screen guidance and the app stores.
      (Tel Aviv's Yarkon and tayelet sections are `highway=path` + `bicycle=designated`), promenade credit
      0.6 anywhere and 1 along the water or through a park. Long bike routes trace the boardwalks, so the
      planner now follows them end to end.
+   - **Landscape runs only.** When any candidate (loop or there-and-back, within 8% of the distance)
+     keeps at least 60% of its length on park paths, boardwalks and promenades (`promFrac`,
+     `LANDSCAPE_SHARE`), nothing else is offered — fewer than three options then, and the results
+     note says so. A run that is 80% streets is no fun even if it touches the beach. A Sightseeing
+     tour is exempt (landmarks rank it).
    - **The sea first.** The `sea` grid layer (ocean polygons + beaches, ~100 m inland) is kept apart from
      rivers and lakes: seaside edges cost ×0.7 on top of the water bonus, score `+0.6·seaFrac`, and the
      first option gets `seaBoost` (+1.2 once 30% of the run is by the sea) — so from Ramat Aviv the beach

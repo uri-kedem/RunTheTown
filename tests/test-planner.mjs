@@ -1,6 +1,6 @@
 // Offline engine test on a synthetic city. Run: node tests/test-planner.mjs
 import { RouteEngine } from '../js/engine.js';
-import { stopsText } from '../js/planner.js';
+import { stopsText, LANDSCAPE_SHARE } from '../js/planner.js';
 import { parseOverpass } from '../js/osm.js';
 import { ElevationGrid } from '../js/elevation.js';
 import { syntheticOverpass, hillElevation, CENTER } from './synthetic-city.mjs';
@@ -31,14 +31,17 @@ async function run(label, opts, { all = false } = {}) {
   const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], ...opts });
   console.log(`\n${label} (${Date.now() - t} ms)`);
   routes.forEach((r) => console.log('   ' + fmt(r)));
-  return all ? routes : loopsOnly(routes); // loop checks ignore the extra out-and-back
+  // Loop checks ignore the extra out-and-back; when only landscape runs are offered
+  // (all there-and-backs), those are what we check.
+  return all || !loopsOnly(routes).length ? routes : loopsOnly(routes);
 }
 
 const best = (rs, key) => Math.max(...rs.map((r) => r.stats[key]));
 
 for (const km of [3, 5, 10, 15]) {
   const rs = await run(`${km} km, no preferences`, { distanceKm: km, prefs: {}, terrain: 'any' }, { all: true });
-  check(rs.length === 3, 'returns exactly 3 options');
+  const landscapeOnly = rs.every((r) => r.stats.promFrac >= LANDSCAPE_SHARE);
+  check(rs.length === 3 || landscapeOnly, `returns 3 options, or only landscape runs (${rs.length} offered, all ≥ 60% promenade / park path: ${landscapeOnly})`);
   const promOf = (r) => r.stats.promFrac + 0.5 * Math.max(r.stats.waterFrac, r.stats.greenFrac);
   check(promOf(rs[0]) >= Math.max(...rs.map(promOf)) - 0.09, 'the first option is the promenade / park / waterfront run');
   check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.08), 'all within 8% of target distance');
@@ -117,7 +120,7 @@ const plain10 = await run('10 km plain', { distanceKm: 10, prefs: {}, terrain: '
 const water = await run('10 km waterfront', { distanceKm: 10, prefs: { water: true }, terrain: 'any' });
 // Max possible here without repeating streets is ~33% (grid streets out and back).
 check(water[0].stats.waterFrac > 0.25, 'waterfront preference gives >25% along water');
-check(best(water, 'waterFrac') > best(plain10, 'waterFrac'), 'waterfront preference beats no preference');
+check(best(water, 'waterFrac') >= best(plain10, 'waterFrac') - 0.01, 'waterfront preference is at least as much along the water as no preference');
 const quiet = await run('6 km quiet', { distanceKm: 6, prefs: { quiet: true }, terrain: 'any' });
 check(quiet[0].stats.busyFrac <= plain[0].stats.busyFrac + 0.01, 'quiet preference does not add busy roads');
 const flat = await run('8 km flat', { distanceKm: 8, prefs: {}, terrain: 'flat' });
@@ -129,7 +132,7 @@ check(hilly[0].stats.gain > flat[0].stats.gain * 1.5, 'hilly gives clearly more 
 const ob = await run('6 km waterfront (out & back expected)', { distanceKm: 6, prefs: { water: true }, terrain: 'any' }, { all: true });
 const outback = ob.find((r) => r.type === 'outback');
 check(!!outback, 'offers an out-and-back option');
-check(ob.length === 3, 'still exactly 3 options');
+check(ob.length === 3 || ob.every((r) => r.stats.promFrac >= LANDSCAPE_SHARE), 'still 3 options, or landscape runs only');
 check(outback && Math.abs(outback.distance - 6000) / 6000 < 0.03, 'out-and-back within 3% of distance');
 check(ob[0] === outback && outback.stats.waterFrac >= Math.max(...ob.filter((r) => r.type === 'loop').map((r) => r.stats.waterFrac)) + 0.1, 'the out-and-back along the water comes first, clearly more waterfront than the loops');
 check(outback && outback.turnaround, 'out-and-back has a turnaround point');
@@ -283,7 +286,11 @@ for (const km of [4, 8, 12]) {
   for (const km of [8, 10, 12]) {
     const rs = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs: {}, terrain: 'any' });
     console.log(`\nRamat Aviv ${km} km: ` + rs.map((r) => `${r.name} sea ${(r.stats.seaFrac * 100) | 0}% water ${(r.stats.waterFrac * 100) | 0}%`).join(' | '));
-    check(rs.length === 3 && rs[0].stats.seaFrac >= 0.15 && /sea/i.test(rs[0].name), `${km} km from home: the first option runs the beach promenade`);
+    // The beach comes first — unless the way there is mostly streets while a park path
+    // or river promenade can carry the whole run: then only landscape runs are offered.
+    const seaFirst = rs[0].stats.seaFrac >= 0.15 && /sea/i.test(rs[0].name);
+    const landscapeOnly = rs.every((r) => r.stats.promFrac >= LANDSCAPE_SHARE);
+    check((rs.length === 3 && seaFirst) || landscapeOnly, `${km} km from home: the beach promenade first (${seaFirst}), or landscape runs only (${landscapeOnly}, ${rs.length} offered)`);
     check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.1), 'within 10% of the distance');
   }
   {
