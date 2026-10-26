@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = '08af527e';
+const CACHE_VERSION = '32b9d134';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -62,7 +62,7 @@ self.addEventListener('fetch', (event) => {
   if (!isShell(url)) return; // tiles, Overpass, Open-Meteo, Nominatim: straight to the network
 
   // Page and script: network first (so a new build shows up), cache when offline.
-  const navigation = req.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/js/bundle.js') || url.pathname.endsWith('/css/style.css');
+  const navigation = req.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/js/bundle.js') || url.pathname.endsWith('/css/style.css') || url.pathname.endsWith('/manifest.webmanifest');
   if (navigation) {
     event.respondWith(
       fetch(req).then((res) => {
