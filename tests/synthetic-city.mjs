@@ -117,12 +117,17 @@ export function syntheticOverpass({ size = 7000, spacing = 100, riverX = 2000, s
     geomWay([[300, -1700], [1100, -1700], [1100, -900], [300, -900], [300, -1700]], { landuse: 'industrial' });
     way(diag(300, -1700, 1100, -900), { highway: 'service', surface: 'asphalt', name: 'Factory Alley' });
 
-    // A marina east of the river, off the boulevard: a basin with pontoons (footways over
-    // the water, not for runners) and a quay promenade along its edge (fine).
-    geomWay([[2100, -400], [2500, -400], [2500, 0], [2100, 0], [2100, -400]], { natural: 'water' });
+    // A marina east of the river, off the boulevard, like Tel Aviv's: a basin with pontoons
+    // (footways over the water), an unnamed dock quay along its edge (behind the clubhouses,
+    // no way through) and the named promenade 80 m inland (the run).
+    geomWay([[2100, -400], [2500, -400], [2500, 0], [2100, 0], [2100, -400]], { natural: 'water', leisure: 'marina', name: 'Town Marina' });
     const quay = []; for (let y = 0; y >= -400; y -= 50) quay.push([2080, y]);
-    way(quay, { highway: 'footway', name: 'Marina Quay' });
+    way(quay, { highway: 'footway' }); // the dock quay
     way([[2080, 0], [2100, 0]], { highway: 'footway' }); // the quay joins the boulevard
+    const tayelet = []; for (let y = 0; y >= -400; y -= 50) tayelet.push([2020, y]);
+    way(tayelet, { highway: 'footway', name: 'Marina Promenade' });
+    way([[2020, 0], [2080, 0]], { highway: 'footway' });
+    way([[2020, -400], [2080, -400]], { highway: 'footway' });
     for (const y of [-100, -250]) way([[2080, y], [2150, y], [2250, y], [2350, y], [2450, y]], { highway: 'footway', name: `Pontoon ${-y}` });
 
     // An Eilat-like quarter east of the river: its streets hang off a trunk road

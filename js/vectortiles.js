@@ -423,7 +423,11 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       if (f.type !== 3) continue;
       const c = f.props.class;
       const s = f.props.subclass;
-      if (c === 'sand' && s === 'beach') features.push({ kind: 'water', shape: 'area', buffer: 60, rings: f.geom.map(toLatLon), relation: true });
+      if (c === 'sand' && s === 'beach') {
+        const rings = f.geom.map(toLatLon);
+        features.push({ kind: 'water', shape: 'area', buffer: 60, rings, relation: true });
+        features.push({ kind: 'sea', shape: 'area', buffer: 60, rings, relation: true });
+      }
       else if (/^(wood|grass|wetland)$/.test(c) || /^(park|garden|meadow|forest|wood|scrub|heath|grassland|recreation_ground|village_green)$/.test(s || '')) {
         const rings = f.geom.map(toLatLon);
         features.push({ kind: 'green', shape: 'area', buffer: 0, rings, relation: true });
@@ -432,7 +436,9 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       }
     }
     for (const f of layers.water?.features || []) {
-      if (f.type === 3) features.push({ kind: 'water', shape: 'body', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
+      if (f.type !== 3) continue;
+      // The sea ('ocean') is kept apart from rivers and lakes: a beach promenade beats a river bank.
+      features.push({ kind: f.props.class === 'ocean' ? 'sea' : 'water', shape: 'body', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
     }
     for (const f of layers.poi?.features || []) {
       if (f.type !== 1) continue;

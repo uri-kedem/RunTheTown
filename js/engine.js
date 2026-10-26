@@ -27,9 +27,12 @@ const STOPS_GRACE_MS = 4000;
 // Loops reach ~0.3·D from the start; a little margin lets nearby starts reuse
 // the area. Long runs grow the area more slowly (the download grows with the
 // square of the radius), so their routes wind more instead of going farther.
+// How far from the start the map is loaded. A there-and-back reaches ~0.4·D out, so
+// 0.38·D (+300 m) keeps a seafront 3 km away within an 8 km run; long runs level off
+// (the far side of a 20 km loop is never 8 km out on real streets).
 export function radiusFor(distanceM) {
-  if (distanceM <= LONG_RUN_M) return Math.round(0.32 * distanceM + 300);
-  return Math.round(0.32 * LONG_RUN_M + 300 + 0.2 * (distanceM - LONG_RUN_M));
+  const long = 0.32 * LONG_RUN_M + 300 + 0.2 * Math.max(0, distanceM - LONG_RUN_M);
+  return Math.round(Math.min(0.38 * distanceM + 300, long));
 }
 
 export class RouteEngine {
@@ -94,6 +97,7 @@ export class RouteEngine {
     if (startOk && 1 - failedTiles / tiles >= MIN_TILE_SHARE) {
       osm = osmFromVectorTiles(vtiles, vt.buffers, { long });
       osm.stopPoints = stopPoints || [];
+      if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -135,14 +139,14 @@ export class RouteEngine {
 
   // Traffic lights & crosswalks: from the device cache, else one small query.
   async loadStops(lat, lon, radius, long) {
-    const key = `stops:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const key = `stops2:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
     if (this.useCache) {
       const hit = await tileCache.get(key);
-      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return hit.points;
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [] });
     }
     const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
     const points = await fetchStops(lat, lon, r, { long, fetchImpl: this.fetchImpl });
-    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points });
+    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [] });
     return points;
   }
 

@@ -13,6 +13,9 @@ export class LandscapeGrid {
     this.closed = new Uint8Array(this.n * this.n); // army bases, railway land, quarries, prisons: no way through
     this.compound = new Uint8Array(this.n * this.n); // factories, hospitals, schools, campuses, garages: fenced, avoid
     this.body = null; // filled water areas (sea, lakes), from vector tiles
+    this.dock = new Uint8Array(this.n * this.n); // marina basins and their quays: no running there
+    this.sea = new Uint8Array(this.n * this.n); // land by the sea: beaches and seaside promenades (the best of all water)
+    this.seaBody = null; // the sea itself (ocean polygons), filled
   }
 
   col(x) {
@@ -26,7 +29,7 @@ export class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : kind === 'sea' ? this.sea : kind === 'dock' ? this.dock : this.water;
   }
 
   // 1 if (x, y) lies well inside that layer: its cell and the four neighbours (a quay
@@ -56,6 +59,10 @@ export class LandscapeGrid {
         // real shores): fill them, then mark land near them in finish().
         this.body ||= new Uint8Array(this.n * this.n);
         this.fillPolygon(rings, this.body);
+        if (f.kind === 'sea') {
+          this.seaBody ||= new Uint8Array(this.n * this.n);
+          this.fillPolygon(rings, this.seaBody);
+        }
         continue;
       }
       const arr = this.layer(f.kind);
@@ -68,10 +75,14 @@ export class LandscapeGrid {
   }
 
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.
+  // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {
-    if (!this.body) return;
+    if (this.seaBody) this.flood(this.seaBody, this.sea, reach + 1);
+    if (this.body) this.flood(this.body, this.water, reach);
+  }
+
+  flood(b, out, reach) {
     const n = this.n;
-    const b = this.body;
     let frontier = [];
     for (let i = 0; i < n * n; i++) if (b[i]) frontier.push(i);
     const dist = new Uint8Array(n * n);
@@ -88,7 +99,7 @@ export class LandscapeGrid {
           const j = rr * n + cc;
           if (dist[j]) continue;
           dist[j] = step + 1;
-          this.water[j] = 1;
+          out[j] = 1;
           next.push(j);
         }
       }

@@ -200,6 +200,7 @@ const GREEN = {
   natural: /^(wood|scrub|heath|grassland|wetland)$/,
 };
 
+// Seaside features (coastline, beaches) also count as 'sea' — see seaFeature().
 export function classifyFeature(tags = {}) {
   if (tags.natural === 'coastline') return { kind: 'water', shape: 'line', buffer: 110 };
   if (tags.waterway) {
@@ -213,13 +214,33 @@ export function classifyFeature(tags = {}) {
   }
   return null;
 }
+
+// A marina basin and its quays (within ~35 m of the water): docks, where a footway or
+// service road is a quay or a pontoon, not a running route (see Graph).
+export const DOCK = { kind: 'dock', shape: 'area', buffer: 35 };
+
+export function ringsOf(el) {
+  let rings = [];
+  if (el.type === 'way' && el.geometry) rings = [el.geometry.filter(Boolean).map((p) => [p.lat, p.lon])];
+  else if (el.members) rings = el.members.filter((m) => m.type === 'way' && m.geometry).map((m) => m.geometry.filter(Boolean).map((p) => [p.lat, p.lon]));
+  return rings.filter((r) => r.length >= 2);
+}
+
+// The sea apart from other water: land within reach of the coastline or a beach.
+export function seaFeature(tags = {}) {
+  if (tags.natural === 'coastline') return { kind: 'sea', shape: 'line', buffer: 110 };
+  if (tags.natural === 'beach') return { kind: 'sea', shape: 'area', buffer: 60 };
+  return null;
+}
+
 // Open country (woods, scrub, heath, nature reserves): a bare path here is a dirt trail.
 export function wildFeature(tags = {}) {
   if (/^(wood|scrub|heath|grassland|wetland)$/.test(tags.natural || '') || tags.landuse === 'forest' || tags.leisure === 'nature_reserve') return { kind: 'wild', shape: 'area', buffer: 20 };
   // Land a runner cannot pass through (its paths leave the network) and fenced compounds
   // (their small paths and alleys are a last resort).
   if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
-  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '') || tags.leisure === 'marina') return { kind: 'compound', shape: 'area', buffer: 0 };
+  if (tags.leisure === 'marina') return DOCK;
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 
@@ -258,6 +279,7 @@ export function parseOverpass(json) {
     if (el.type !== 'way' && el.type !== 'relation') continue;
     const cls = classifyFeature(el.tags);
     const wild = wildFeature(el.tags); // open country, closed ground, fenced compounds
+    const sea = seaFeature(el.tags);
     if (!cls && !wild) continue;
     let rings = [];
     if (el.type === 'way' && el.geometry) {
@@ -271,6 +293,7 @@ export function parseOverpass(json) {
     if (rings.length) {
       if (cls) features.push({ ...cls, rings, relation: el.type === 'relation' });
       if (wild) features.push({ ...wild, rings, relation: el.type === 'relation' });
+      if (sea) features.push({ ...sea, rings, relation: el.type === 'relation' });
     }
   }
   return { nodes, stops, roads, features };
@@ -285,7 +308,9 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
   const sel = long
     ? 'node["highway"="traffic_signals"];'
     : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];${sel}out qt;`;
+  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
+  // quays and pontoons around them are not running routes.
+  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];);out geom qt;`;
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -310,10 +335,16 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
     const json = await Promise.any(ENDPOINTS.slice(0, 2).map(one));
     ctrls.forEach((c) => c.abort());
     const out = [];
+    const docks = [];
     for (const el of json.elements || []) {
       const k = el.type === 'node' && el.tags ? stopKind(el.tags) : 0;
       if (k) out.push([el.lat, el.lon, k]);
+      if (el.type !== 'node' && el.tags?.leisure === 'marina') {
+        const rings = ringsOf(el);
+        if (rings.length) docks.push({ ...DOCK, rings, relation: el.type === 'relation' });
+      }
     }
+    out.docks = docks;
     return out;
   } catch {
     return null;

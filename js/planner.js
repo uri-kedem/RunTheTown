@@ -23,6 +23,7 @@ export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
       // promenades, boardwalks and park paths most of all: they are the point of the app.
       c *= 1 - (prefs.green ? 0.5 : 0.25) * g.green[e];
       c *= 1 - (prefs.water ? 0.55 : 0.25) * g.water[e];
+      c *= 1 - 0.3 * g.sea[e]; // the seaside beats a river bank or a lake shore
       c *= 1 - 0.45 * g.prom[e];
     }
     let f = c;
@@ -44,15 +45,23 @@ export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   }
 }
 
+// How much the seaside lifts a route: full credit once ~30% of it runs by the sea
+// (a 10 km run with 3 km of beach promenade), so it beats a run along a river bank.
+export function seaBoost(seaFrac) {
+  return 1.2 * Math.min(1, seaFrac / 0.3);
+}
+
 function nodeAttrs(g) {
   if (g._nodeGreen) return;
   g._nodeGreen = new Float32Array(g.n);
   g._nodeWater = new Float32Array(g.n);
   g._nodeProm = new Float32Array(g.n);
+  g._nodeSea = new Float32Array(g.n);
   for (let e = 0; e < g.m; e++) {
     for (const v of [g.ea[e], g.eb[e]]) {
       g._nodeGreen[v] = Math.max(g._nodeGreen[v], g.green[e]);
       g._nodeWater[v] = Math.max(g._nodeWater[v], g.water[e]);
+      g._nodeSea[v] = Math.max(g._nodeSea[v], g.sea[e]);
       g._nodeProm[v] = Math.max(g._nodeProm[v], g.prom[e]);
     }
   }
@@ -164,7 +173,10 @@ export async function planLoops(g, opts) {
     const s = r.stats;
     // With a landscape picked, that landscape counts as much as the promenade itself.
     const landscape = prefs.water ? s.waterFrac : prefs.green ? s.greenFrac : 0.5 * Math.max(s.waterFrac, s.greenFrac);
-    return s.promFrac + landscape - (r.type === 'outback' ? 0.08 : 0);
+    // The seaside counts on top: when the beach is within reach, that is the run to offer,
+    // even with a few plain kilometres to get there (Ramat Aviv: the Yarkon is 1 km
+    // away, the sea 3 km — the beach promenade is the run).
+    return s.promFrac + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0);
   };
   const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
   const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
@@ -202,6 +214,7 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
   const { order, prevArc } = g.shortestTree(start);
   const L = new Float64Array(g.n);
   const S = new Float64Array(g.n);
+  const Sea = new Float64Array(g.n);
   const half = D / 2;
   const cands = [];
   for (const u of order) {
@@ -210,9 +223,12 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
     const p = g.other(e, u);
     L[u] = L[p] + g.len[e];
     S[u] = S[p] + g.len[e] * scenicOf(g, e, prefs);
+    Sea[u] = Sea[p] + g.len[e] * g.sea[e];
     if (Math.abs(L[u] - half) <= 0.0125 * D) cands.push(u);
   }
-  cands.sort((a, b) => S[b] / L[b] - S[a] / L[a]);
+  // Most scenic first; a turnaround on the seaside ranks above any river or park bank.
+  const rank = (u) => S[u] / L[u] + seaBoost(Sea[u] / L[u]);
+  cands.sort((a, b) => rank(b) - rank(a));
 
   const picked = [];
   const sectorsUsed = new Set();
@@ -265,8 +281,9 @@ function findAnchors(g, { start, comp, D, prefs }) {
     const d = Math.hypot(dx, dy);
     if (d < 0.1 * D || d > 0.4 * D) continue;
     const sector = Math.floor(((Math.atan2(dx, dy) / (2 * Math.PI) + 1) % 1) * 8);
+    const seaBonus = g._nodeSea[i] >= 0.66 ? 0.1 * D : 0; // the seaside wins its slot over a river or park nearby
     for (let band = 0; band < ideals.length; band++) {
-      const score = Math.abs(d - ideals[band]);
+      const score = Math.abs(d - ideals[band]) - seaBonus;
       const k = sector * ideals.length + band;
       if (!slots[k] || score < slots[k].score) slots[k] = { node: i, score, d, dx, dy, sector, band };
     }
@@ -398,12 +415,12 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 export function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
-  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e], g.prom[e]);
-  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e]);
+  if (!prefs.green && !prefs.water) return Math.min(1, Math.max(g.green[e], g.water[e], g.prom[e]) + 0.5 * g.sea[e]);
+  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e] + 0.5 * g.sea[e]);
 }
 
 export function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -412,6 +429,7 @@ export function routeStats(g, route, D, prefs = {}) {
     total += L;
     green += L * g.green[e];
     water += L * g.water[e];
+    sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
     if (g.rough[e]) rough += L;
@@ -438,6 +456,7 @@ export function routeStats(g, route, D, prefs = {}) {
     distErr: Math.abs(total - D) / D,
     greenFrac: green / total,
     waterFrac: water / total,
+    seaFrac: sea / total, // by the sea (beach, seaside promenade)
     quietFrac: quiet / total,
     busyFrac: busy / total,
     trunkFrac: trunk / total, // arterials (highway=trunk): tolerated for connectivity, never sought
@@ -464,6 +483,7 @@ export function scoreRoute(s, prefs, terrain) {
   score -= 0.6 * s.busyFrac;
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
   score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
+  score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;
@@ -498,7 +518,8 @@ function describe(g, route, start, prefs = {}) {
   const heading = bearingName(headingDeg);
 
   let theme = 'City loop';
-  if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
+  if (s.seaFrac >= 0.2) theme = 'Seaside loop';
+  else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
   else if (s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
@@ -506,7 +527,8 @@ function describe(g, route, start, prefs = {}) {
   const outback = route.type === 'outback';
   if (outback) {
     theme = 'Out & back';
-    if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
+    if (s.seaFrac >= 0.15) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
+    else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
     else if (s.greenFrac >= 0.25) theme += ' through the green';
   }
 

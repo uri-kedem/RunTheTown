@@ -257,6 +257,7 @@ const GREEN = {
   natural: /^(wood|scrub|heath|grassland|wetland)$/,
 };
 
+// Seaside features (coastline, beaches) also count as 'sea' — see seaFeature().
 function classifyFeature(tags = {}) {
   if (tags.natural === 'coastline') return { kind: 'water', shape: 'line', buffer: 110 };
   if (tags.waterway) {
@@ -270,13 +271,33 @@ function classifyFeature(tags = {}) {
   }
   return null;
 }
+
+// A marina basin and its quays (within ~35 m of the water): docks, where a footway or
+// service road is a quay or a pontoon, not a running route (see Graph).
+const DOCK = { kind: 'dock', shape: 'area', buffer: 35 };
+
+function ringsOf(el) {
+  let rings = [];
+  if (el.type === 'way' && el.geometry) rings = [el.geometry.filter(Boolean).map((p) => [p.lat, p.lon])];
+  else if (el.members) rings = el.members.filter((m) => m.type === 'way' && m.geometry).map((m) => m.geometry.filter(Boolean).map((p) => [p.lat, p.lon]));
+  return rings.filter((r) => r.length >= 2);
+}
+
+// The sea apart from other water: land within reach of the coastline or a beach.
+function seaFeature(tags = {}) {
+  if (tags.natural === 'coastline') return { kind: 'sea', shape: 'line', buffer: 110 };
+  if (tags.natural === 'beach') return { kind: 'sea', shape: 'area', buffer: 60 };
+  return null;
+}
+
 // Open country (woods, scrub, heath, nature reserves): a bare path here is a dirt trail.
 function wildFeature(tags = {}) {
   if (/^(wood|scrub|heath|grassland|wetland)$/.test(tags.natural || '') || tags.landuse === 'forest' || tags.leisure === 'nature_reserve') return { kind: 'wild', shape: 'area', buffer: 20 };
   // Land a runner cannot pass through (its paths leave the network) and fenced compounds
   // (their small paths and alleys are a last resort).
   if (/^(military|railway|quarry)$/.test(tags.landuse || '') || tags.military || tags.amenity === 'prison') return { kind: 'closed', shape: 'area', buffer: 5 };
-  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '') || tags.leisure === 'marina') return { kind: 'compound', shape: 'area', buffer: 0 };
+  if (tags.leisure === 'marina') return DOCK;
+  if (/^(industrial|garages)$/.test(tags.landuse || '') || /^(hospital|school|college|university)$/.test(tags.amenity || '')) return { kind: 'compound', shape: 'area', buffer: 0 };
   return null;
 }
 
@@ -315,6 +336,7 @@ function parseOverpass(json) {
     if (el.type !== 'way' && el.type !== 'relation') continue;
     const cls = classifyFeature(el.tags);
     const wild = wildFeature(el.tags); // open country, closed ground, fenced compounds
+    const sea = seaFeature(el.tags);
     if (!cls && !wild) continue;
     let rings = [];
     if (el.type === 'way' && el.geometry) {
@@ -328,6 +350,7 @@ function parseOverpass(json) {
     if (rings.length) {
       if (cls) features.push({ ...cls, rings, relation: el.type === 'relation' });
       if (wild) features.push({ ...wild, rings, relation: el.type === 'relation' });
+      if (sea) features.push({ ...sea, rings, relation: el.type === 'relation' });
     }
   }
   return { nodes, stops, roads, features };
@@ -342,7 +365,9 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
   const sel = long
     ? 'node["highway"="traffic_signals"];'
     : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];${sel}out qt;`;
+  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
+  // quays and pontoons around them are not running routes.
+  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];);out geom qt;`;
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -367,10 +392,16 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
     const json = await Promise.any(ENDPOINTS.slice(0, 2).map(one));
     ctrls.forEach((c) => c.abort());
     const out = [];
+    const docks = [];
     for (const el of json.elements || []) {
       const k = el.type === 'node' && el.tags ? stopKind(el.tags) : 0;
       if (k) out.push([el.lat, el.lon, k]);
+      if (el.type !== 'node' && el.tags?.leisure === 'marina') {
+        const rings = ringsOf(el);
+        if (rings.length) docks.push({ ...DOCK, rings, relation: el.type === 'relation' });
+      }
     }
+    out.docks = docks;
     return out;
   } catch {
     return null;
@@ -803,7 +834,11 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       if (f.type !== 3) continue;
       const c = f.props.class;
       const s = f.props.subclass;
-      if (c === 'sand' && s === 'beach') features.push({ kind: 'water', shape: 'area', buffer: 60, rings: f.geom.map(toLatLon), relation: true });
+      if (c === 'sand' && s === 'beach') {
+        const rings = f.geom.map(toLatLon);
+        features.push({ kind: 'water', shape: 'area', buffer: 60, rings, relation: true });
+        features.push({ kind: 'sea', shape: 'area', buffer: 60, rings, relation: true });
+      }
       else if (/^(wood|grass|wetland)$/.test(c) || /^(park|garden|meadow|forest|wood|scrub|heath|grassland|recreation_ground|village_green)$/.test(s || '')) {
         const rings = f.geom.map(toLatLon);
         features.push({ kind: 'green', shape: 'area', buffer: 0, rings, relation: true });
@@ -812,7 +847,9 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       }
     }
     for (const f of layers.water?.features || []) {
-      if (f.type === 3) features.push({ kind: 'water', shape: 'body', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
+      if (f.type !== 3) continue;
+      // The sea ('ocean') is kept apart from rivers and lakes: a beach promenade beats a river bank.
+      features.push({ kind: f.props.class === 'ocean' ? 'sea' : 'water', shape: 'body', buffer: 0, rings: f.geom.map(toLatLon), relation: true });
     }
     for (const f of layers.poi?.features || []) {
       if (f.type !== 1) continue;
@@ -1101,6 +1138,9 @@ class LandscapeGrid {
     this.closed = new Uint8Array(this.n * this.n); // army bases, railway land, quarries, prisons: no way through
     this.compound = new Uint8Array(this.n * this.n); // factories, hospitals, schools, campuses, garages: fenced, avoid
     this.body = null; // filled water areas (sea, lakes), from vector tiles
+    this.dock = new Uint8Array(this.n * this.n); // marina basins and their quays: no running there
+    this.sea = new Uint8Array(this.n * this.n); // land by the sea: beaches and seaside promenades (the best of all water)
+    this.seaBody = null; // the sea itself (ocean polygons), filled
   }
 
   col(x) {
@@ -1114,7 +1154,7 @@ class LandscapeGrid {
   }
 
   layer(kind) {
-    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : this.water;
+    return kind === 'green' ? this.green : kind === 'wild' ? this.wild : kind === 'closed' ? this.closed : kind === 'compound' ? this.compound : kind === 'body' ? this.body : kind === 'sea' ? this.sea : kind === 'dock' ? this.dock : this.water;
   }
 
   // 1 if (x, y) lies well inside that layer: its cell and the four neighbours (a quay
@@ -1144,6 +1184,10 @@ class LandscapeGrid {
         // real shores): fill them, then mark land near them in finish().
         this.body ||= new Uint8Array(this.n * this.n);
         this.fillPolygon(rings, this.body);
+        if (f.kind === 'sea') {
+          this.seaBody ||= new Uint8Array(this.n * this.n);
+          this.fillPolygon(rings, this.seaBody);
+        }
         continue;
       }
       const arr = this.layer(f.kind);
@@ -1156,10 +1200,14 @@ class LandscapeGrid {
   }
 
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.
+  // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {
-    if (!this.body) return;
+    if (this.seaBody) this.flood(this.seaBody, this.sea, reach + 1);
+    if (this.body) this.flood(this.body, this.water, reach);
+  }
+
+  flood(b, out, reach) {
     const n = this.n;
-    const b = this.body;
     let frontier = [];
     for (let i = 0; i < n * n; i++) if (b[i]) frontier.push(i);
     const dist = new Uint8Array(n * n);
@@ -1176,7 +1224,7 @@ class LandscapeGrid {
           const j = rr * n + cc;
           if (dist[j]) continue;
           dist[j] = step + 1;
-          this.water[j] = 1;
+          out[j] = 1;
           next.push(j);
         }
       }
@@ -1475,7 +1523,11 @@ class Graph {
         let closed = 0;
         let compound = 0;
         let afloat = 0;
+        let dock = 0;
         const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
+        // A quay: a footway, service road or stairs hugging a marina basin (a promenade or
+        // a named path past the marina is a different kind of way and stays).
+        const canDock = /^(footway|service|steps|living_street)$/.test(road.tags.highway) && !PROMENADE_NAME.test(road.tags.name || '');
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
@@ -1485,11 +1537,16 @@ class Graph {
           if (grid.at('closed', x, y)) closed++;
           if (grid.at('compound', x, y)) compound++;
           if (canFloat && grid.body && grid.deep('body', x, y)) afloat++;
+          if (canDock && grid.at('dock', x, y)) dock++;
         }
         // A footway or service road that lies over the water is a marina pontoon, jetty or
         // pier: not a running route (a promenade along the edge keeps most nodes on land).
         if (cnt >= 2 && canFloat && afloat / cnt >= 0.6) {
           skippedAfloat++;
+          continue;
+        }
+        if (cnt >= 2 && canDock && dock / cnt >= 0.6) {
+          skippedAfloat++; // quays count with the pontoons
           continue;
         }
         if (cnt && road.tags.rough && wild / cnt >= 0.5) {
@@ -1561,6 +1618,7 @@ class Graph {
     this.len = new Float32Array(m);
     this.green = new Float32Array(m);
     this.water = new Float32Array(m);
+    this.sea = new Float32Array(m); // by the sea (beach, seaside promenade): the best water there is
     // Smooth running: promenades, esplanades, boardwalks, boulevard walkways,
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
@@ -1574,14 +1632,17 @@ class Graph {
       if (grid) {
         let g = 0;
         let w = 0;
+        let sea = 0;
         for (const t of [0.15, 0.5, 0.85]) {
           const px = this.x[a] + (this.x[b] - this.x[a]) * t;
           const py = this.y[a] + (this.y[b] - this.y[a]) * t;
           g += grid.at('green', px, py);
           w += grid.at('water', px, py);
+          sea += grid.at('sea', px, py);
         }
         this.green[e] = g / 3;
-        this.water[e] = w / 3;
+        this.water[e] = Math.max(w, sea) / 3;
+        this.sea[e] = sea / 3;
         if (ehw[e] === HW.PATH && !erough[e]) this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0);
       }
     }
@@ -2096,6 +2157,7 @@ function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
       // promenades, boardwalks and park paths most of all: they are the point of the app.
       c *= 1 - (prefs.green ? 0.5 : 0.25) * g.green[e];
       c *= 1 - (prefs.water ? 0.55 : 0.25) * g.water[e];
+      c *= 1 - 0.3 * g.sea[e]; // the seaside beats a river bank or a lake shore
       c *= 1 - 0.45 * g.prom[e];
     }
     let f = c;
@@ -2117,15 +2179,23 @@ function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   }
 }
 
+// How much the seaside lifts a route: full credit once ~30% of it runs by the sea
+// (a 10 km run with 3 km of beach promenade), so it beats a run along a river bank.
+function seaBoost(seaFrac) {
+  return 1.2 * Math.min(1, seaFrac / 0.3);
+}
+
 function nodeAttrs(g) {
   if (g._nodeGreen) return;
   g._nodeGreen = new Float32Array(g.n);
   g._nodeWater = new Float32Array(g.n);
   g._nodeProm = new Float32Array(g.n);
+  g._nodeSea = new Float32Array(g.n);
   for (let e = 0; e < g.m; e++) {
     for (const v of [g.ea[e], g.eb[e]]) {
       g._nodeGreen[v] = Math.max(g._nodeGreen[v], g.green[e]);
       g._nodeWater[v] = Math.max(g._nodeWater[v], g.water[e]);
+      g._nodeSea[v] = Math.max(g._nodeSea[v], g.sea[e]);
       g._nodeProm[v] = Math.max(g._nodeProm[v], g.prom[e]);
     }
   }
@@ -2237,7 +2307,10 @@ async function planLoops(g, opts) {
     const s = r.stats;
     // With a landscape picked, that landscape counts as much as the promenade itself.
     const landscape = prefs.water ? s.waterFrac : prefs.green ? s.greenFrac : 0.5 * Math.max(s.waterFrac, s.greenFrac);
-    return s.promFrac + landscape - (r.type === 'outback' ? 0.08 : 0);
+    // The seaside counts on top: when the beach is within reach, that is the run to offer,
+    // even with a few plain kilometres to get there (Ramat Aviv: the Yarkon is 1 km
+    // away, the sea 3 km — the beach promenade is the run).
+    return s.promFrac + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0);
   };
   const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
   const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
@@ -2275,6 +2348,7 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
   const { order, prevArc } = g.shortestTree(start);
   const L = new Float64Array(g.n);
   const S = new Float64Array(g.n);
+  const Sea = new Float64Array(g.n);
   const half = D / 2;
   const cands = [];
   for (const u of order) {
@@ -2283,9 +2357,12 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
     const p = g.other(e, u);
     L[u] = L[p] + g.len[e];
     S[u] = S[p] + g.len[e] * scenicOf(g, e, prefs);
+    Sea[u] = Sea[p] + g.len[e] * g.sea[e];
     if (Math.abs(L[u] - half) <= 0.0125 * D) cands.push(u);
   }
-  cands.sort((a, b) => S[b] / L[b] - S[a] / L[a]);
+  // Most scenic first; a turnaround on the seaside ranks above any river or park bank.
+  const rank = (u) => S[u] / L[u] + seaBoost(Sea[u] / L[u]);
+  cands.sort((a, b) => rank(b) - rank(a));
 
   const picked = [];
   const sectorsUsed = new Set();
@@ -2338,8 +2415,9 @@ function findAnchors(g, { start, comp, D, prefs }) {
     const d = Math.hypot(dx, dy);
     if (d < 0.1 * D || d > 0.4 * D) continue;
     const sector = Math.floor(((Math.atan2(dx, dy) / (2 * Math.PI) + 1) % 1) * 8);
+    const seaBonus = g._nodeSea[i] >= 0.66 ? 0.1 * D : 0; // the seaside wins its slot over a river or park nearby
     for (let band = 0; band < ideals.length; band++) {
-      const score = Math.abs(d - ideals[band]);
+      const score = Math.abs(d - ideals[band]) - seaBonus;
       const k = sector * ideals.length + band;
       if (!slots[k] || score < slots[k].score) slots[k] = { node: i, score, d, dx, dy, sector, band };
     }
@@ -2471,12 +2549,12 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
-  if (!prefs.green && !prefs.water) return Math.max(g.green[e], g.water[e], g.prom[e]);
-  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e]);
+  if (!prefs.green && !prefs.water) return Math.min(1, Math.max(g.green[e], g.water[e], g.prom[e]) + 0.5 * g.sea[e]);
+  return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e] + 0.5 * g.sea[e]);
 }
 
 function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -2485,6 +2563,7 @@ function routeStats(g, route, D, prefs = {}) {
     total += L;
     green += L * g.green[e];
     water += L * g.water[e];
+    sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
     if (g.rough[e]) rough += L;
@@ -2511,6 +2590,7 @@ function routeStats(g, route, D, prefs = {}) {
     distErr: Math.abs(total - D) / D,
     greenFrac: green / total,
     waterFrac: water / total,
+    seaFrac: sea / total, // by the sea (beach, seaside promenade)
     quietFrac: quiet / total,
     busyFrac: busy / total,
     trunkFrac: trunk / total, // arterials (highway=trunk): tolerated for connectivity, never sought
@@ -2537,6 +2617,7 @@ function scoreRoute(s, prefs, terrain) {
   score -= 0.6 * s.busyFrac;
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
   score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
+  score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;
@@ -2571,7 +2652,8 @@ function describe(g, route, start, prefs = {}) {
   const heading = bearingName(headingDeg);
 
   let theme = 'City loop';
-  if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
+  if (s.seaFrac >= 0.2) theme = 'Seaside loop';
+  else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
   else if (s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
@@ -2579,7 +2661,8 @@ function describe(g, route, start, prefs = {}) {
   const outback = route.type === 'outback';
   if (outback) {
     theme = 'Out & back';
-    if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
+    if (s.seaFrac >= 0.15) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
+    else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
     else if (s.greenFrac >= 0.25) theme += ' through the green';
   }
 
@@ -3525,9 +3608,12 @@ const STOPS_GRACE_MS = 4000;
 // Loops reach ~0.3·D from the start; a little margin lets nearby starts reuse
 // the area. Long runs grow the area more slowly (the download grows with the
 // square of the radius), so their routes wind more instead of going farther.
+// How far from the start the map is loaded. A there-and-back reaches ~0.4·D out, so
+// 0.38·D (+300 m) keeps a seafront 3 km away within an 8 km run; long runs level off
+// (the far side of a 20 km loop is never 8 km out on real streets).
 function radiusFor(distanceM) {
-  if (distanceM <= LONG_RUN_M) return Math.round(0.32 * distanceM + 300);
-  return Math.round(0.32 * LONG_RUN_M + 300 + 0.2 * (distanceM - LONG_RUN_M));
+  const long = 0.32 * LONG_RUN_M + 300 + 0.2 * Math.max(0, distanceM - LONG_RUN_M);
+  return Math.round(Math.min(0.38 * distanceM + 300, long));
 }
 
 class RouteEngine {
@@ -3592,6 +3678,7 @@ class RouteEngine {
     if (startOk && 1 - failedTiles / tiles >= MIN_TILE_SHARE) {
       osm = osmFromVectorTiles(vtiles, vt.buffers, { long });
       osm.stopPoints = stopPoints || [];
+      if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -3633,14 +3720,14 @@ class RouteEngine {
 
   // Traffic lights & crosswalks: from the device cache, else one small query.
   async loadStops(lat, lon, radius, long) {
-    const key = `stops:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const key = `stops2:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
     if (this.useCache) {
       const hit = await tileCache.get(key);
-      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return hit.points;
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [] });
     }
     const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
     const points = await fetchStops(lat, lon, r, { long, fetchImpl: this.fetchImpl });
-    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points });
+    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [] });
     return points;
   }
 

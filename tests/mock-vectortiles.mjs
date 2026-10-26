@@ -210,12 +210,14 @@ export function makeMockMapBackend(dataset, { seaX = null, vtFailRate = 0, vtDow
     }
     // Overpass: the stops-only query, or a full tile query (backup path).
     const query = decodeURIComponent(String(opts.body || '').replace(/^data=/, ''));
-    if (!query.includes('way[')) {
+    if (!query.includes('way["highway"')) {
+      // The stops query: traffic lights and crossings, plus marina basins (with geometry).
       calls.stops++;
       if (overpass.deadServers?.includes(new URL(url).host) || rand() < (overpass.failRate || 0)) return { ok: false, status: 504, json: async () => ({}) };
       const [s0, w0, n0, e0] = query.match(/\[bbox:([^\]]+)\]/)[1].split(',').map(Number);
       const out = [];
       for (const n of nodes.values()) if (n.tags && n.lat >= s0 && n.lat <= n0 && n.lon >= w0 && n.lon <= e0) out.push(n);
+      for (const el of dataset.elements) if (el.type === 'way' && el.geometry && el.tags?.leisure === 'marina' && el.geometry.some((p) => p.lat >= s0 && p.lat <= n0 && p.lon >= w0 && p.lon <= e0)) out.push(el);
       return { ok: true, status: 200, json: async () => ({ elements: out }) };
     }
     calls.overpassTiles++;

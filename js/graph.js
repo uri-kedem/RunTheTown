@@ -83,7 +83,11 @@ export class Graph {
         let closed = 0;
         let compound = 0;
         let afloat = 0;
+        let dock = 0;
         const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
+        // A quay: a footway, service road or stairs hugging a marina basin (a promenade or
+        // a named path past the marina is a different kind of way and stays).
+        const canDock = /^(footway|service|steps|living_street)$/.test(road.tags.highway) && !PROMENADE_NAME.test(road.tags.name || '');
         for (const id of road.nodes) {
           const p = osm.nodes.get(id);
           if (!p) continue;
@@ -93,11 +97,16 @@ export class Graph {
           if (grid.at('closed', x, y)) closed++;
           if (grid.at('compound', x, y)) compound++;
           if (canFloat && grid.body && grid.deep('body', x, y)) afloat++;
+          if (canDock && grid.at('dock', x, y)) dock++;
         }
         // A footway or service road that lies over the water is a marina pontoon, jetty or
         // pier: not a running route (a promenade along the edge keeps most nodes on land).
         if (cnt >= 2 && canFloat && afloat / cnt >= 0.6) {
           skippedAfloat++;
+          continue;
+        }
+        if (cnt >= 2 && canDock && dock / cnt >= 0.6) {
+          skippedAfloat++; // quays count with the pontoons
           continue;
         }
         if (cnt && road.tags.rough && wild / cnt >= 0.5) {
@@ -169,6 +178,7 @@ export class Graph {
     this.len = new Float32Array(m);
     this.green = new Float32Array(m);
     this.water = new Float32Array(m);
+    this.sea = new Float32Array(m); // by the sea (beach, seaside promenade): the best water there is
     // Smooth running: promenades, esplanades, boardwalks, boulevard walkways,
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
@@ -182,14 +192,17 @@ export class Graph {
       if (grid) {
         let g = 0;
         let w = 0;
+        let sea = 0;
         for (const t of [0.15, 0.5, 0.85]) {
           const px = this.x[a] + (this.x[b] - this.x[a]) * t;
           const py = this.y[a] + (this.y[b] - this.y[a]) * t;
           g += grid.at('green', px, py);
           w += grid.at('water', px, py);
+          sea += grid.at('sea', px, py);
         }
         this.green[e] = g / 3;
-        this.water[e] = w / 3;
+        this.water[e] = Math.max(w, sea) / 3;
+        this.sea[e] = sea / 3;
         if (ehw[e] === HW.PATH && !erough[e]) this.prom[e] = Math.max(this.prom[e], this.water[e] >= 0.5 ? 1 : 0, this.green[e] >= 0.5 ? 0.7 : 0);
       }
     }

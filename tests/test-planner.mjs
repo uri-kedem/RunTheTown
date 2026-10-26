@@ -78,7 +78,10 @@ check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road cro
     check(rough > 0 && g.skippedWild >= 1, 'the bare park path stays (penalised) while the bare wood trail is dropped');
     check(g.skippedClosed >= 1, `the path through the army base is not in the network (${g.skippedClosed} ways dropped on closed ground)`);
     const named = (nm) => { let n = 0; for (let e = 0; e < g.m; e++) if (g.names[g.edgeName[e]]?.name === nm) n++; return n; };
-    check(g.skippedAfloat >= 2 && named('Pontoon 100') === 0 && named('Pontoon 250') === 0 && named('Marina Quay') > 0, `the marina pontoons are out, the quay stays (${g.skippedAfloat} afloat ways dropped, quay edges ${named('Marina Quay')})`);
+    check(g.skippedAfloat >= 2 && named('Pontoon 100') === 0 && named('Pontoon 250') === 0 && named('Marina Promenade') > 0, `the marina pontoons are out, the promenade stays (${g.skippedAfloat} afloat ways dropped, promenade edges ${named('Marina Promenade')})`);
+    let quay = 0, tayelet = 0;
+    for (let i = 0; i < g.n; i++) { if (g.y[i] < -10 && g.y[i] > -390) { if (Math.abs(g.x[i] - 2080) < 2) quay++; if (Math.abs(g.x[i] - 2020) < 2) tayelet++; } }
+    check(quay === 0 && tayelet > 0, `the unnamed dock quay along the basin is out, the promenade 80 m inland is in (quay nodes ${quay}, promenade nodes ${tayelet})`);
     console.log(`   dropped as private: ${area?.audit?.dropped?.private ?? 'n/a'}`);
   }
 }
@@ -270,6 +273,21 @@ for (const km of [4, 8, 12]) {
   console.log(`\nturns per km: without turn costs ${without.toFixed(2)}, with ${withTurns.toFixed(2)}`);
   check(withTurns < without * 0.88, 'turn costs give at least 12% fewer turns');
   check(withTurns < 2, 'under 2 turns per km on the grid city');
+}
+
+// Ramat Aviv: a river bank 1 km east of home and the sea 3 km west. Whenever the run is
+// long enough to reach the sea, the first option is the beach promenade, not the river.
+{
+  const coastal = syntheticOverpass({ size: 12000, spacing: 100, riverX: 1000, seaX: -3000, fullGrid: true });
+  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(coastal), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+  for (const km of [8, 10, 12]) {
+    const rs = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs: {}, terrain: 'any' });
+    console.log(`\nRamat Aviv ${km} km: ` + rs.map((r) => `${r.name} sea ${(r.stats.seaFrac * 100) | 0}% water ${(r.stats.waterFrac * 100) | 0}%`).join(' | '));
+    check(rs.length === 3 && rs[0].stats.seaFrac >= 0.15 && /sea/i.test(rs[0].name), `${km} km from home: the first option runs the beach promenade`);
+    check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.1), 'within 10% of the distance');
+  }
+  const short = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 4, prefs: {}, terrain: 'any' });
+  check(short.length === 3 && short.every((r) => r.stats.seaFrac === 0), '4 km from home: the sea is out of reach, three routes anyway');
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');

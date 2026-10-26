@@ -93,8 +93,16 @@ for locked-screen guidance and the app stores.
    - **Nothing over the water.** A footway, service road, path or stairs with most of its nodes deep
      inside a water body (`LandscapeGrid.deep`: the cell and its four neighbours are water) is a marina
      pontoon, jetty or pier and is dropped (`Graph.skippedAfloat`) — the Tel Aviv marina by the Hilton
-     used to show up in routes. The quay along the edge keeps its land nodes and stays. Marina grounds
-     from Overpass (`leisure=marina`) count as a compound.
+     used to show up in routes. Marina basins (`leisure=marina`, fetched with the traffic-light query
+     since the tiles cannot tell a harbour from a lake) also mark a `dock` layer 35 m wide: an unnamed
+     footway, service road, stairs or living street hugging the basin is the dock quay (Tel Aviv's runs
+     behind the clubhouses with no way through) and is dropped; the named promenade inland stays.
+   - **The sea first.** The `sea` grid layer (ocean polygons + beaches, ~100 m inland) is kept apart from
+     rivers and lakes: seaside edges cost ×0.7 on top of the water bonus, score `+0.6·seaFrac`, and the
+     first option gets `seaBoost` (+1.2 once 30% of the run is by the sea) — so from Ramat Aviv the beach
+     promenade beats the Yarkon bank whenever the run is long enough to reach it (8 km and up); the map is
+     loaded to 0.38·D + 300 m so a there-and-back can get there. Routes are named "Seaside loop" /
+     "Out & back along the sea".
    - Long runs (over 15 km) also skip service alleys and steps.
 4. **On-device cache:** map tiles, traffic lights and elevation are saved in the browser for 14 days
    (`js/cache.js`), so coming back to a city is instant.
