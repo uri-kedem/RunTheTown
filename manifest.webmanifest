@@ -11,8 +11,8 @@
   "lang": "en",
   "categories": ["sports", "health", "navigation"],
   "icons": [
-    { "src": "img/icon-192.9505f1e4.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "img/icon-512.2861d845.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "img/icon-512-maskable.c84a1a8c.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "img/icon-192.f5aabddb.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icon-512.a5709e23.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "img/icon-512-maskable.838d30b5.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

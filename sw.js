@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = 'ee70303e';
+const CACHE_VERSION = '08af527e';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -26,10 +26,10 @@ const SHELL = [
   './img/terms-outline.3b878224.png',
   './img/install-icon.af1a2869.png',
   './img/terms-icon.d8a112dd.png',
-  './img/favicon.ca38a771.png',
-  './img/icon-180.920e3c57.png',
-  './img/icon-192.9505f1e4.png',
-  './img/icon-512.2861d845.png',
+  './img/favicon.1a6e36d1.png',
+  './img/icon-180.d266ebe8.png',
+  './img/icon-192.f5aabddb.png',
+  './img/icon-512.a5709e23.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
 ];
