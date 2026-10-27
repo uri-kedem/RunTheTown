@@ -2,7 +2,7 @@
 // attributes, a spatial index for snapping, and Dijkstra shortest paths.
 
 import { haversine } from './geo.js';
-import { STOP, stopKind, isBikeRoute } from './osm.js';
+import { STOP, stopKind, isBikeRoute, sidewalkKind } from './osm.js';
 
 // Extra "virtual meters" for having to stop: a traffic light is worth a ~250 m
 // detour, a crosswalk ~50 m. Runners hate stopping more than running a bit more.
@@ -76,6 +76,28 @@ export class Graph {
     let skippedWild = 0;
     let skippedClosed = 0;
     let skippedAfloat = 0;
+    let noSidewalk = 0;
+    // Where the town is, by the map itself: the nodes of small streets and footpaths, in
+    // 60 m cells. A car road with none of these beside it runs through open country.
+    const SMALL_RE = /^(residential|living_street|pedestrian|footway|path|cycleway|steps)$/;
+    const smallCells = new Set();
+    const cellKey = (x, y) => `${Math.floor(x / 60)}:${Math.floor(y / 60)}`;
+    if (grid?.builtSum) {
+      for (const road of osm.roads) {
+        if (!SMALL_RE.test(road.tags.highway)) continue;
+        for (const id of road.nodes) {
+          const p = osm.nodes.get(id);
+          if (p) {
+            const [x, y] = proj.toXY(p[0], p[1]);
+            smallCells.add(cellKey(x, y));
+          }
+        }
+      }
+    }
+    const nearSmallStreet = (x, y) => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (smallCells.has(cellKey(x + 60 * dx, y + 60 * dy))) return true;
+      return false;
+    };
     for (let road of osm.roads) {
       // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
       // network at all. Any way that runs mostly through closed ground (army base, railway
@@ -124,7 +146,30 @@ export class Graph {
         }
         if (cnt && small && compound / cnt >= 0.5) road = { ...road, tags: { ...road.tags, rough: 1 } };
       }
-      const cls = highwayClass(road.tags.highway);
+      let cls = highwayClass(road.tags.highway);
+      // A car road through open country has no sidewalk: outside a town — built-up share
+      // from space under 20% around a node AND no side street or footpath within ~60 m of
+      // it, for most of the road — a tertiary, secondary or primary road is priced as a
+      // last resort (HW.TRUNK), kept only so a runner can cross a river or reach the next
+      // quarter over the one bridge. Bridges keep their class.
+      const sw = sidewalkKind(road.tags); // the map's own word, where the tag exists
+      if (sw === 'no' && cls >= HW.TERTIARY && cls < HW.TRUNK && !(road.tags.bridge && road.tags.bridge !== 'no')) {
+        cls = HW.TRUNK;
+        noSidewalk++;
+      } else if (sw !== 'yes' && grid?.builtSum && cls >= HW.TERTIARY && cls < HW.TRUNK && !(road.tags.bridge && road.tags.bridge !== 'no')) {
+        let out = 0, cnt = 0;
+        for (const id of road.nodes) {
+          const p = osm.nodes.get(id);
+          if (!p) continue;
+          const [x, y] = proj.toXY(p[0], p[1]);
+          cnt++;
+          if (grid.townShare(x, y) < 0.2 && !nearSmallStreet(x, y)) out++;
+        }
+        if (cnt && out / cnt >= 0.6) {
+          cls = HW.TRUNK;
+          noSidewalk++;
+        }
+      }
       let nid = -1;
       const nm = road.tags['name:en'] || road.tags.name;
       if (nm) {
@@ -166,6 +211,7 @@ export class Graph {
     this.skippedWild = skippedWild; // bare paths left out for running through open country
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
+    this.noSidewalk = noSidewalk; // country roads priced as a last resort (no sidewalk)
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);

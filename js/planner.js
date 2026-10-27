@@ -6,8 +6,8 @@ import { HW } from './graph.js';
 import { bearingName, bearingNameFine } from './geo.js';
 import { buildCues } from './cues.js';
 
-const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 3.2]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk)
-const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 5.0];
+const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 6.0]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk / no sidewalk)
+const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 8.0];
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 export const ROUGH_COST = 3;
@@ -166,6 +166,10 @@ export async function planLoops(g, opts) {
     c.stats = routeStats(g, c, D, prefs);
     c.score = scoreRoute(c.stats, prefs, terrain);
   }
+  // A road with no sidewalk (an arterial, a country road) is for crossing a river, not for
+  // running: loops with more than 10% of it are dropped whenever anything else exists.
+  const safe = candidates.filter((c) => c.stats.trunkFrac <= 0.1);
+  if (safe.length) candidates.splice(0, candidates.length, ...safe);
   candidates.sort((a, b) => b.score - a.score);
 
   // Option 1 is the promenade run: of every loop and there-and-back, the one with the
@@ -551,7 +555,7 @@ export function routeStats(g, route, D, prefs = {}) {
     seaFrac: sea / total, // by the sea (beach, seaside promenade)
     quietFrac: quiet / total,
     busyFrac: busy / total,
-    trunkFrac: trunk / total, // arterials (highway=trunk): tolerated for connectivity, never sought
+    trunkFrac: trunk / total, // roads with no sidewalk (arterials, country roads): tolerated for a crossing, never sought
     repeatFrac: repeated / total,
     scenicFrac: scenic / total,
     promFrac: prom / total,
@@ -635,6 +639,9 @@ function describe(g, route, start, prefs = {}) {
   if (outback) highlights.push('Same way there and back');
   if (g.hasElevation) highlights.push(climbText(s));
   highlights.push(stopsText(s));
+  // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
+  const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
+  if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
 
   // Elevation profile, downsampled to ~80 points.
   const profile = [];

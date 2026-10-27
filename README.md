@@ -100,6 +100,16 @@ for locked-screen guidance and the app stores.
      unnamed footway, service road, stairs or living street with 60% of its nodes on the dock is the
      dock quay (Tel Aviv's runs behind the clubhouses with no way through) and is dropped; the named
      promenade inland stays. Checked on the real Tel Aviv tiles (scratch test, 4 tiles around the Hilton).
+   - **No sidewalk, no run** (Efrat: routes went out on the Wadi an-Nis and Route 60 connector roads).
+     A tertiary / secondary / primary road is priced as a last resort (`HW.TRUNK`, cost 6.0, 8.0 quiet; loops
+     with over 10% of it dropped whenever another candidate exists; out-and-backs and promenade loops never
+     take it) when (a) OSM says `sidewalk=no` (the tag rides along with the traffic-light Overpass query and
+     is stamped onto the tile roads it runs along, `applySidewalkTags`), or (b) with no tag, most of its nodes
+     are outside a town: built-up share from space under 20% within 100 m (`LandscapeGrid.townShare`) AND no
+     residential street or footpath within ~60 m (`Graph` small-street cells). `sidewalk=both/left/right/
+     separate` keeps the road; bridges keep their class so a wadi or river can still be crossed. The card
+     states "N m on a road with no sidewalk" whenever a route has 100 m or more of it. Known limit: a
+     village main road lined with houses but with no sidewalk and no tag passes as a town road.
    - **Land cover from space** (`js/landcover.js`): ESA WorldCover 2021 (10 m) read as z13 PNG tiles from
      Microsoft's Planetary Computer (`…/item/tiles/WebMercatorQuad/{z}/{x}/{y}@1x.png?collection=esa-worldcover
      &item=ESA_WorldCover_10m_2021_v200_<sheet>&assets=map`; the grey value is the class code: 10 trees,

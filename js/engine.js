@@ -5,7 +5,7 @@
 // on the device, so coming back to the same city is instant.
 
 import { makeProjection, haversine } from './geo.js';
-import { fetchTiles, tilesFor, parseOverpass, fetchStops } from './osm.js';
+import { fetchTiles, tilesFor, parseOverpass, fetchStops, applySidewalkTags } from './osm.js';
 import { vtTilesFor, fetchVectorTiles, osmFromVectorTiles } from './vectortiles.js';
 import { fetchElevationGrid, ElevationGrid } from './elevation.js';
 import { fetchLandcoverGrid } from './landcover.js';
@@ -106,6 +106,7 @@ export class RouteEngine {
       osm = osmFromVectorTiles(vtiles, vt.buffers, { long });
       osm.stopPoints = stopPoints || [];
       if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
+      if (stopPoints?.sidewalks?.length) applySidewalkTags(osm, stopPoints.sidewalks, proj); // the sidewalk tag, where mapped
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -149,14 +150,14 @@ export class RouteEngine {
 
   // Traffic lights & crosswalks: from the device cache, else one small query.
   async loadStops(lat, lon, radius, long) {
-    const key = `stops2:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const key = `stops3:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
     if (this.useCache) {
       const hit = await tileCache.get(key);
-      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [] });
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [], sidewalks: hit.sidewalks || [] });
     }
     const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
     const points = await fetchStops(lat, lon, r, { long, fetchImpl: this.fetchImpl });
-    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [] });
+    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [], sidewalks: points.sidewalks || [] });
     return points;
   }
 

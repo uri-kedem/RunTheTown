@@ -398,6 +398,7 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       const tags = { highway };
       if (rough) tags.rough = 1;
       if (bike) tags.bike = 1;
+      if (f.props.brunnel === 'bridge') tags.bridge = 'yes'; // a crossing worth keeping even with no sidewalk
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {

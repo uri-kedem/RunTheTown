@@ -296,6 +296,55 @@ function ringsOf(el) {
   return rings.filter((r) => r.length >= 2);
 }
 
+// What the sidewalk tag says: 'no' (none at all), 'yes' (one side or both, or mapped
+// separately), or null when the tag is missing or unclear.
+function sidewalkKind(tags = {}) {
+  const v = tags.sidewalk || tags['sidewalk:both'];
+  if (!v) return null;
+  if (/^(no|none)$/.test(v)) return tags['sidewalk:left'] === 'yes' || tags['sidewalk:right'] === 'yes' ? 'yes' : 'no';
+  if (/^(both|left|right|separate|yes|lane)$/.test(v)) return 'yes';
+  return null;
+}
+
+// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
+// no sidewalk tag): a road whose nodes mostly lie within ~12 m of a tagged way takes its answer.
+function applySidewalkTags(osm, sidewalks, proj) {
+  if (!sidewalks?.length) return 0;
+  const CELL = 12;
+  const key = (x, y) => `${Math.round(x / CELL)}:${Math.round(y / CELL)}`;
+  const marks = new Map(); // cell -> 'no' | 'yes'
+  for (const sw of sidewalks) {
+    const xy = sw.pts.map(([la, lo]) => proj.toXY(la, lo));
+    for (let i = 0; i < xy.length; i++) {
+      const [x0, y0] = xy[i];
+      marks.set(key(x0, y0), sw.no ? 'no' : 'yes');
+      if (i + 1 < xy.length) {
+        const [x1, y1] = xy[i + 1];
+        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (CELL / 2));
+        for (let k = 1; k < steps; k++) marks.set(key(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), sw.no ? 'no' : 'yes');
+      }
+    }
+  }
+  let stamped = 0;
+  for (const road of osm.roads) {
+    if (road.tags.sidewalk || !/^(tertiary|secondary|primary|trunk|unclassified)/.test(road.tags.highway)) continue;
+    let no = 0, yes = 0, cnt = 0;
+    for (const id of road.nodes) {
+      const p = osm.nodes.get(id);
+      if (!p) continue;
+      const [x, y] = proj.toXY(p[0], p[1]);
+      cnt++;
+      let hit = null;
+      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = marks.get(key(x + dx * CELL, y + dy * CELL)) || null;
+      if (hit === 'no') no++;
+      else if (hit === 'yes') yes++;
+    }
+    if (cnt && no / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
+    else if (cnt && yes / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
+  }
+  return stamped;
+}
+
 // The sea apart from other water: land within reach of the coastline or a beach.
 function seaFeature(tags = {}) {
   if (tags.natural === 'coastline') return { kind: 'sea', shape: 'line', buffer: 110 };
@@ -380,7 +429,8 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
     : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
   // Marina basins come along (vector tiles don't tell a harbour from a lake): the
   // quays and pontoons around them are not running routes.
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];);out geom qt;`;
+  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
+  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -406,6 +456,7 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
     ctrls.forEach((c) => c.abort());
     const out = [];
     const docks = [];
+    const sidewalks = []; // [{ no: true|false, pts: [[lat, lon], …] }] from the sidewalk tag
     for (const el of json.elements || []) {
       const k = el.type === 'node' && el.tags ? stopKind(el.tags) : 0;
       if (k) out.push([el.lat, el.lon, k]);
@@ -413,8 +464,13 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
         const rings = ringsOf(el);
         if (rings.length) docks.push({ ...DOCK, rings, relation: el.type === 'relation' });
       }
+      if (el.type === 'way' && el.tags?.sidewalk && el.geometry) {
+        const sw = sidewalkKind(el.tags);
+        if (sw) sidewalks.push({ no: sw === 'no', pts: el.geometry.filter(Boolean).map((p) => [p.lat, p.lon]) });
+      }
     }
     out.docks = docks;
+    out.sidewalks = sidewalks;
     return out;
   } catch {
     return null;
@@ -821,6 +877,7 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       const tags = { highway };
       if (rough) tags.rough = 1;
       if (bike) tags.bike = 1;
+      if (f.props.brunnel === 'bridge') tags.bridge = 'yes'; // a crossing worth keeping even with no sidewalk
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {
@@ -1231,8 +1288,9 @@ class LandscapeGrid {
     const osmGreen = this.green.slice();
     // Built-up share within ~500 m (20 cells): tree cover with hardly any buildings
     // around is open country, where a bare path is a dirt trail (wild); a wood with
-    // the town around it is a park.
+    // the town around it is a park. The integral image is kept for townShare().
     const built = new Float32Array((n + 1) * (n + 1)); // integral image
+    this.builtSum = built;
     for (let r = 0; r < n; r++) {
       let row = 0;
       for (let c = 0; c < n; c++) {
@@ -1264,6 +1322,20 @@ class LandscapeGrid {
         if (open && !osmGreen[i] && !this.closed[i]) this.wild[i] = 1;
       }
     }
+  }
+
+  // Share of built-up ground (from space) within ~100 m of (x, y): 0 in open country,
+  // close to 1 in a town. null until land cover has been merged.
+  townShare(x, y, d = 4) {
+    if (!this.builtSum) return null;
+    const n = this.n;
+    const c = this.col(x);
+    const r = this.row(y);
+    if (c < 0 || r < 0 || c >= n || r >= n) return 0;
+    const r0 = Math.max(0, r - d), r1 = Math.min(n, r + d + 1), c0 = Math.max(0, c - d), c1 = Math.min(n, c + d + 1);
+    const b = this.builtSum;
+    const sum = b[r1 * (n + 1) + c1] - b[r0 * (n + 1) + c1] - b[r1 * (n + 1) + c0] + b[r0 * (n + 1) + c0];
+    return sum / ((r1 - r0) * (c1 - c0));
   }
 
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.
@@ -1734,6 +1806,28 @@ class Graph {
     let skippedWild = 0;
     let skippedClosed = 0;
     let skippedAfloat = 0;
+    let noSidewalk = 0;
+    // Where the town is, by the map itself: the nodes of small streets and footpaths, in
+    // 60 m cells. A car road with none of these beside it runs through open country.
+    const SMALL_RE = /^(residential|living_street|pedestrian|footway|path|cycleway|steps)$/;
+    const smallCells = new Set();
+    const cellKey = (x, y) => `${Math.floor(x / 60)}:${Math.floor(y / 60)}`;
+    if (grid?.builtSum) {
+      for (const road of osm.roads) {
+        if (!SMALL_RE.test(road.tags.highway)) continue;
+        for (const id of road.nodes) {
+          const p = osm.nodes.get(id);
+          if (p) {
+            const [x, y] = proj.toXY(p[0], p[1]);
+            smallCells.add(cellKey(x, y));
+          }
+        }
+      }
+    }
+    const nearSmallStreet = (x, y) => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (smallCells.has(cellKey(x + 60 * dx, y + 60 * dy))) return true;
+      return false;
+    };
     for (let road of osm.roads) {
       // A bare path (no surface tag) through woods or scrub is a dirt trail: not in the
       // network at all. Any way that runs mostly through closed ground (army base, railway
@@ -1782,7 +1876,30 @@ class Graph {
         }
         if (cnt && small && compound / cnt >= 0.5) road = { ...road, tags: { ...road.tags, rough: 1 } };
       }
-      const cls = highwayClass(road.tags.highway);
+      let cls = highwayClass(road.tags.highway);
+      // A car road through open country has no sidewalk: outside a town — built-up share
+      // from space under 20% around a node AND no side street or footpath within ~60 m of
+      // it, for most of the road — a tertiary, secondary or primary road is priced as a
+      // last resort (HW.TRUNK), kept only so a runner can cross a river or reach the next
+      // quarter over the one bridge. Bridges keep their class.
+      const sw = sidewalkKind(road.tags); // the map's own word, where the tag exists
+      if (sw === 'no' && cls >= HW.TERTIARY && cls < HW.TRUNK && !(road.tags.bridge && road.tags.bridge !== 'no')) {
+        cls = HW.TRUNK;
+        noSidewalk++;
+      } else if (sw !== 'yes' && grid?.builtSum && cls >= HW.TERTIARY && cls < HW.TRUNK && !(road.tags.bridge && road.tags.bridge !== 'no')) {
+        let out = 0, cnt = 0;
+        for (const id of road.nodes) {
+          const p = osm.nodes.get(id);
+          if (!p) continue;
+          const [x, y] = proj.toXY(p[0], p[1]);
+          cnt++;
+          if (grid.townShare(x, y) < 0.2 && !nearSmallStreet(x, y)) out++;
+        }
+        if (cnt && out / cnt >= 0.6) {
+          cls = HW.TRUNK;
+          noSidewalk++;
+        }
+      }
       let nid = -1;
       const nm = road.tags['name:en'] || road.tags.name;
       if (nm) {
@@ -1824,6 +1941,7 @@ class Graph {
     this.skippedWild = skippedWild; // bare paths left out for running through open country
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
+    this.noSidewalk = noSidewalk; // country roads priced as a last resort (no sidewalk)
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);
@@ -2370,8 +2488,8 @@ function buildCues(g, route) {
 
 
 
-const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 3.2]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk)
-const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 5.0];
+const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 6.0]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk / no sidewalk)
+const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 8.0];
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 const ROUGH_COST = 3;
@@ -2530,6 +2648,10 @@ async function planLoops(g, opts) {
     c.stats = routeStats(g, c, D, prefs);
     c.score = scoreRoute(c.stats, prefs, terrain);
   }
+  // A road with no sidewalk (an arterial, a country road) is for crossing a river, not for
+  // running: loops with more than 10% of it are dropped whenever anything else exists.
+  const safe = candidates.filter((c) => c.stats.trunkFrac <= 0.1);
+  if (safe.length) candidates.splice(0, candidates.length, ...safe);
   candidates.sort((a, b) => b.score - a.score);
 
   // Option 1 is the promenade run: of every loop and there-and-back, the one with the
@@ -2915,7 +3037,7 @@ function routeStats(g, route, D, prefs = {}) {
     seaFrac: sea / total, // by the sea (beach, seaside promenade)
     quietFrac: quiet / total,
     busyFrac: busy / total,
-    trunkFrac: trunk / total, // arterials (highway=trunk): tolerated for connectivity, never sought
+    trunkFrac: trunk / total, // roads with no sidewalk (arterials, country roads): tolerated for a crossing, never sought
     repeatFrac: repeated / total,
     scenicFrac: scenic / total,
     promFrac: prom / total,
@@ -2999,6 +3121,9 @@ function describe(g, route, start, prefs = {}) {
   if (outback) highlights.push('Same way there and back');
   if (g.hasElevation) highlights.push(climbText(s));
   highlights.push(stopsText(s));
+  // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
+  const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
+  if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
 
   // Elevation profile, downsampled to ~80 points.
   const profile = [];
@@ -4009,6 +4134,7 @@ class RouteEngine {
       osm = osmFromVectorTiles(vtiles, vt.buffers, { long });
       osm.stopPoints = stopPoints || [];
       if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
+      if (stopPoints?.sidewalks?.length) applySidewalkTags(osm, stopPoints.sidewalks, proj); // the sidewalk tag, where mapped
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -4052,14 +4178,14 @@ class RouteEngine {
 
   // Traffic lights & crosswalks: from the device cache, else one small query.
   async loadStops(lat, lon, radius, long) {
-    const key = `stops2:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const key = `stops3:${long ? 'long' : 'full'}:${lat.toFixed(2)}:${lon.toFixed(2)}`;
     if (this.useCache) {
       const hit = await tileCache.get(key);
-      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [] });
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return Object.assign(hit.points, { docks: hit.docks || [], sidewalks: hit.sidewalks || [] });
     }
     const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
     const points = await fetchStops(lat, lon, r, { long, fetchImpl: this.fetchImpl });
-    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [] });
+    if (points && this.useCache) tileCache.put(key, { lat, lon, radius: r, points: Array.from(points), docks: points.docks || [], sidewalks: points.sidewalks || [] });
     return points;
   }
 

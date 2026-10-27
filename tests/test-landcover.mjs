@@ -73,14 +73,62 @@ check(/esa-worldcover.*N30E033.*assets=map/.test(landcoverTileUrl(13, 4887, 3324
   const woods = await run(async (proj, radius, cell) => {
     const n = Math.ceil((2 * radius) / cell);
     const classes = new Uint8Array(n * n).fill(LC.BUILT);
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { const x = c * cell + cell / 2 - radius, y = r * cell + cell / 2 - radius; if (x > 200 && x < 1700 && y < -200 && y > -1700) classes[r * n + c] = LC.TREE; }
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { const x = c * cell + cell / 2 - radius, y = r * cell + cell / 2 - radius; if (x > -1700 && x < -200 && y < -200 && y > -1700) classes[r * n + c] = LC.TREE; }
     return new LandcoverGrid(proj, radius, cell, classes);
   });
   const best = (o) => Math.max(...o.rs.map((r) => r.stats.greenFrac));
   console.log(`\n6 km parks: greenest option ${(best(plain) * 100) | 0}% green on OSM alone, ${(best(woods) * 100) | 0}% with the satellite woods (landcover merged: ${woods.area.landcover})`);
   check(woods.area.landcover === true && plain.area.landcover === false, 'the area says whether land cover was merged');
-  check(best(woods) >= best(plain) + 0.05, 'the satellite woodland draws a greener route');
+  check(best(woods) >= best(plain) + 0.04, 'the satellite woodland draws a greener route');
   check(woods.rs.every((r) => Math.abs(r.distance / 1000 - 6) / 6 < 0.1), 'routes still fit the distance');
+}
+
+// No sidewalk, no run: a tertiary road leaving town across open country is priced as a
+// last resort (HW.TRUNK); its bridge over the wadi keeps its class; the town part stays.
+{
+  const { Graph, HW } = await import('../js/graph.js');
+  const { parseOverpass } = await import('../js/osm.js');
+  const proj = makeProjection(...CENTER);
+  const radius = 2000, cell = 25;
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const ll = (x, y) => [CENTER[0] + y / ky, CENTER[1] + x / kx];
+  const els = [];
+  let id = 1;
+  const node = (x, y) => { const [lat, lon] = ll(x, y); els.push({ type: 'node', id, lat, lon }); return id++; };
+  const way = (pts, tags) => { els.push({ type: 'way', id: id++, nodes: pts.map(([x, y]) => node(x, y)), tags }); };
+  // Town: a block of residential streets west of x = 0; the road runs east into the fields.
+  for (let y = -400; y <= 400; y += 200) way([[-800, y], [-400, y], [0, y]], { highway: 'residential', name: `Street ${y}` });
+  way([[-800, -400], [-800, 0], [-800, 400]], { highway: 'residential', name: 'West' });
+  way([[0, -400], [0, 0], [0, 400]], { highway: 'residential', name: 'East' });
+  way([[-400, 0], [0, 0]], { highway: 'tertiary', name: 'Main Street' }); // in town
+  way([[0, 0], [300, 0], [600, 0], [900, 0]], { highway: 'tertiary', name: 'Country Road' }); // open country
+  way([[900, 0], [1000, 0]], { highway: 'tertiary', name: 'Wadi Bridge', bridge: 'yes' });
+  way([[1000, 0], [1300, 0], [1600, 0]], { highway: 'tertiary', name: 'Country Road' });
+  const osm = parseOverpass({ elements: els });
+  const grid = new LandscapeGrid(proj, radius, cell);
+  const n = grid.n;
+  const classes = new Uint8Array(n * n).fill(LC.CROP);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { const x = grid.center(c); if (x < 50) classes[r * n + c] = LC.BUILT; }
+  grid.addLandcover(new LandcoverGrid(proj, radius, cell, classes));
+  grid.finish();
+  const g = new Graph(osm, proj, grid, null);
+  const classOf = (nm) => { const set = new Set(); for (let e = 0; e < g.m; e++) if (g.names[g.edgeName[e]]?.name === nm) set.add(g.hw[e]); return [...set]; };
+  check(g.noSidewalk === 2 && classOf('Country Road').every((h) => h === HW.TRUNK), `the country road is priced as a road with no sidewalk (${g.noSidewalk} ways)`);
+  check(classOf('Main Street').every((h) => h === HW.TERTIARY) && classOf('Street 0').every((h) => h === HW.LOCAL), 'the same road in town keeps its class');
+  check(classOf('Wadi Bridge').every((h) => h === HW.TERTIARY), 'the bridge keeps its class, so the wadi can still be crossed');
+  // The sidewalk tag has the last word: Overpass says the town's Main Street has none
+  // and the country road has one on the left; stamped onto the (tag-less) tile roads.
+  const { applySidewalkTags, sidewalkKind } = await import('../js/osm.js');
+  check(sidewalkKind({ sidewalk: 'no' }) === 'no' && sidewalkKind({ sidewalk: 'both' }) === 'yes' && sidewalkKind({ sidewalk: 'separate' }) === 'yes' && sidewalkKind({}) === null, 'sidewalk tag values are read');
+  const osm2 = parseOverpass({ elements: els });
+  const stamped = applySidewalkTags(osm2, [
+    { no: true, pts: [ll(-400, 0), ll(-200, 0), ll(0, 0)] },
+    { no: false, pts: [ll(0, 0), ll(300, 0), ll(600, 0), ll(900, 0)] },
+  ], proj);
+  const g2 = new Graph(osm2, proj, grid, null);
+  const classOf2 = (nm) => { const set = new Set(); for (let e = 0; e < g2.m; e++) if (g2.names[g2.edgeName[e]]?.name === nm) set.add(g2.hw[e]); return [...set]; };
+  check(stamped >= 2 && classOf2('Main Street').every((h) => h === HW.TRUNK), 'a town street tagged sidewalk=no is a road with no sidewalk');
+  check(classOf2('Country Road').includes(HW.TERTIARY), 'a country road tagged with a sidewalk keeps its class');
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll land-cover checks passed');

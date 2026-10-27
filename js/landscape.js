@@ -88,8 +88,9 @@ export class LandscapeGrid {
     const osmGreen = this.green.slice();
     // Built-up share within ~500 m (20 cells): tree cover with hardly any buildings
     // around is open country, where a bare path is a dirt trail (wild); a wood with
-    // the town around it is a park.
+    // the town around it is a park. The integral image is kept for townShare().
     const built = new Float32Array((n + 1) * (n + 1)); // integral image
+    this.builtSum = built;
     for (let r = 0; r < n; r++) {
       let row = 0;
       for (let c = 0; c < n; c++) {
@@ -121,6 +122,20 @@ export class LandscapeGrid {
         if (open && !osmGreen[i] && !this.closed[i]) this.wild[i] = 1;
       }
     }
+  }
+
+  // Share of built-up ground (from space) within ~100 m of (x, y): 0 in open country,
+  // close to 1 in a town. null until land cover has been merged.
+  townShare(x, y, d = 4) {
+    if (!this.builtSum) return null;
+    const n = this.n;
+    const c = this.col(x);
+    const r = this.row(y);
+    if (c < 0 || r < 0 || c >= n || r >= n) return 0;
+    const r0 = Math.max(0, r - d), r1 = Math.min(n, r + d + 1), c0 = Math.max(0, c - d), c1 = Math.min(n, c + d + 1);
+    const b = this.builtSum;
+    const sum = b[r1 * (n + 1) + c1] - b[r0 * (n + 1) + c1] - b[r1 * (n + 1) + c0] + b[r0 * (n + 1) + c0];
+    return sum / ((r1 - r0) * (c1 - c0));
   }
 
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.

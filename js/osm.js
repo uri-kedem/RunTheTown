@@ -239,6 +239,55 @@ export function ringsOf(el) {
   return rings.filter((r) => r.length >= 2);
 }
 
+// What the sidewalk tag says: 'no' (none at all), 'yes' (one side or both, or mapped
+// separately), or null when the tag is missing or unclear.
+export function sidewalkKind(tags = {}) {
+  const v = tags.sidewalk || tags['sidewalk:both'];
+  if (!v) return null;
+  if (/^(no|none)$/.test(v)) return tags['sidewalk:left'] === 'yes' || tags['sidewalk:right'] === 'yes' ? 'yes' : 'no';
+  if (/^(both|left|right|separate|yes|lane)$/.test(v)) return 'yes';
+  return null;
+}
+
+// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
+// no sidewalk tag): a road whose nodes mostly lie within ~12 m of a tagged way takes its answer.
+export function applySidewalkTags(osm, sidewalks, proj) {
+  if (!sidewalks?.length) return 0;
+  const CELL = 12;
+  const key = (x, y) => `${Math.round(x / CELL)}:${Math.round(y / CELL)}`;
+  const marks = new Map(); // cell -> 'no' | 'yes'
+  for (const sw of sidewalks) {
+    const xy = sw.pts.map(([la, lo]) => proj.toXY(la, lo));
+    for (let i = 0; i < xy.length; i++) {
+      const [x0, y0] = xy[i];
+      marks.set(key(x0, y0), sw.no ? 'no' : 'yes');
+      if (i + 1 < xy.length) {
+        const [x1, y1] = xy[i + 1];
+        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (CELL / 2));
+        for (let k = 1; k < steps; k++) marks.set(key(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), sw.no ? 'no' : 'yes');
+      }
+    }
+  }
+  let stamped = 0;
+  for (const road of osm.roads) {
+    if (road.tags.sidewalk || !/^(tertiary|secondary|primary|trunk|unclassified)/.test(road.tags.highway)) continue;
+    let no = 0, yes = 0, cnt = 0;
+    for (const id of road.nodes) {
+      const p = osm.nodes.get(id);
+      if (!p) continue;
+      const [x, y] = proj.toXY(p[0], p[1]);
+      cnt++;
+      let hit = null;
+      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = marks.get(key(x + dx * CELL, y + dy * CELL)) || null;
+      if (hit === 'no') no++;
+      else if (hit === 'yes') yes++;
+    }
+    if (cnt && no / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
+    else if (cnt && yes / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
+  }
+  return stamped;
+}
+
 // The sea apart from other water: land within reach of the coastline or a beach.
 export function seaFeature(tags = {}) {
   if (tags.natural === 'coastline') return { kind: 'sea', shape: 'line', buffer: 110 };
@@ -323,7 +372,8 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
     : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
   // Marina basins come along (vector tiles don't tell a harbour from a lake): the
   // quays and pontoons around them are not running routes.
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];);out geom qt;`;
+  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
+  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -349,6 +399,7 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
     ctrls.forEach((c) => c.abort());
     const out = [];
     const docks = [];
+    const sidewalks = []; // [{ no: true|false, pts: [[lat, lon], …] }] from the sidewalk tag
     for (const el of json.elements || []) {
       const k = el.type === 'node' && el.tags ? stopKind(el.tags) : 0;
       if (k) out.push([el.lat, el.lon, k]);
@@ -356,8 +407,13 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
         const rings = ringsOf(el);
         if (rings.length) docks.push({ ...DOCK, rings, relation: el.type === 'relation' });
       }
+      if (el.type === 'way' && el.tags?.sidewalk && el.geometry) {
+        const sw = sidewalkKind(el.tags);
+        if (sw) sidewalks.push({ no: sw === 'no', pts: el.geometry.filter(Boolean).map((p) => [p.lat, p.lon]) });
+      }
     }
     out.docks = docks;
+    out.sidewalks = sidewalks;
     return out;
   } catch {
     return null;
