@@ -2684,7 +2684,8 @@ async function planLoops(g, opts) {
   }
   const promenade = pool.slice().sort((a, b) => promenadeOf(b) - promenadeOf(a))[0];
   if (promenade && promenadeOf(promenade) >= 0.25 && !prefs.sights) chosen.push(promenade); // a tour is ranked by its landmarks instead
-  for (const limit of [0.45, 0.7, 1.01]) {
+  // Distinct options: never two routes that share 90% of their streets.
+  for (const limit of [0.45, 0.7, 0.9]) {
     for (const c of candidates) {
       if (chosen.length >= count) break;
       if (chosen.includes(c)) continue;
