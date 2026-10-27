@@ -106,6 +106,11 @@ for locked-screen guidance and the app stores.
      (Tel Aviv's Yarkon and tayelet sections are `highway=path` + `bicycle=designated`), promenade credit
      0.6 anywhere and 1 along the water or through a park. Long bike routes trace the boardwalks, so the
      planner now follows them end to end.
+   - **Promenade loops** (`promenadeLoops`): the scenic leg out of the out-and-back tree (turnarounds at
+     0.40–0.50·D with ≥ 60% scenic length, up to 3 per compass sector), then a different way back with the
+     outbound edges priced ×4 — the other bank of the Yarkon, the parallel park path. Kept as a loop when it
+     fits the distance (8%), repeats under 25% and stays a landscape run. The synthetic river has an
+     east-bank path with footbridges every kilometre to exercise it (8 km by the river → 93% promenade loop).
    - **Landscape runs only.** When any candidate (loop or there-and-back, within 8% of the distance)
      keeps at least 60% of its length on park paths, boardwalks and promenades (`promFrac`,
      `LANDSCAPE_SHARE`), nothing else is offered — fewer than three options then, and the results

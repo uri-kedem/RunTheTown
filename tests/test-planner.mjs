@@ -278,6 +278,19 @@ for (const km of [4, 8, 12]) {
   check(withTurns < 2, 'under 2 turns per km on the grid city');
 }
 
+// Promenade loops: from a start by the river, an 8 km run should be a loop — out along
+// the west-bank promenade, back on the east-bank path over the footbridges — not only
+// a there-and-back, and still a landscape run.
+{
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const at = (x, y) => ({ lat: CENTER[0] + y / ky, lon: CENTER[1] + x / kx });
+  const rs = await engine.plan({ ...at(1900, 0), distanceKm: 8, prefs: {}, terrain: 'any' });
+  console.log('\nby the river 8 km: ' + rs.map((r) => `${r.type} ${r.name} ${(r.distance / 1000).toFixed(2)} km prom ${(r.stats.promFrac * 100) | 0}% repeat ${(r.stats.repeatFrac * 100) | 0}%`).join(' | '));
+  const loop = rs.find((r) => r.type === 'loop');
+  check(!!loop && loop.stats.promFrac >= 0.8 && loop.stats.repeatFrac < 0.15, `a promenade loop over both banks is offered (${loop ? `prom ${(loop.stats.promFrac * 100) | 0}%, repeat ${(loop.stats.repeatFrac * 100) | 0}%` : 'no loop'})`);
+  check(rs.every((r) => r.stats.promFrac >= LANDSCAPE_SHARE), 'and every option is a landscape run');
+}
+
 // Ramat Aviv: a river bank 1 km east of home and the sea 3 km west. Whenever the run is
 // long enough to reach the sea, the first option is the beach promenade, not the river.
 {

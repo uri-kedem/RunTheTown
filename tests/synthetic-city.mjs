@@ -79,6 +79,12 @@ export function syntheticOverpass({ size = 7000, spacing = 100, riverX = 2000, s
   const prom = [];
   for (let y = -half; y <= half; y += 50) prom.push([riverX - 50, y]);
   way(prom, { highway: 'footway', name: 'River Promenade' });
+  // The east bank has a park path too, joined by footbridges every kilometre: out on
+  // one bank, back on the other makes a promenade loop (like the Yarkon).
+  const east = [];
+  for (let y = -half; y <= half; y += 50) east.push([riverX + 50, y]);
+  way(east, { highway: 'path', bicycle: 'designated', foot: 'designated', name: 'East Bank Path' });
+  for (let y = -half; y <= half; y += 1000) way([[riverX - 50, y], [riverX + 50, y]], { highway: 'footway', bridge: 'yes' });
 
   // A pedestrian street (car-free) between two grid streets, and a boulevard
   // whose walkway runs down the middle, like Rothschild.

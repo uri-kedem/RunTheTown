@@ -154,6 +154,10 @@ export async function planLoops(g, opts) {
     candidates.push(...(await sightseeingTours(g, { start, comp, D })));
   }
   const outbacks = outAndBacks(g, { start, D, prefs, terrain });
+  // Promenade loops: the scenic way out, then a different scenic way back (the other
+  // bank of the river, the parallel park path) — a loop where a there-and-back was the
+  // only landscape run before.
+  candidates.push(...(await promenadeLoops(g, { start, D, prefs, terrain })));
   if (!candidates.length && !outbacks.length) {
     throw new Error("Couldn't build a route here. Try a shorter distance or another start point.");
   }
@@ -280,6 +284,68 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
     picked.push(route);
   }
   return picked;
+}
+
+// Loops made of a scenic leg out (the out-and-back tree) and a different way back:
+// turnarounds a little short of half the distance, in every direction, the outbound
+// edges priced ×4 for the return. Kept when the loop fits the distance, repeats little
+// and stays a landscape run (LANDSCAPE_SHARE of promenade / park path).
+async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxLoops = 4 }) {
+  const { order, prevArc } = g.shortestTree(start);
+  const L = new Float64Array(g.n);
+  const S = new Float64Array(g.n);
+  const Sea = new Float64Array(g.n);
+  const bySector = new Map();
+  for (const u of order) {
+    if (u === start) continue;
+    const e = g.adjEdge[prevArc[u]];
+    const p = g.other(e, u);
+    L[u] = L[p] + g.len[e];
+    S[u] = S[p] + g.len[e] * scenicOf(g, e, prefs);
+    Sea[u] = Sea[p] + g.len[e] * g.sea[e];
+    // The way back is usually a little longer than the way out (it is the second choice).
+    if (L[u] < 0.4 * D || L[u] > 0.5 * D) continue;
+    if (S[u] / L[u] < LANDSCAPE_SHARE) continue; // only a scenic leg out can make a landscape loop
+    const sector = Math.round(((Math.atan2(g.x[u] - g.x[start], g.y[u] - g.y[start]) * 180) / Math.PI + 360) / 45) % 8;
+    if (!bySector.has(sector)) bySector.set(sector, []);
+    bySector.get(sector).push(u);
+  }
+  const rank = (u) => S[u] / L[u] + seaBoost(Sea[u] / L[u]);
+  const loops = [];
+  for (const [, us] of bySector) {
+    us.sort((a, b) => rank(b) - rank(a));
+    let tried = 0;
+    for (let k = 0; k < us.length && tried < perSector; k++) {
+      const u = us[k];
+      // Spread the tries along the leg: skip turnarounds within 5% of D of one already tried.
+      if (us.slice(0, k).some((v) => tried && Math.abs(L[v] - L[u]) < 0.05 * D)) continue;
+      tried++;
+      const out = [u];
+      while (out[out.length - 1] !== start) out.push(g.other(g.adjEdge[prevArc[out[out.length - 1]]], out[out.length - 1]));
+      out.reverse();
+      const outEdges = [];
+      for (let i = 0; i + 1 < out.length; i++) outEdges.push(g.edgeBetween(out[i], out[i + 1]));
+      const saved = outEdges.map((e) => g.penalty[e]);
+      for (const e of outEdges) g.penalty[e] *= 4;
+      const back = g.shortestPath(u, start, { fromArc: -1 });
+      outEdges.forEach((e, i) => (g.penalty[e] = saved[i]));
+      if (!back) continue;
+      const nodes = out.concat(back.nodes.slice(1));
+      const edges = outEdges.concat(back.edges);
+      let length = 0;
+      for (const e of edges) length += g.len[e];
+      if (Math.abs(length - D) / D > 0.08) continue;
+      const route = { nodes, edges, length, type: 'loop', turnaround: u };
+      route.stats = routeStats(g, route, D, prefs);
+      if (route.stats.repeatFrac > 0.25 || route.stats.promFrac < LANDSCAPE_SHARE || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
+      if (loops.some((o) => overlap(g, route, o) > 0.6)) continue;
+      route.score = scoreRoute(route.stats, prefs, terrain);
+      loops.push(route);
+      if (loops.length >= maxLoops) return loops;
+      await sleep();
+    }
+  }
+  return loops;
 }
 
 // Attractive nodes (water or green, per preferences) that a loop of length D can
