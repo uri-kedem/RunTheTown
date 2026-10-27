@@ -2504,7 +2504,7 @@ function outAndBacks(g, { start, D, prefs, terrain, count = 3 }) {
 // turnarounds a little short of half the distance, in every direction, the outbound
 // edges priced ×4 for the return. Kept when the loop fits the distance, repeats little
 // and stays a landscape run (LANDSCAPE_SHARE of promenade / park path).
-async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxLoops = 4 }) {
+async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 1, maxLoops = 3 }) {
   const { order, prevArc } = g.shortestTree(start);
   const L = new Float64Array(g.n);
   const S = new Float64Array(g.n);
@@ -2526,8 +2526,13 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
   }
   const rank = (u) => S[u] / L[u] + seaBoost(Sea[u] / L[u]);
   const loops = [];
-  for (const [, us] of bySector) {
-    us.sort((a, b) => rank(b) - rank(a));
+  // Each way back is a full path search on a big graph: best directions first, one try
+  // each (turnaround nearest 0.46·D among the top-ranked, so the loop fits the distance).
+  for (const us of bySector.values()) us.sort((a, b) => rank(b) - rank(a));
+  const sectors = [...bySector.values()].sort((a, b) => rank(b[0]) - rank(a[0]));
+  for (const us of sectors) {
+    const top = us.slice(0, 5).sort((a, b) => Math.abs(L[a] - 0.46 * D) - Math.abs(L[b] - 0.46 * D));
+    us.splice(0, us.length, ...top);
     let tried = 0;
     for (let k = 0; k < us.length && tried < perSector; k++) {
       const u = us[k];
