@@ -8,6 +8,7 @@ import { makeProjection, haversine } from './geo.js';
 import { fetchTiles, tilesFor, parseOverpass, fetchStops } from './osm.js';
 import { vtTilesFor, fetchVectorTiles, osmFromVectorTiles } from './vectortiles.js';
 import { fetchElevationGrid, ElevationGrid } from './elevation.js';
+import { fetchLandcoverGrid } from './landcover.js';
 import { LandscapeGrid } from './landscape.js';
 import { Graph } from './graph.js';
 import { applyPreferences, planLoops } from './planner.js';
@@ -23,6 +24,7 @@ const MIN_TILE_SHARE = 0.75;
 // Traffic-light and elevation data never hold routes up for long: wait at most
 // this long after the map is ready (they're saved for next time if they arrive later).
 const STOPS_GRACE_MS = 4000;
+const LANDSCAPE_CELL = 25; // metres; the land-cover grid is sampled on the same cells
 
 // Loops reach ~0.3·D from the start; a little margin lets nearby starts reuse
 // the area. Long runs grow the area more slowly (the download grows with the
@@ -36,11 +38,12 @@ export function radiusFor(distanceM) {
 }
 
 export class RouteEngine {
-  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, useCache = true, scanPauseMs = 1050 } = {}) {
+  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050 } = {}) {
     this.area = null;
     this.scanPauseMs = scanPauseMs;
     this.fetchImpl = fetchImpl;
     this.fetchElevation = fetchElevationImpl;
+    this.fetchLandcover = fetchLandcoverImpl;
     this.useCache = useCache && typeof indexedDB !== 'undefined';
   }
 
@@ -82,12 +85,17 @@ export class RouteEngine {
     // most STOPS_GRACE_MS (they're cached for next time if they arrive later).
     const stopsPromise = this.loadStops(lat, lon, radius, long);
     const elevPromise = this.loadElevation(lat, lon, radius, proj);
+    // Land cover from space (ESA WorldCover): optional like the lights, a few small tiles.
+    const lcPromise = this.fetchLandcover(proj, radius, LANDSCAPE_CELL, { fetchImpl: this.fetchImpl, cache: this.useCache ? tileCache : null }).catch((err) => {
+      console.warn('Land cover unavailable:', err);
+      return null;
+    });
     const vt = await fetchVectorTiles(vtiles, { cache, fetchImpl: this.fetchImpl, onProgress: progress }).catch(() => ({
       buffers: new Map(),
       failed: vtiles.map((t) => t.key),
     }));
     const grace = new Promise((r) => setTimeout(() => r(null), STOPS_GRACE_MS));
-    const [stopPoints, elev] = await Promise.all([Promise.race([stopsPromise, grace]), Promise.race([elevPromise, grace])]);
+    const [stopPoints, elev, landcover] = await Promise.all([Promise.race([stopsPromise, grace]), Promise.race([elevPromise, grace]), Promise.race([lcPromise, grace])]);
 
     let osm;
     let source = 'vector';
@@ -123,8 +131,9 @@ export class RouteEngine {
     if (!osm.roads.length) throw new Error('No streets or paths found around here.');
     onStatus('Reading the landscape…');
     await new Promise((r) => setTimeout(r, 0));
-    const grid = new LandscapeGrid(proj, radius);
+    const grid = new LandscapeGrid(proj, radius, LANDSCAPE_CELL);
     grid.addFeatures(osm.features);
+    grid.addLandcover(landcover); // satellite fills what the map leaves out
     grid.finish();
     const graph = new Graph(osm, proj, grid, elev);
     graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched
@@ -133,6 +142,7 @@ export class RouteEngine {
       stopsKnown: source === 'overpass' || stopPoints !== null,
       osmPlaces: osm.places || null,
       audit: osm.audit || null, // ways kept and left out, by kind (for checks)
+      landcover: !!landcover, // satellite land cover was merged in
     };
     return this.area;
   }

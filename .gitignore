@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 Claude outputs/
 tests/_engine-live-scratch.js
+
+# Private planning documents, never pushed
+docs/

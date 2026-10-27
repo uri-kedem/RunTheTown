@@ -100,6 +100,16 @@ for locked-screen guidance and the app stores.
      unnamed footway, service road, stairs or living street with 60% of its nodes on the dock is the
      dock quay (Tel Aviv's runs behind the clubhouses with no way through) and is dropped; the named
      promenade inland stays. Checked on the real Tel Aviv tiles (scratch test, 4 tiles around the Hilton).
+   - **Land cover from space** (`js/landcover.js`): ESA WorldCover 2021 (10 m) read as z13 PNG tiles from
+     Microsoft's Planetary Computer (`…/item/tiles/WebMercatorQuad/{z}/{x}/{y}@1x.png?collection=esa-worldcover
+     &item=ESA_WorldCover_10m_2021_v200_<sheet>&assets=map`; the grey value is the class code: 10 trees,
+     30 grass, 40 crops, 50 built-up, 60 bare, 80 water). Sampled on the landscape grid's own 25 m cells (6 tiles
+     and ~1 s for an 8 km run), cached on the device, optional like the lights (4 s grace).
+     `LandscapeGrid.addLandcover`: a green patch (cell + 4 neighbours) adds `green` (a park nobody drew; a
+     tree-lined street does not count), water adds the waterfront bonus only (never a harbour), and crops,
+     bare ground, scrub, or trees/grass with under 15% built-up within 500 m become `wild` (a bare path
+     there is a dirt trail) — never over an OSM park. OSM keeps the last word. Google's Dynamic World needs an
+     Earth Engine key on a server, so it waits for a backend; the module takes the same class codes.
    - **Bike routes are promenades.** A car-free bike route — a cycleway open to walkers, or a footway,
      path or pedestrian street with `bicycle=designated` (OpenFreeMap tiles carry `bicycle`/`foot`) — is
      a made, continuous path (`tags.bike`, `Graph.bike`): never a "rough" trail even with no surface tag

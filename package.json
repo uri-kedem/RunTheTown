@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-long-runs.mjs",
+    "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-landcover.mjs && node tests/test-long-runs.mjs",
     "start": "python3 -m http.server 8080"
   }
 }

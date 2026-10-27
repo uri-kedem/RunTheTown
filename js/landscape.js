@@ -78,6 +78,51 @@ export class LandscapeGrid {
     }
   }
 
+  // Satellite land cover (ESA WorldCover classes, one per cell) on top of the OSM
+  // features: it fills in parks nobody drew, river banks and open country in towns
+  // where the map is thin. OSM keeps the last word where it has one.
+  addLandcover(lc) {
+    if (!lc || lc.n !== this.n) return;
+    const n = this.n;
+    const k = lc.classes;
+    const osmGreen = this.green.slice();
+    // Built-up share within ~500 m (20 cells): tree cover with hardly any buildings
+    // around is open country, where a bare path is a dirt trail (wild); a wood with
+    // the town around it is a park.
+    const built = new Float32Array((n + 1) * (n + 1)); // integral image
+    for (let r = 0; r < n; r++) {
+      let row = 0;
+      for (let c = 0; c < n; c++) {
+        row += k[r * n + c] === 50 ? 1 : 0;
+        built[(r + 1) * (n + 1) + c + 1] = built[r * (n + 1) + c + 1] + row;
+      }
+    }
+    const builtFrac = (r, c, d = 20) => {
+      const r0 = Math.max(0, r - d), r1 = Math.min(n, r + d + 1), c0 = Math.max(0, c - d), c1 = Math.min(n, c + d + 1);
+      const s = built[r1 * (n + 1) + c1] - built[r0 * (n + 1) + c1] - built[r1 * (n + 1) + c0] + built[r0 * (n + 1) + c0];
+      return s / ((r1 - r0) * (c1 - c0));
+    };
+    const isGreen = (v) => v === 10 || v === 20 || v === 30 || v === 90 || v === 95;
+    // Green only where it is a patch, not a scattered street tree: the cell and its
+    // four neighbours all green (so a park counts, a tree-lined avenue does not).
+    for (let r = 1; r < n - 1; r++) {
+      for (let c = 1; c < n - 1; c++) {
+        const i = r * n + c;
+        const v = k[i];
+        if (isGreen(v) && isGreen(k[i - 1]) && isGreen(k[i + 1]) && isGreen(k[i - n]) && isGreen(k[i + n])) this.green[i] = 1;
+        // Water from space feeds the waterfront bonus only (never the harbour
+        // detection: a coastline off by a pixel must not turn the beach into a dock).
+        if (v === 80) {
+          this.body ||= new Uint8Array(n * n);
+          this.body[i] = 1;
+        }
+        // Open country: crops, bare ground, scrub, or trees/grass with no buildings near.
+        const open = v === 40 || v === 60 || v === 20 || ((v === 10 || v === 30) && builtFrac(r, c) < 0.15);
+        if (open && !osmGreen[i] && !this.closed[i]) this.wild[i] = 1;
+      }
+    }
+  }
+
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.
   // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {

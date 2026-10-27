@@ -1,7 +1,7 @@
 # Bundles the ES modules into one classic script so index.html works when opened
 # directly from Finder (file://), with no local server. Run: python3 build.py
 import re, pathlib
-ORDER = ['geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'app']
+ORDER = ['geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'landcover', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'app']
 root = pathlib.Path(__file__).parent
 parts = []
 for name in ORDER:

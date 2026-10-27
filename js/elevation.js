@@ -44,7 +44,7 @@ export async function fetchElevationGrid(proj, radius, { n = 40, signal, fetchIm
 }
 
 // Web-Mercator tile numbers for a point.
-function tileXY(lat, lon, z) {
+export function tileXY(lat, lon, z) {
   const s = Math.sin((lat * Math.PI) / 180);
   const k = 2 ** z;
   return [((lon + 180) / 360) * k, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * k];
