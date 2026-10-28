@@ -327,11 +327,13 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
     const top = us.slice(0, 8).sort((a, b) => Math.abs(L[a] - 0.46 * D) - Math.abs(L[b] - 0.46 * D));
     us.splice(0, us.length, ...top);
     let tried = 0;
+    const triedAt = [];
     for (let k = 0; k < us.length && tried < perSector; k++) {
       const u = us[k];
       // Spread the tries along the leg: skip turnarounds within 5% of D of one already tried.
-      if (us.slice(0, k).some((v) => tried && Math.abs(L[v] - L[u]) < 0.05 * D)) continue;
+      if (triedAt.some((lv) => Math.abs(lv - L[u]) < 0.05 * D)) continue;
       tried++;
+      triedAt.push(L[u]);
       const out = [u];
       while (out[out.length - 1] !== start) out.push(g.other(g.adjEdge[prevArc[out[out.length - 1]]], out[out.length - 1]));
       out.reverse();
@@ -595,10 +597,13 @@ export function scoreRoute(s, prefs, terrain) {
   return score;
 }
 
+// Share of the shorter route that runs on streets the other one also uses. Edges are
+// counted as often as they are run (an out-and-back runs each twice), so two there-and-backs
+// along the same street overlap fully, not by half.
 function overlap(g, a, b) {
   const setB = new Set(b.edges);
   let shared = 0;
-  for (const e of new Set(a.edges)) if (setB.has(e)) shared += g.len[e];
+  for (const e of a.edges) if (setB.has(e)) shared += g.len[e];
   return shared / Math.min(a.length, b.length);
 }
 

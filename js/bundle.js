@@ -485,6 +485,7 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
 // features } structure the graph builder uses.
 
 
+
 const VT_ZOOM = 14;
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
 const VT_CONCURRENCY = 6;
@@ -664,7 +665,15 @@ function vtTilesFor(lat, lon, radius, z = VT_ZOOM) {
 
 let tileUrlPromise = null;
 async function tileUrlTemplate(fetchImpl) {
-  tileUrlPromise ||= fetchImpl(TILEJSON)
+  tileUrlPromise ||= (async () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), VT_TIMEOUT_MS); // a hanging index must fail like a hanging tile
+    try {
+      return await fetchImpl(TILEJSON, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  })()
     .then((r) => {
       if (!r.ok) throw new Error('tile service returned ' + r.status);
       return r.json();
@@ -881,7 +890,7 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {
-          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags });
+          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags: { ...tags } }); // own copy: names are stamped per road
           cur = null;
         };
         for (let i = 0; i + 1 < line.length; i++) {
@@ -1306,11 +1315,12 @@ class LandscapeGrid {
     const isGreen = (v) => v === 10 || v === 20 || v === 30 || v === 90 || v === 95;
     // Green only where it is a patch, not a scattered street tree: the cell and its
     // four neighbours all green (so a park counts, a tree-lined avenue does not).
-    for (let r = 1; r < n - 1; r++) {
-      for (let c = 1; c < n - 1; c++) {
+    const g4 = (r, c) => (r < 0 || c < 0 || r >= n || c >= n ? true : isGreen(k[r * n + c])); // outside the map counts as agreeing
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
         const i = r * n + c;
         const v = k[i];
-        if (isGreen(v) && isGreen(k[i - 1]) && isGreen(k[i + 1]) && isGreen(k[i - n]) && isGreen(k[i + n])) this.green[i] = 1;
+        if (isGreen(v) && g4(r, c - 1) && g4(r, c + 1) && g4(r - 1, c) && g4(r + 1, c)) this.green[i] = 1;
         // Water from space feeds the waterfront bonus only (never the harbour
         // detection: a coastline off by a pixel must not turn the beach into a dock).
         if (v === 80) {
@@ -1362,7 +1372,9 @@ class LandscapeGrid {
       const cells = [s0];
       seen[s0] = 1;
       let touchesSea = !!sea[s0];
-      for (let k = 0; k < cells.length && cells.length <= maxCells; k++) {
+      // The whole body is visited even past the cap, so a big basin is never re-found
+      // later as several small ones.
+      for (let k = 0; k < cells.length; k++) {
         const i = cells[k];
         const r = (i / n) | 0;
         const c = i - r * n;
@@ -1636,6 +1648,7 @@ async function fetchOpenMeteoGrid(proj, radius, { n, signal, fetchImpl }) {
 // second source can be dropped in with the same class codes.
 
 
+
 const LC = { NONE: 0, TREE: 10, SHRUB: 20, GRASS: 30, CROP: 40, BUILT: 50, BARE: 60, SNOW: 70, WATER: 80, WETLAND: 90, MANGROVE: 95, MOSS: 100 };
 
 const PC_TILES = 'https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad';
@@ -1716,11 +1729,16 @@ async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl = fetc
     }
   }
   const keys = [...need.keys()];
-  const imgs = await Promise.all(keys.map((k) => need.get(k)));
-  const tiles = new Map(keys.map((k, i) => [k, imgs[i]]));
+  // One tile that fails (a sheet that is all sea, a server hiccup) is a hole of class 0,
+  // not a reason to drop the whole layer.
+  const settled = await Promise.allSettled(keys.map((k) => need.get(k)));
+  const tiles = new Map();
+  settled.forEach((r, i) => { if (r.status === 'fulfilled') tiles.set(keys[i], r.value); });
+  if (!tiles.size) throw new Error('no land-cover tile loaded');
   const classes = new Uint8Array(n * n);
   samples.forEach(([key, px, py], i) => {
     const img = tiles.get(key);
+    if (!img) return;
     const x = Math.min(255, Math.max(0, Math.floor(px)));
     const y = Math.min(255, Math.max(0, Math.floor(py)));
     classes[i] = img[y * 256 + x];
@@ -1731,6 +1749,7 @@ async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl = fetc
 // ---- graph.js ----
 // Path network: nodes/edges built from OSM ways, with per-edge landscape
 // attributes, a spatial index for snapping, and Dijkstra shortest paths.
+
 
 
 
@@ -1841,7 +1860,8 @@ class Graph {
         let compound = 0;
         let afloat = 0;
         let dock = 0;
-        const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
+        const isBridge = !!road.tags.bridge && road.tags.bridge !== 'no';
+        const canFloat = !isBridge && /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers (a footbridge is not one)
         // A quay: a footway, service road or stairs hugging a marina basin (a promenade or
         // a named path past the marina is a different kind of way and stays).
         const canDock = /^(footway|service|steps|living_street)$/.test(road.tags.highway) && !PROMENADE_NAME.test(road.tags.name || '');
@@ -2420,14 +2440,17 @@ function buildCues(g, route) {
   const nameOf = (e) => (e >= 0 && g.edgeName && g.edgeName[e] >= 0 ? g.names[g.edgeName[e]] : null);
 
   // Point roughly LOOK_M back / ahead of index i along the route.
+  // Never look past a reversal (the turnaround of an out-and-back): the node beyond it
+  // is the mirror of the one before, which would give a zero heading.
+  const reversal = (j) => j > 0 && j < n - 1 && nodes[j - 1] === nodes[j + 1];
   const back = (i) => {
     let j = i;
-    while (j > 0 && along[i] - along[j] < LOOK_M) j--;
+    while (j > 0 && along[i] - along[j] < LOOK_M && (j === i || !reversal(j))) j--;
     return nodes[j];
   };
   const ahead = (i) => {
     let j = i;
-    while (j < n - 1 && along[j] - along[i] < LOOK_M) j++;
+    while (j < n - 1 && along[j] - along[i] < LOOK_M && (j === i || !reversal(j))) j++;
     return nodes[j];
   };
   const degree = (v) => g.adjStart[v + 1] - g.adjStart[v];
@@ -2484,6 +2507,7 @@ function buildCues(g, route) {
 // Loop planner: designs candidate loops in many directions, fits each to the
 // target distance, scores them against the runner's preferences and returns
 // the best few distinct options.
+
 
 
 
@@ -2809,11 +2833,13 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
     const top = us.slice(0, 8).sort((a, b) => Math.abs(L[a] - 0.46 * D) - Math.abs(L[b] - 0.46 * D));
     us.splice(0, us.length, ...top);
     let tried = 0;
+    const triedAt = [];
     for (let k = 0; k < us.length && tried < perSector; k++) {
       const u = us[k];
       // Spread the tries along the leg: skip turnarounds within 5% of D of one already tried.
-      if (us.slice(0, k).some((v) => tried && Math.abs(L[v] - L[u]) < 0.05 * D)) continue;
+      if (triedAt.some((lv) => Math.abs(lv - L[u]) < 0.05 * D)) continue;
       tried++;
+      triedAt.push(L[u]);
       const out = [u];
       while (out[out.length - 1] !== start) out.push(g.other(g.adjEdge[prevArc[out[out.length - 1]]], out[out.length - 1]));
       out.reverse();
@@ -3077,10 +3103,13 @@ function scoreRoute(s, prefs, terrain) {
   return score;
 }
 
+// Share of the shorter route that runs on streets the other one also uses. Edges are
+// counted as often as they are run (an out-and-back runs each twice), so two there-and-backs
+// along the same street overlap fully, not by half.
 function overlap(g, a, b) {
   const setB = new Set(b.edges);
   let shared = 0;
-  for (const e of new Set(a.edges)) if (setB.has(e)) shared += g.len[e];
+  for (const e of a.edges) if (setB.has(e)) shared += g.len[e];
   return shared / Math.min(a.length, b.length);
 }
 
@@ -3334,6 +3363,7 @@ function fitTour(g, start, stopNodes, D) {
 
 
 
+
 const TRACK_MIN_PERIM = 250; // m: smaller "tracks" are playground loops
 const TRACK_MAX_PERIM = 700;
 const PARK_MIN_AREA = 150000; // m²: 15 ha, a park you can run around
@@ -3472,8 +3502,18 @@ async function findRunningPlaces(area) {
   }
   const parks = big.filter((b) => b.paths >= PARK_MIN_PATHS).sort((a, b) => b.area - a.area).slice(0, MAX_PARKS);
   if (parks.length) {
-    const savedF = g.costF.slice(), savedB = g.costB.slice(), savedSW = g.stopWeight;
-    applyPreferences(g, { prefs: { green: true }, terrain: 'any' });
+    // The preview plans on a private view of the graph: own costs and penalties, the
+    // same streets. A route search the runner starts meanwhile (the preview runs for
+    // seconds, with awaits) keeps its own preferences untouched.
+    const gp = Object.create(g);
+    gp.costF = g.costF.slice();
+    gp.costB = g.costB.slice();
+    gp.penalty = new Float32Array(g.m).fill(1);
+    gp.stopWeight = g.stopWeight;
+    // The search's visit stamps must stay one counter for both views (they share the
+    // scratch arrays), or one search would mistake the other's marks for its own.
+    Object.defineProperty(gp, 'curStamp', { get: () => g.curStamp, set: (v) => { g.curStamp = v; } });
+    applyPreferences(gp, { prefs: { green: true }, terrain: 'any' });
     for (const b of parks) {
       // Name: the park's own label (best rank, nearest the middle of the green), not a sub-garden's.
       let mx = 0, my = 0;
@@ -3485,12 +3525,12 @@ async function findRunningPlaces(area) {
       // Keep the loop inside the park: paths elsewhere cost 6x.
       for (let e = 0; e < g.m; e++) {
         const c = cellOf((g.x[g.ea[e]] + g.x[g.eb[e]]) / 2, (g.y[g.ea[e]] + g.y[g.eb[e]]) / 2);
-        g.penalty[e] = c >= 0 && label[c] === b.id ? 1 : 6;
+        gp.penalty[e] = c >= 0 && label[c] === b.id ? 1 : 6;
       }
       const D = Math.max(1500, Math.min(5000, 2.2 * Math.sqrt(b.area), 0.6 * b.paths));
       let loop = null;
       try {
-        const routes = await planLoops(g, { startXY: [g.x[entry], g.y[entry]], distance: D, prefs: { green: true }, terrain: 'any', count: 1, bearings: 8 });
+        const routes = await planLoops(gp, { startXY: [g.x[entry], g.y[entry]], distance: D, prefs: { green: true }, terrain: 'any', count: 1, bearings: 8 });
         loop = routes.find((r) => r.type === 'loop' && r.stats.greenFrac >= 0.5 && r.stats.distErr < 0.15) || null;
       } catch {}
       if (!loop) continue;
@@ -3500,10 +3540,6 @@ async function findRunningPlaces(area) {
         areaKm2: b.area / 1e6, pathsKm: b.paths / 1000, ring: loop.latlngs, loop, entry: [g.lat[entry], g.lon[entry]],
       });
     }
-    g.penalty.fill(1);
-    g.costF.set(savedF);
-    g.costB.set(savedB);
-    g.stopWeight = savedSW;
   }
   area.runningPlaces = places;
   return places;
@@ -3784,6 +3820,7 @@ function fallbackLinks(place) {
 // (so laps can be planned on them). Big parks still come from the map tiles.
 
 
+
 const NOMINATIM_SCAN = 'https://nominatim.openstreetmap.org';
 const SCAN_KM = 8; // half-size of the box scanned around the start
 const SCAN_TIMEOUT_MS = 8000;
@@ -3930,6 +3967,7 @@ function mergeSpots(scanned, tilePlaces) {
 // app simply downloads again.
 
 
+
 const DB_NAME = 'runthetown';
 const STORE = 'areas';
 const TILES = 'tiles';
@@ -4045,6 +4083,7 @@ const tileCache = {
 // crosswalks from a small Overpass query (best-effort); if the vector tiles
 // fail, the full map falls back to Overpass. Tiles and elevation are cached
 // on the device, so coming back to the same city is instant.
+
 
 
 
@@ -4179,14 +4218,18 @@ class RouteEngine {
     grid.finish();
     const graph = new Graph(osm, proj, grid, elev);
     graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched
-    this.area = {
+    const built = {
       lat, lon, radius, mode, proj, graph, grid, elev, source, tiles, failedTiles,
       stopsKnown: source === 'overpass' || stopPoints !== null,
       osmPlaces: osm.places || null,
       audit: osm.audit || null, // ways kept and left out, by kind (for checks)
       landcover: !!landcover, // satellite land cover was merged in
     };
-    return this.area;
+    // Two loads can be in flight (the spot preview and a bigger plan): a smaller map must
+    // not replace a bigger one that already covers it when it happens to finish last.
+    const cur = this.area;
+    if (!(cur && cur.radius > radius && (cur.mode === mode || cur.mode === 'full') && haversine(cur.lat, cur.lon, lat, lon) + radius <= cur.radius)) this.area = built;
+    return built;
   }
 
   // Traffic lights & crosswalks: from the device cache, else one small query.
@@ -4319,6 +4362,7 @@ class RouteEngine {
 // Navigator is pure logic (fixes in, announcements out) so it can be tested
 // with simulated GPS. Voice, ScreenLock, GpsSource and SimulatedRun wrap the
 // browser APIs.
+
 
 
 const PRE_MAX = 200; // announce a turn this far ahead (m)...
@@ -4609,7 +4653,7 @@ class Navigator {
         c.now = c.pre = true;
         const next = this.cues[k + 1];
         let parts = cueSpeech(c);
-        if (next && next.type !== 'arrive' && next.at - c.at <= THEN_M) {
+        if (next && next.type !== 'arrive' && next.type !== 'lap' && next.at - c.at <= THEN_M) { // laps are said on their own, as they start
           parts = [...parts, part(', then '), ...lower(cueSpeech(next))];
           next.pre = true;
         }
@@ -4732,16 +4776,26 @@ class Voice {
     // Urgent messages (turn now, off route) jump the queue and drop stale ones.
     if (priority >= 2) {
       this.queue = this.queue.filter((q) => q.priority >= 2);
-      if (priority >= 3) { this.synth.cancel(); this.queue = []; this.speaking = false; }
+      if (priority >= 3) { this.cancelSpeech(); }
     }
     this.queue.push({ parts, priority });
     if (this.queue.length > 4) this.queue.splice(0, this.queue.length - 4);
     if (!this.speaking) this.next();
   }
+  // Stops what is being said. The cancelled utterance's callback still fires later; the
+  // generation counter makes it a no-op instead of resuming the old sentence.
+  cancelSpeech() {
+    this.gen = (this.gen || 0) + 1;
+    clearTimeout(this.watchdog);
+    try { this.synth.cancel(); } catch {}
+    this.queue = [];
+    this.speaking = false;
+  }
   next() {
     const item = this.queue.shift();
     if (!item) { this.speaking = false; return; }
     this.speaking = true;
+    const gen = (this.gen = (this.gen || 0) + 1);
     // Merge runs of the same language; drop Hebrew parts if there is no Hebrew voice.
     const runs = [];
     for (const p of item.parts) {
@@ -4753,6 +4807,8 @@ class Voice {
     }
     let i = 0;
     const speakRun = () => {
+      if (gen !== this.gen) return; // cancelled or superseded: this chain is dead
+      clearTimeout(this.watchdog);
       if (i >= runs.length) return this.next();
       const r = runs[i++];
       const u = new SpeechSynthesisUtterance(r.text);
@@ -4761,13 +4817,17 @@ class Voice {
       if (v) u.voice = v;
       u.rate = 1.02;
       u.onend = u.onerror = speakRun;
-      this.synth.speak(u);
+      this.current = u; // keep a reference: Chrome drops callbacks of a collected utterance
+      // Watchdog: if the browser never reports the end (screen locked, tab in the
+      // background), carry on anyway instead of staying silent for the rest of the run.
+      this.watchdog = setTimeout(speakRun, 4000 + 80 * r.text.length);
+      try { this.synth.speak(u); } catch { speakRun(); }
     };
     speakRun();
   }
   setMuted(m) {
     this.muted = m;
-    if (m && this.synth) { this.synth.cancel(); this.queue = []; this.speaking = false; }
+    if (m && this.synth) this.cancelSpeech();
   }
   stop() { this.setMuted(true); this.muted = false; }
 }
@@ -4874,6 +4934,7 @@ class SimulatedRun {
 
 
 
+
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
 const $ = (id) => document.getElementById(id);
@@ -4947,6 +5008,7 @@ function setStart(lat, lon, label, { pan = true } = {}) {
     }).addTo(map);
     startMarker.on('dragend', () => {
       const p = startMarker.getLatLng();
+      if (nav.active || busy) { startMarker.setLatLng([state.start.lat, state.start.lon]); return; } // not while running or planning
       showPrefs();
       setStart(p.lat, p.lng, 'Dropped pin', { pan: false });
     });
@@ -5345,6 +5407,9 @@ function drawPlaces(places, list = $('places')) {
       engine.placeDetails(p).then((d) => {
         p._details = d || {};
         marker.setPopupContent(placePopup(p, i, p._details));
+      }).catch(() => {
+        p._details = {};
+        marker.setPopupContent(placePopup(p, i, p._details));
       });
     });
     if (i >= 6) return; // the nearest few in the list, all on the map
@@ -5393,7 +5458,7 @@ document.addEventListener('click', (e) => {
 let askedPlace = null;
 function runAtPlace(i) {
   const place = drawnPlaces[i];
-  if (!place || !state.start) return;
+  if (!place || !state.start || nav.active || busy) return; // not during a run or a search
   map.closePopup?.();
   askedPlace = place;
   $('lapsAskTitle').textContent = place.kind === 'park' ? `Loops in ${place.name}` : `Laps at ${place.name}`;
@@ -5428,7 +5493,8 @@ function closeLapsAsk() {
 async function planLaps() {
   const km = readLapsKm();
   const place = askedPlace;
-  if (km == null || !place || !state.start || busy) return;
+  if (km == null || !place || !state.start) return;
+  if (busy) return toast('Still working on the last search — one moment.');
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
   $('distanceInput').value = String(km);
@@ -5672,6 +5738,8 @@ async function startRun({ demo }) {
   const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: true, rate: 6 });
 
   document.body.classList.add('navigating');
+  startMarker?.dragging?.disable(); // the start stays put during the run
+  map.closePopup?.();
   $('navView').hidden = false;
   $('navFinish').hidden = true;
   $('navDemo').hidden = !demo;
@@ -5690,6 +5758,7 @@ async function startRun({ demo }) {
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
   const locked = await screenLock.acquire();
+  if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = locked
     ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
     : 'Keep the screen on and this page open, or directions stop. Turn off auto-lock for the run if you can.';
@@ -5794,6 +5863,7 @@ function endRun() {
   map.removeLayer(navLayer);
   routeLayer.addTo(map);
   document.body.classList.remove('navigating');
+  startMarker?.dragging?.enable();
   window.dispatchEvent(new Event('rtt:runended')); // a build update that waited for the run can reload now
   $('navView').hidden = true;
   $('recenterBtn').hidden = true;
@@ -5905,10 +5975,13 @@ function installSetup() {
   });
   $('installBtn').addEventListener('click', async () => {
     if (!deferred) return;
-    deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    if (outcome === 'accepted') $('installBtn').hidden = true;
-    deferred = null;
+    const d = deferred;
+    deferred = null; // the browser allows one prompt per saved event; the button hides until the next one
+    $('installBtn').hidden = true;
+    try {
+      d.prompt();
+      await d.userChoice;
+    } catch {}
   });
   window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; $('railInstall').hidden = true; });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -5918,9 +5991,21 @@ function installSetup() {
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first install, nothing to swap
-      const reload = () => location.reload();
-      if (document.body.classList.contains('navigating')) window.addEventListener('rtt:runended', reload, { once: true });
-      else reload();
+      // At most one reload every few minutes: GitHub's edge caches can hand out an old
+      // and a new sw.js in turn for a while, which would otherwise reload in a loop.
+      let last = 0;
+      try { last = Number(sessionStorage.getItem('rtt-reload-at') || 0); } catch {}
+      if (Date.now() - last < 3 * 60 * 1000) return;
+      const reload = () => {
+        try { sessionStorage.setItem('rtt-reload-at', String(Date.now())); } catch {}
+        location.reload();
+      };
+      // Never mid-run, and not while a search or the laps dialog is in progress.
+      const waiting = () => document.body.classList.contains('navigating') || busy || !$('lapsAsk').hidden;
+      if (!waiting()) return reload();
+      const tryLater = () => { if (!waiting()) { reload(); } else setTimeout(tryLater, 2000); };
+      window.addEventListener('rtt:runended', tryLater, { once: true });
+      setTimeout(tryLater, 2000);
     });
     navigator.serviceWorker.register('sw.js').then((reg) => reg.update().catch(() => {})).catch((err) => console.warn('Service worker not registered:', err));
   }
@@ -5957,7 +6042,7 @@ $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
 $('termsBack').addEventListener('click', () => { $('terms').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('installBack').addEventListener('click', () => { $('install').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 installSetup();
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); if (!$('lapsAsk').hidden) closeLapsAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 

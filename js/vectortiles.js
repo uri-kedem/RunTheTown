@@ -185,7 +185,15 @@ export function vtTilesFor(lat, lon, radius, z = VT_ZOOM) {
 
 let tileUrlPromise = null;
 async function tileUrlTemplate(fetchImpl) {
-  tileUrlPromise ||= fetchImpl(TILEJSON)
+  tileUrlPromise ||= (async () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), VT_TIMEOUT_MS); // a hanging index must fail like a hanging tile
+    try {
+      return await fetchImpl(TILEJSON, { signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  })()
     .then((r) => {
       if (!r.ok) throw new Error('tile service returned ' + r.status);
       return r.json();
@@ -402,7 +410,7 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
       for (const line of f.geom) {
         let cur = null;
         const flush = () => {
-          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags });
+          if (cur && cur.length > 1) roads.push({ id: wayId++, nodes: cur, tags: { ...tags } }); // own copy: names are stamped per road
           cur = null;
         };
         for (let i = 0; i + 1 < line.length; i++) {

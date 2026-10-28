@@ -296,7 +296,7 @@ export class Navigator {
         c.now = c.pre = true;
         const next = this.cues[k + 1];
         let parts = cueSpeech(c);
-        if (next && next.type !== 'arrive' && next.at - c.at <= THEN_M) {
+        if (next && next.type !== 'arrive' && next.type !== 'lap' && next.at - c.at <= THEN_M) { // laps are said on their own, as they start
           parts = [...parts, part(', then '), ...lower(cueSpeech(next))];
           next.pre = true;
         }
@@ -419,16 +419,26 @@ export class Voice {
     // Urgent messages (turn now, off route) jump the queue and drop stale ones.
     if (priority >= 2) {
       this.queue = this.queue.filter((q) => q.priority >= 2);
-      if (priority >= 3) { this.synth.cancel(); this.queue = []; this.speaking = false; }
+      if (priority >= 3) { this.cancelSpeech(); }
     }
     this.queue.push({ parts, priority });
     if (this.queue.length > 4) this.queue.splice(0, this.queue.length - 4);
     if (!this.speaking) this.next();
   }
+  // Stops what is being said. The cancelled utterance's callback still fires later; the
+  // generation counter makes it a no-op instead of resuming the old sentence.
+  cancelSpeech() {
+    this.gen = (this.gen || 0) + 1;
+    clearTimeout(this.watchdog);
+    try { this.synth.cancel(); } catch {}
+    this.queue = [];
+    this.speaking = false;
+  }
   next() {
     const item = this.queue.shift();
     if (!item) { this.speaking = false; return; }
     this.speaking = true;
+    const gen = (this.gen = (this.gen || 0) + 1);
     // Merge runs of the same language; drop Hebrew parts if there is no Hebrew voice.
     const runs = [];
     for (const p of item.parts) {
@@ -440,6 +450,8 @@ export class Voice {
     }
     let i = 0;
     const speakRun = () => {
+      if (gen !== this.gen) return; // cancelled or superseded: this chain is dead
+      clearTimeout(this.watchdog);
       if (i >= runs.length) return this.next();
       const r = runs[i++];
       const u = new SpeechSynthesisUtterance(r.text);
@@ -448,13 +460,17 @@ export class Voice {
       if (v) u.voice = v;
       u.rate = 1.02;
       u.onend = u.onerror = speakRun;
-      this.synth.speak(u);
+      this.current = u; // keep a reference: Chrome drops callbacks of a collected utterance
+      // Watchdog: if the browser never reports the end (screen locked, tab in the
+      // background), carry on anyway instead of staying silent for the rest of the run.
+      this.watchdog = setTimeout(speakRun, 4000 + 80 * r.text.length);
+      try { this.synth.speak(u); } catch { speakRun(); }
     };
     speakRun();
   }
   setMuted(m) {
     this.muted = m;
-    if (m && this.synth) { this.synth.cancel(); this.queue = []; this.speaking = false; }
+    if (m && this.synth) this.cancelSpeech();
   }
   stop() { this.setMuted(true); this.muted = false; }
 }

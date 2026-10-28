@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = 'a8763e23';
+const CACHE_VERSION = '72ba5def';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -38,7 +38,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
       // Fetch each file on its own so one failed CDN file does not block the install.
-      Promise.all(SHELL.map((url) => cache.add(url).catch((err) => console.warn('sw: could not cache', url, err)))),
+      // Straight from the network, past the browser's HTTP cache: the edge keeps files for
+      // 10 minutes, and a fresh service worker must not install the previous build.
+      Promise.all(SHELL.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch((err) => console.warn('sw: could not cache', url, err)))),
     ).then(() => self.skipWaiting()),
   );
 });
@@ -66,17 +68,21 @@ self.addEventListener('fetch', (event) => {
   if (navigation) {
     event.respondWith(
       fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
+        // Only a good answer is worth keeping: a 404 during a deploy or a 5xx must not
+        // become what the app serves offline.
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
         return res;
-      }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('./index.html'))),
+      }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))),
     );
     return;
   }
   // Everything else in the shell (artwork, Leaflet, fonts): cache first.
   event.respondWith(
     caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req).then((res) => {
-      if (res.ok || res.type === 'opaque') caches.open(CACHE).then((c) => c.put(req, res.clone()));
+      if (res.ok || res.type === 'opaque') caches.open(CACHE).then((c) => c.put(req, res.clone())).catch(() => {});
       return res;
     })),
   );

@@ -131,5 +131,37 @@ check(/esa-worldcover.*N30E033.*assets=map/.test(landcoverTileUrl(13, 4887, 3324
   check(classOf2('Country Road').includes(HW.TERTIARY), 'a country road tagged with a sidewalk keeps its class');
 }
 
+// A footbridge over the river is never a "pontoon", and a lagoon bigger than the
+// harbour cap never leaves dock marks behind.
+{
+  const { Graph } = await import('../js/graph.js');
+  const { parseOverpass } = await import('../js/osm.js');
+  const proj = makeProjection(...CENTER);
+  const radius = 2000, cell = 25;
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const ll = (x, y) => [CENTER[0] + y / ky, CENTER[1] + x / kx];
+  const els = [];
+  let id = 1;
+  const node = (x, y) => { const [lat, lon] = ll(x, y); els.push({ type: 'node', id, lat, lon }); return id++; };
+  const way = (pts, tags) => { els.push({ type: 'way', id: id++, nodes: pts.map(([x, y]) => node(x, y)), tags }); };
+  const W0 = node(-300, 0), W1 = node(-100, 0), E1 = node(100, 0), E0 = node(300, 0);
+  els.push({ type: 'way', id: id++, nodes: [W0, W1], tags: { highway: 'residential', name: 'West Bank' } });
+  els.push({ type: 'way', id: id++, nodes: [W1, node(-60, 0), node(-20, 0), node(20, 0), node(60, 0), E1], tags: { highway: 'footway', bridge: 'yes', name: 'River Bridge' } });
+  els.push({ type: 'way', id: id++, nodes: [E1, E0], tags: { highway: 'residential', name: 'East Bank' } });
+  const osm = parseOverpass({ elements: els });
+  const grid = new LandscapeGrid(proj, radius, cell);
+  grid.addFeatures([{ kind: 'water', shape: 'body', buffer: 0, relation: true, rings: [[ll(-80, -600), ll(80, -600), ll(80, 600), ll(-80, 600), ll(-80, -600)]] }]);
+  grid.finish();
+  const g = new Graph(osm, proj, grid, null);
+  check(g.skippedAfloat === 0 && g.compSize.length === 1, `a footbridge over a river stays in the network (${g.skippedAfloat} dropped, ${g.compSize.length} component(s))`);
+
+  const big = new LandscapeGrid(proj, 3000, cell);
+  big.addFeatures([{ kind: 'sea', shape: 'body', buffer: 0, relation: true, rings: [[ll(-3000, -3000), ll(-1500, -3000), ll(-1500, 3000), ll(-3000, 3000), ll(-3000, -3000)]] }]);
+  big.addFeatures([{ kind: 'water', shape: 'body', buffer: 0, relation: true, rings: [[ll(-1500, -1250), ll(1000, -1250), ll(1000, 1250), ll(-1500, 1250), ll(-1500, -1250)]] }]); // 2500 × 2500 m lagoon, 10,000 cells
+  big.finish();
+  let dock = 0; for (const v of big.dock) dock += v;
+  check(dock === 0, `a lagoon bigger than the harbour cap leaves no dock marks (${dock})`);
+}
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll land-cover checks passed');
 process.exit(failures ? 1 : 0);

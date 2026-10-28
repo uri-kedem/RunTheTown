@@ -91,11 +91,16 @@ export async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl
     }
   }
   const keys = [...need.keys()];
-  const imgs = await Promise.all(keys.map((k) => need.get(k)));
-  const tiles = new Map(keys.map((k, i) => [k, imgs[i]]));
+  // One tile that fails (a sheet that is all sea, a server hiccup) is a hole of class 0,
+  // not a reason to drop the whole layer.
+  const settled = await Promise.allSettled(keys.map((k) => need.get(k)));
+  const tiles = new Map();
+  settled.forEach((r, i) => { if (r.status === 'fulfilled') tiles.set(keys[i], r.value); });
+  if (!tiles.size) throw new Error('no land-cover tile loaded');
   const classes = new Uint8Array(n * n);
   samples.forEach(([key, px, py], i) => {
     const img = tiles.get(key);
+    if (!img) return;
     const x = Math.min(255, Math.max(0, Math.floor(px)));
     const y = Math.min(255, Math.max(0, Math.floor(py)));
     classes[i] = img[y * 256 + x];

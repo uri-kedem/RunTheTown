@@ -300,6 +300,26 @@ Live runs on real OpenStreetMap data:
 - Promenades are recognised by name and by being car-free paths along water or parks; an unnamed
   esplanade away from water counts only as a normal path.
 
+## Backlog from the code review (Oct 28, 2026)
+Fixed the same day: shared tag objects (wrong street names), the preview/plan cost race, out-and-back overlap,
+the harbour cap, footbridges over water, lap cues said twice, the lost turnaround cue, stale/stuck speech,
+UI changes mid-run, a stale service-worker install, non-OK responses cached, reload loops, two area loads
+racing, a hanging tile index, all-or-nothing land cover, silent bundler failures. Still open:
+- Map tile 404s count as empty tiles and are cached 14 days (fine for sea; a CDN incident would stick).
+- IndexedDB open has no blocked/version-change handling; expired records are never purged; no size cap.
+- Typed arrays are stored as plain arrays in the cache (bigger and slower than needed).
+- A failed Nominatim scan / details lookup is remembered for the session (no retry when back online).
+- Sightseeing tours can run thousands of path searches with no yield on a big city.
+- Rejected GPS fixes (accuracy > 60 m) still move the dot; zoom is forced back to 16 on every fix.
+- A rejoin behind current progress drops the next forward gain from the odometer.
+- Hairpin bends on switchbacks read as "Turn around"; a U-turn via a parallel twin edge is under-priced.
+- A sightseeing tour with a large distance error can slip into the candidates when a later iteration fails.
+- Border nodes 1–2 px apart on a tile edge don't merge; on wide screens the sheet can cover a route's left edge.
+- Accessibility: radio and chip groups are unnamed; the map has no role.
+- Fragile by design: 25 m cell constants, the manual `ORDER` in build.py, four tile errors switch the basemap
+  for good, a path search per keystroke in the laps dialog, and the first plan in a city usually has no hills
+  (elevation loses the 4 s grace).
+
 ## Next steps
 
 1. Field-test in a few cities and tune the scoring weights.

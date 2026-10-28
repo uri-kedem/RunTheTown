@@ -46,6 +46,10 @@ for (const km of [3, 5, 10, 15]) {
   check(promOf(rs[0]) >= Math.max(...rs.map(promOf)) - 0.09, 'the first option is the promenade / park / waterfront run');
   check(rs.every((r) => Math.abs(r.distance / 1000 - km) / km < 0.08), 'all within 8% of target distance');
   check(loopsOnly(rs).every((r) => r.stats.repeatFrac < 0.2), 'little back-tracking on the loops');
+  // No two options are the same run (an out-and-back's streets count twice, so two
+  // there-and-backs along one street are a full overlap, not half).
+  const shareOf = (a, b) => { const sb = new Set(b.latlngs.map((p) => p.join(','))); let n = 0; for (const p of a.latlngs) if (sb.has(p.join(','))) n++; return n / Math.min(a.latlngs.length, b.latlngs.length); };
+  check(rs.every((a, i) => rs.every((b, j) => i === j || shareOf(a, b) < 0.9)), 'no two options share 90% of their points');
 }
 
 const plain = await run('6 km plain', { distanceKm: 6, prefs: {}, terrain: 'any' });

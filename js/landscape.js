@@ -106,11 +106,12 @@ export class LandscapeGrid {
     const isGreen = (v) => v === 10 || v === 20 || v === 30 || v === 90 || v === 95;
     // Green only where it is a patch, not a scattered street tree: the cell and its
     // four neighbours all green (so a park counts, a tree-lined avenue does not).
-    for (let r = 1; r < n - 1; r++) {
-      for (let c = 1; c < n - 1; c++) {
+    const g4 = (r, c) => (r < 0 || c < 0 || r >= n || c >= n ? true : isGreen(k[r * n + c])); // outside the map counts as agreeing
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
         const i = r * n + c;
         const v = k[i];
-        if (isGreen(v) && isGreen(k[i - 1]) && isGreen(k[i + 1]) && isGreen(k[i - n]) && isGreen(k[i + n])) this.green[i] = 1;
+        if (isGreen(v) && g4(r, c - 1) && g4(r, c + 1) && g4(r - 1, c) && g4(r + 1, c)) this.green[i] = 1;
         // Water from space feeds the waterfront bonus only (never the harbour
         // detection: a coastline off by a pixel must not turn the beach into a dock).
         if (v === 80) {
@@ -162,7 +163,9 @@ export class LandscapeGrid {
       const cells = [s0];
       seen[s0] = 1;
       let touchesSea = !!sea[s0];
-      for (let k = 0; k < cells.length && cells.length <= maxCells; k++) {
+      // The whole body is visited even past the cap, so a big basin is never re-found
+      // later as several small ones.
+      for (let k = 0; k < cells.length; k++) {
         const i = cells[k];
         const r = (i / n) | 0;
         const c = i - r * n;

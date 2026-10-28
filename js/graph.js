@@ -111,7 +111,8 @@ export class Graph {
         let compound = 0;
         let afloat = 0;
         let dock = 0;
-        const canFloat = /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers
+        const isBridge = !!road.tags.bridge && road.tags.bridge !== 'no';
+        const canFloat = !isBridge && /^(footway|service|path|steps)$/.test(road.tags.highway); // pontoons, jetties, piers (a footbridge is not one)
         // A quay: a footway, service road or stairs hugging a marina basin (a promenade or
         // a named path past the marina is a different kind of way and stays).
         const canDock = /^(footway|service|steps|living_street)$/.test(road.tags.highway) && !PROMENADE_NAME.test(road.tags.name || '');

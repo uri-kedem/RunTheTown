@@ -78,6 +78,7 @@ function setStart(lat, lon, label, { pan = true } = {}) {
     }).addTo(map);
     startMarker.on('dragend', () => {
       const p = startMarker.getLatLng();
+      if (nav.active || busy) { startMarker.setLatLng([state.start.lat, state.start.lon]); return; } // not while running or planning
       showPrefs();
       setStart(p.lat, p.lng, 'Dropped pin', { pan: false });
     });
@@ -476,6 +477,9 @@ function drawPlaces(places, list = $('places')) {
       engine.placeDetails(p).then((d) => {
         p._details = d || {};
         marker.setPopupContent(placePopup(p, i, p._details));
+      }).catch(() => {
+        p._details = {};
+        marker.setPopupContent(placePopup(p, i, p._details));
       });
     });
     if (i >= 6) return; // the nearest few in the list, all on the map
@@ -524,7 +528,7 @@ document.addEventListener('click', (e) => {
 let askedPlace = null;
 function runAtPlace(i) {
   const place = drawnPlaces[i];
-  if (!place || !state.start) return;
+  if (!place || !state.start || nav.active || busy) return; // not during a run or a search
   map.closePopup?.();
   askedPlace = place;
   $('lapsAskTitle').textContent = place.kind === 'park' ? `Loops in ${place.name}` : `Laps at ${place.name}`;
@@ -559,7 +563,8 @@ function closeLapsAsk() {
 async function planLaps() {
   const km = readLapsKm();
   const place = askedPlace;
-  if (km == null || !place || !state.start || busy) return;
+  if (km == null || !place || !state.start) return;
+  if (busy) return toast('Still working on the last search — one moment.');
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
   $('distanceInput').value = String(km);
@@ -803,6 +808,8 @@ async function startRun({ demo }) {
   const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: true, rate: 6 });
 
   document.body.classList.add('navigating');
+  startMarker?.dragging?.disable(); // the start stays put during the run
+  map.closePopup?.();
   $('navView').hidden = false;
   $('navFinish').hidden = true;
   $('navDemo').hidden = !demo;
@@ -821,6 +828,7 @@ async function startRun({ demo }) {
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
   const locked = await screenLock.acquire();
+  if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = locked
     ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
     : 'Keep the screen on and this page open, or directions stop. Turn off auto-lock for the run if you can.';
@@ -925,6 +933,7 @@ function endRun() {
   map.removeLayer(navLayer);
   routeLayer.addTo(map);
   document.body.classList.remove('navigating');
+  startMarker?.dragging?.enable();
   window.dispatchEvent(new Event('rtt:runended')); // a build update that waited for the run can reload now
   $('navView').hidden = true;
   $('recenterBtn').hidden = true;
@@ -1036,10 +1045,13 @@ function installSetup() {
   });
   $('installBtn').addEventListener('click', async () => {
     if (!deferred) return;
-    deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    if (outcome === 'accepted') $('installBtn').hidden = true;
-    deferred = null;
+    const d = deferred;
+    deferred = null; // the browser allows one prompt per saved event; the button hides until the next one
+    $('installBtn').hidden = true;
+    try {
+      d.prompt();
+      await d.userChoice;
+    } catch {}
   });
   window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; $('railInstall').hidden = true; });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -1049,9 +1061,21 @@ function installSetup() {
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController) { hadController = true; return; } // first install, nothing to swap
-      const reload = () => location.reload();
-      if (document.body.classList.contains('navigating')) window.addEventListener('rtt:runended', reload, { once: true });
-      else reload();
+      // At most one reload every few minutes: GitHub's edge caches can hand out an old
+      // and a new sw.js in turn for a while, which would otherwise reload in a loop.
+      let last = 0;
+      try { last = Number(sessionStorage.getItem('rtt-reload-at') || 0); } catch {}
+      if (Date.now() - last < 3 * 60 * 1000) return;
+      const reload = () => {
+        try { sessionStorage.setItem('rtt-reload-at', String(Date.now())); } catch {}
+        location.reload();
+      };
+      // Never mid-run, and not while a search or the laps dialog is in progress.
+      const waiting = () => document.body.classList.contains('navigating') || busy || !$('lapsAsk').hidden;
+      if (!waiting()) return reload();
+      const tryLater = () => { if (!waiting()) { reload(); } else setTimeout(tryLater, 2000); };
+      window.addEventListener('rtt:runended', tryLater, { once: true });
+      setTimeout(tryLater, 2000);
     });
     navigator.serviceWorker.register('sw.js').then((reg) => reg.update().catch(() => {})).catch((err) => console.warn('Service worker not registered:', err));
   }
@@ -1088,7 +1112,7 @@ $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
 $('termsBack').addEventListener('click', () => { $('terms').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('installBack').addEventListener('click', () => { $('install').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 installSetup();
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); if (!$('lapsAsk').hidden) closeLapsAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 

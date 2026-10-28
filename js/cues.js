@@ -46,14 +46,17 @@ export function buildCues(g, route) {
   const nameOf = (e) => (e >= 0 && g.edgeName && g.edgeName[e] >= 0 ? g.names[g.edgeName[e]] : null);
 
   // Point roughly LOOK_M back / ahead of index i along the route.
+  // Never look past a reversal (the turnaround of an out-and-back): the node beyond it
+  // is the mirror of the one before, which would give a zero heading.
+  const reversal = (j) => j > 0 && j < n - 1 && nodes[j - 1] === nodes[j + 1];
   const back = (i) => {
     let j = i;
-    while (j > 0 && along[i] - along[j] < LOOK_M) j--;
+    while (j > 0 && along[i] - along[j] < LOOK_M && (j === i || !reversal(j))) j--;
     return nodes[j];
   };
   const ahead = (i) => {
     let j = i;
-    while (j < n - 1 && along[j] - along[i] < LOOK_M) j++;
+    while (j < n - 1 && along[j] - along[i] < LOOK_M && (j === i || !reversal(j))) j++;
     return nodes[j];
   };
   const degree = (v) => g.adjStart[v + 1] - g.adjStart[v];

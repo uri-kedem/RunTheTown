@@ -138,14 +138,18 @@ export class RouteEngine {
     grid.finish();
     const graph = new Graph(osm, proj, grid, elev);
     graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched
-    this.area = {
+    const built = {
       lat, lon, radius, mode, proj, graph, grid, elev, source, tiles, failedTiles,
       stopsKnown: source === 'overpass' || stopPoints !== null,
       osmPlaces: osm.places || null,
       audit: osm.audit || null, // ways kept and left out, by kind (for checks)
       landcover: !!landcover, // satellite land cover was merged in
     };
-    return this.area;
+    // Two loads can be in flight (the spot preview and a bigger plan): a smaller map must
+    // not replace a bigger one that already covers it when it happens to finish last.
+    const cur = this.area;
+    if (!(cur && cur.radius > radius && (cur.mode === mode || cur.mode === 'full') && haversine(cur.lat, cur.lon, lat, lon) + radius <= cur.radius)) this.area = built;
+    return built;
   }
 
   // Traffic lights & crosswalks: from the device cache, else one small query.

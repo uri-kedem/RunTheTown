@@ -143,8 +143,18 @@ export async function findRunningPlaces(area) {
   }
   const parks = big.filter((b) => b.paths >= PARK_MIN_PATHS).sort((a, b) => b.area - a.area).slice(0, MAX_PARKS);
   if (parks.length) {
-    const savedF = g.costF.slice(), savedB = g.costB.slice(), savedSW = g.stopWeight;
-    applyPreferences(g, { prefs: { green: true }, terrain: 'any' });
+    // The preview plans on a private view of the graph: own costs and penalties, the
+    // same streets. A route search the runner starts meanwhile (the preview runs for
+    // seconds, with awaits) keeps its own preferences untouched.
+    const gp = Object.create(g);
+    gp.costF = g.costF.slice();
+    gp.costB = g.costB.slice();
+    gp.penalty = new Float32Array(g.m).fill(1);
+    gp.stopWeight = g.stopWeight;
+    // The search's visit stamps must stay one counter for both views (they share the
+    // scratch arrays), or one search would mistake the other's marks for its own.
+    Object.defineProperty(gp, 'curStamp', { get: () => g.curStamp, set: (v) => { g.curStamp = v; } });
+    applyPreferences(gp, { prefs: { green: true }, terrain: 'any' });
     for (const b of parks) {
       // Name: the park's own label (best rank, nearest the middle of the green), not a sub-garden's.
       let mx = 0, my = 0;
@@ -156,12 +166,12 @@ export async function findRunningPlaces(area) {
       // Keep the loop inside the park: paths elsewhere cost 6x.
       for (let e = 0; e < g.m; e++) {
         const c = cellOf((g.x[g.ea[e]] + g.x[g.eb[e]]) / 2, (g.y[g.ea[e]] + g.y[g.eb[e]]) / 2);
-        g.penalty[e] = c >= 0 && label[c] === b.id ? 1 : 6;
+        gp.penalty[e] = c >= 0 && label[c] === b.id ? 1 : 6;
       }
       const D = Math.max(1500, Math.min(5000, 2.2 * Math.sqrt(b.area), 0.6 * b.paths));
       let loop = null;
       try {
-        const routes = await planLoops(g, { startXY: [g.x[entry], g.y[entry]], distance: D, prefs: { green: true }, terrain: 'any', count: 1, bearings: 8 });
+        const routes = await planLoops(gp, { startXY: [g.x[entry], g.y[entry]], distance: D, prefs: { green: true }, terrain: 'any', count: 1, bearings: 8 });
         loop = routes.find((r) => r.type === 'loop' && r.stats.greenFrac >= 0.5 && r.stats.distErr < 0.15) || null;
       } catch {}
       if (!loop) continue;
@@ -171,10 +181,6 @@ export async function findRunningPlaces(area) {
         areaKm2: b.area / 1e6, pathsKm: b.paths / 1000, ring: loop.latlngs, loop, entry: [g.lat[entry], g.lon[entry]],
       });
     }
-    g.penalty.fill(1);
-    g.costF.set(savedF);
-    g.costB.set(savedB);
-    g.stopWeight = savedSW;
   }
   area.runningPlaces = places;
   return places;
