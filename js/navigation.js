@@ -87,19 +87,32 @@ const lower = (parts) => parts.map((p, i) => (i === 0 ? { ...p, text: p.text[0].
  */
 export class Navigator {
   constructor(route, { speak = () => {}, now = () => Date.now() } = {}) {
-    this.route = route;
     this.speak = speak;
     this.now = now;
+    this.proj = makeProjection(route.latlngs[0][0], route.latlngs[0][1]);
+    this.setRoute(route);
+    this.odometer = 0; // meters actually run (from GPS), for splits and pace
+    this.anchor = null;
+    this.moving = null; // heading of travel (deg), from recent movement
+    this.nextSplit = 1000;
+    this.lastSplit = { t: 0, odo: 0 };
+    this.elapsed = 0; // ms, excluding pauses
+    this.paused = false;
+    this.started = false;
+    this.finished = false;
+  }
+
+  // The line to follow: geometry, cues and sights measured on this polyline (their `at`
+  // came from the graph; re-measured here so long routes don't drift). Progress restarts at 0.
+  setRoute(route) {
+    this.route = route;
     const pts = route.latlngs;
-    this.proj = makeProjection(pts[0][0], pts[0][1]);
     this.xy = pts.map(([la, lo]) => this.proj.toXY(la, lo));
     this.along = new Float64Array(pts.length);
     for (let i = 1; i < pts.length; i++) {
       this.along[i] = this.along[i - 1] + Math.hypot(this.xy[i][0] - this.xy[i - 1][0], this.xy[i][1] - this.xy[i - 1][1]);
     }
     this.total = this.along[pts.length - 1];
-    // Cues and sights, positioned on this polyline (their `at` came from the graph; same geometry).
-    // Re-measure positions on this polyline so long routes don't drift.
     this.progress = 0; // meters along the route
     this.seg = 0; // segment index of progress
     this.cues = (route.cues || [])
@@ -112,15 +125,26 @@ export class Navigator {
     this.offRoute = false;
     this.farCount = 0;
     this.lastOffSaid = -Infinity;
-    this.odometer = 0; // meters actually run (from GPS), for splits and pace
+    this.snapped = null;
+    this.rejoined = false;
+  }
+
+  /**
+   * Rerouting: a new line from where the runner is, joining the old route further on.
+   * The run's distance, time and splits carry on; progress restarts on the new line.
+   * `route` = { latlngs, cues, sights } beginning at the runner's position.
+   */
+  reroute(route, { say = true } = {}) {
+    const sightsSaid = new Set(this.sights.filter((s) => s.said).map((s) => s.name));
+    this.setRoute(route);
+    for (const s of this.sights) if (sightsSaid.has(s.name)) s.said = true;
     this.anchor = null;
-    this.moving = null; // heading of travel (deg), from recent movement
-    this.nextSplit = 1000;
-    this.lastSplit = { t: 0, odo: 0 };
-    this.elapsed = 0; // ms, excluding pauses
-    this.paused = false;
-    this.started = false;
-    this.finished = false;
+    this.rerouted = (this.rerouted || 0) + 1;
+    if (say) {
+      const d = route.cues?.[0];
+      this.speak(msg('New route from here. ', d?.compass ? `Head ${d.compass}` : null, d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
+    }
+    return this.view();
   }
 
   start() {

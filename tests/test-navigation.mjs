@@ -90,6 +90,46 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   check(said.some((s) => /onto the track/i.test(s.text)) && said.some((s) => /Laps done\. Head back the same way/.test(s.text)) && !said.some((s) => /Turn around/.test(s.text)), 'the track is announced in words: onto the track, laps done, head back');
 }
 
+// Rerouting: a runner 150 m off the line gets a new line from where they are that joins
+// the old route further on; distance and time run so far carry on.
+{
+  const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
+  const r = routes[0];
+  const { rejoinRoute } = await import('../js/planner.js');
+  const area = engine.area;
+  let t = 0;
+  const said = [];
+  const nav = new Navigator(r, { speak: (parts) => said.push(parts.map((p) => p.text).join('')), now: () => t * 1000 });
+  nav.start();
+  // Run the first 800 m on the line, then step 150 m to the side and stay there.
+  const sim = new SimulatedRun(r, { speed: 3, noise: 0 });
+  while (sim.d < 800) { t += 2; nav.update(sim.step(2)); }
+  const proj = makeProjection(r.latlngs[0][0], r.latlngs[0][1]);
+  const here = sim.step(0);
+  const [hx, hy] = proj.toXY(here.lat, here.lon);
+  const off = proj.toLatLon(hx + 150, hy + 20);
+  for (let k = 0; k < 12; k++) { t += 2; nav.update({ lat: off[0], lon: off[1], accuracy: 5 }); }
+  check(nav.offRoute, 'runner 150 m off the line is off route');
+  const joinIdx = nav.along.findIndex((a) => a >= nav.progress + 250);
+  const fresh = rejoinRoute(area.graph, area.proj, { lat: off[0], lon: off[1] }, nav.route, joinIdx);
+  check(!!fresh && fresh.latlngs.length > 2, 'a way back onto the route is found');
+  if (fresh) {
+    const d0 = Math.hypot(...(() => { const [x, y] = proj.toXY(fresh.latlngs[0][0], fresh.latlngs[0][1]); return [x - hx - 150, y - hy - 20]; })());
+    check(d0 < 200, `the new line starts near the runner (${Math.round(d0)} m)`);
+    check(fresh.cues[0].type === 'depart' && fresh.cues.every((c, i) => !i || c.at >= fresh.cues[i - 1].at - 1), 'cues start with a departure and stay in order');
+    check(fresh.distance < r.distance && fresh.distance > r.distance - nav.progress - 500, `the new run is the rest of the old one plus the way back (${(fresh.distance / 1000).toFixed(2)} km)`);
+    // Distance and time ran on while the runner was off the line; the new route must not touch them.
+    const odoBefore = nav.odometer, elapsedBefore = nav.elapsed;
+    const v = nav.reroute(fresh);
+    check(!v.offRoute && nav.progress === 0 && nav.odometer === odoBefore && nav.elapsed === elapsedBefore, 'after rerouting: back on the line, progress restarts, distance and time carry on');
+    check(said.some((x) => /^New route from here/.test(x)), 'the new route is announced');
+    // Follow the new line to the end.
+    const sim2 = new SimulatedRun(fresh, { speed: 3, noise: 0 });
+    let steps = 0; while (!nav.finished && steps++ < 5000) { t += 2; nav.update(sim2.step(2)); }
+    check(nav.finished, 'the run finishes on the new line');
+  }
+}
+
 // Starting away from the route start: guided to it.
 {
   const said = [];

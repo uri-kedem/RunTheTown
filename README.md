@@ -239,6 +239,16 @@ for locked-screen guidance and the app stores.
    - gives kilometer splits with pace and distance to go, and calls out sights ("On your right: Habima Theatre");
    - English voice, with Hebrew-only names read by a Hebrew voice;
    - keeps the screen awake (Wake Lock) and has Mute / Pause / End (two taps);
+   - **Rerouting:** after 12 s off the line with a decent GPS fix, the app plans the way from where the
+     runner is back onto the route about 250 m further on (`rejoinRoute` in `js/planner.js`: shortest
+     path on the loaded graph, refused when it is a detour of more than 4× the straight line), announces
+     "New route from here. Head west on Oak Street", redraws the line and keeps time and distance running.
+     At most once every 45 s; the kilometre markers on the map stay where they were.
+   - **Report a problem:** the "Something wrong here? Report it" link under the run buttons (and
+     "Report a problem" in the route pop-up) asks what went wrong (closed or private, no sidewalk, unsafe,
+     wrong directions, not the scenery, other) with an optional note, keeps the last 50 reports on the phone
+     (`localStorage` `rtt-reports`) and opens the mail app with the report filled in: reason, note, route
+     name and distance, the runner's position with an OpenStreetMap link, the start, the build. No server.
    - **Demo run**: a simulated runner (×1 / ×6 / ×15 speed) to try it at a desk.
 12. **Ranking:** preference match, distance accuracy, busy roads, stops, back-tracking and climbing. The 3 best
    distinct loops are shown, plus the out & back when it qualifies.
@@ -298,7 +308,7 @@ Live runs on real OpenStreetMap data:
 - **Live guidance needs the screen on and the page open.** A web page can't keep GPS and voice running
   when the phone is locked or another app is in front; that needs a native app (or a watch via Garmin/Strava).
 - GPS and voice need `https://` on a phone (see "On your phone" above).
-- No automatic re-routing yet: when you're off the route, the app guides you back to it.
+- Rerouting joins the old line further on; it never replans the rest of the run around a blocked path.
 - Whether a track is free to use isn't in the map tiles. Tracks are shown when they're mapped; check
   opening hours on site.
 - Promenades are recognised by name and by being car-free paths along water or parks; an unnamed

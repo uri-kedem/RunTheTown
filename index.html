@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=76c0c84d" />
+    <link rel="manifest" href="manifest.webmanifest?v=803b3b3f" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=76c0c84d" />
+    <link rel="stylesheet" href="css/style.css?v=803b3b3f" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -40,7 +40,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="76c0c84d">76c0c84d</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="803b3b3f">803b3b3f</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -260,6 +260,7 @@
         </button>
         <div class="route-pop-foot">
           <button type="button" class="link" id="routeAskClose">Back to the routes</button>
+          <button type="button" class="link" id="reportRouteBtn">Report a problem</button>
           <button type="button" class="link" id="demoRunBtn">Demo run (no GPS)</button>
         </div>
       </div>
@@ -301,6 +302,7 @@
           <button type="button" id="endBtn" class="danger"><span>End run</span></button>
         </div>
         <div class="nav-note" id="navNote"></div>
+        <div class="nav-foot"><button type="button" class="link" id="reportRunBtn">Something wrong here? Report it</button></div>
       </div>
       <div class="nav-finish" id="navFinish" hidden>
         <div class="finish-card">
@@ -334,6 +336,28 @@
       </div>
     </div>
 
+    <!-- Report a problem with a route: what went wrong, where, sent by e-mail -->
+    <div class="ask" id="reportAsk" hidden>
+      <div class="ask-card">
+        <div class="ask-title">Report a problem</div>
+        <div class="ask-sub" id="reportSub">What went wrong with this route?</div>
+        <div class="chips report-reasons" id="reportReasons">
+          <button type="button" data-reason="closed">Closed or private</button>
+          <button type="button" data-reason="sidewalk">Road with no sidewalk</button>
+          <button type="button" data-reason="unsafe">Felt unsafe</button>
+          <button type="button" data-reason="directions">Wrong directions</button>
+          <button type="button" data-reason="landscape">Not the scenery promised</button>
+          <button type="button" data-reason="other">Something else</button>
+        </div>
+        <textarea id="reportNote" rows="3" maxlength="500" placeholder="Where exactly, and what did you see? (optional)"></textarea>
+        <div class="ask-note">Opens your e-mail app with the report filled in. The route and your position go with it, nothing else.</div>
+        <div class="ask-actions">
+          <button type="button" class="ghost" id="reportCancel">Cancel</button>
+          <button type="button" class="primary" id="reportSend" disabled>Send report</button>
+        </div>
+      </div>
+    </div>
+
     <div class="status" id="status" hidden>
       <div class="spinner"></div>
       <span id="statusText">Working…</span>
@@ -341,6 +365,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=76c0c84d"></script>
+    <script src="js/bundle.js?v=803b3b3f"></script>
   </body>
 </html>

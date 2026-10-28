@@ -3,7 +3,7 @@
 // the best few distinct options.
 
 import { HW } from './graph.js';
-import { bearingName, bearingNameFine } from './geo.js';
+import { bearingName, bearingNameFine, haversine } from './geo.js';
 import { buildCues } from './cues.js';
 
 const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 6.0]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk / no sidewalk)
@@ -360,6 +360,55 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
     }
   }
   return loops;
+}
+
+/**
+ * Rerouting for a runner who left the line: the best way from where they are to the
+ * route further on (`joinIdx`, a vertex of route.latlngs), then the rest of the route.
+ * Returns { latlngs, cues, sights, distance, joined } or null when no sensible way exists
+ * (no street near the runner, nothing near the join point, or a detour over 4x the
+ * straight distance). Cue and sight positions are rebased onto the new line.
+ */
+export function rejoinRoute(g, proj, from, route, joinIdx) {
+  if (!route?.latlngs || joinIdx <= 0 || joinIdx >= route.latlngs.length) return null;
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const [jx, jy] = proj.toXY(route.latlngs[joinIdx][0], route.latlngs[joinIdx][1]);
+  const a = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  const b = g.nearest(jx, jy, { maxDist: 60 });
+  if (a < 0 || b < 0) return null;
+  const straight = Math.hypot(jx - fx, jy - fy);
+  let piece;
+  if (a === b) piece = { nodes: [a], edges: [] };
+  else {
+    piece = g.shortestPath(a, b);
+    if (!piece) return null;
+  }
+  let pieceLen = 0;
+  for (const e of piece.edges) pieceLen += g.len[e];
+  if (pieceLen > 4 * straight + 400) return null; // a detour that long is not a way back
+  const pieceLL = piece.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const pieceCues = piece.edges.length ? buildCues(g, piece).filter((c) => c.type !== 'arrive') : [];
+  // The old route's own measure, to rebase its sights.
+  const alongOld = new Float64Array(route.latlngs.length);
+  for (let i = 1; i < route.latlngs.length; i++) alongOld[i] = alongOld[i - 1] + haversine(route.latlngs[i - 1][0], route.latlngs[i - 1][1], route.latlngs[i][0], route.latlngs[i][1]);
+  const shift = pieceLen - alongOld[joinIdx];
+  const base = pieceLL.length - 1; // index of the join point on the new line
+  const rest = route.latlngs.slice(joinIdx);
+  const latlngs = pieceLL.concat(rest.slice(1));
+  const restCues = (route.cues || [])
+    .filter((c) => c.type !== 'depart' && c.idx != null && c.idx > joinIdx)
+    .map((c) => ({ ...c, idx: c.idx - joinIdx + base, at: c.at + shift, pre: false, now: false }));
+  const cues = [...pieceCues, ...restCues];
+  if (!cues.length || cues[0].type !== 'depart') {
+    const h = pieceLL.length > 1 ? pieceLL : latlngs;
+    const dy = h[1][0] - h[0][0];
+    const dx = (h[1][1] - h[0][1]) * Math.cos((h[0][0] * Math.PI) / 180);
+    cues.unshift({ type: 'depart', at: 0, idx: 0, compass: bearingName((Math.atan2(dx, dy) * 180) / Math.PI), street: null, lat: latlngs[0][0], lon: latlngs[0][1], text: 'Head out' });
+  }
+  const sights = (route.sights || []).filter((s) => s.at > alongOld[joinIdx] - 100).map((s) => ({ ...s, at: s.at + shift }));
+  let distance = pieceLen;
+  for (let i = joinIdx + 1; i < route.latlngs.length; i++) distance += haversine(route.latlngs[i - 1][0], route.latlngs[i - 1][1], route.latlngs[i][0], route.latlngs[i][1]);
+  return { ...route, latlngs, cues, sights, distance, joined: joinIdx, rerouted: true };
 }
 
 // Attractive nodes (water or green, per preferences) that a loop of length D can

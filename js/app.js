@@ -1,6 +1,7 @@
 // UI: map, start point, preferences and route results.
 
 import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
+import { rejoinRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort } from './navigation.js';
 import { fallbackLinks } from './details.js';
@@ -755,6 +756,75 @@ $('routeAskClose').addEventListener('click', closeRouteAsk);
 $('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk')) closeRouteAsk(); });
 $('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
 $('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
+$('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openReport(state.routes[state.selected], null); });
+
+// ---------- Report a problem ----------
+// A runner who meets a locked gate, a road without a sidewalk or a wrong turn can say so
+// in two taps. The report is kept on the phone (the last 50) and goes out as an e-mail
+// the runner sends themself: no server, nothing leaves the phone without their say-so.
+const REPORT_TO = 'uri.kedem1@gmail.com';
+const REPORT_REASONS = {
+  closed: 'Closed or private', sidewalk: 'Road with no sidewalk', unsafe: 'Felt unsafe',
+  directions: 'Wrong directions', landscape: 'Not the scenery promised', other: 'Something else',
+};
+const report = { route: null, at: null, reason: null };
+function openReport(route, at) {
+  if (!route) return;
+  report.route = route;
+  report.at = at; // the runner's position during a run, null from the route pop-up
+  report.reason = null;
+  $('reportSub').textContent = at ? 'What is wrong here? Your position is included.' : `What went wrong with “${route.name}”?`;
+  for (const b of $('reportReasons').querySelectorAll('button')) b.classList.remove('on');
+  $('reportNote').value = '';
+  $('reportSend').disabled = true;
+  $('reportAsk').hidden = false;
+}
+function closeReport() {
+  $('reportAsk').hidden = true;
+}
+$('reportReasons').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-reason]');
+  if (!b) return;
+  report.reason = b.dataset.reason;
+  for (const x of $('reportReasons').querySelectorAll('button')) x.classList.toggle('on', x === b);
+  $('reportSend').disabled = false;
+});
+$('reportCancel').addEventListener('click', closeReport);
+$('reportAsk').addEventListener('click', (e) => { if (e.target === $('reportAsk')) closeReport(); });
+$('reportSend').addEventListener('click', () => {
+  const r = report.route;
+  if (!r || !report.reason) return;
+  const fmt = (p) => (p ? `${p.lat.toFixed(5)},${p.lon.toFixed(5)}` : '-');
+  const entry = {
+    time: new Date().toISOString(),
+    build: $('buildTag')?.dataset.build || 'dev',
+    reason: report.reason,
+    note: $('reportNote').value.trim(),
+    route: r.name,
+    distance: Math.round(r.distance),
+    start: state.start ? { lat: state.start.lat, lon: state.start.lon } : null,
+    at: report.at ? { lat: report.at.lat, lon: report.at.lon } : null,
+    type: r.type || 'loop',
+  };
+  try {
+    const all = JSON.parse(localStorage.getItem('rtt-reports') || '[]');
+    all.push(entry);
+    localStorage.setItem('rtt-reports', JSON.stringify(all.slice(-50)));
+  } catch {}
+  const lines = [
+    `Problem: ${REPORT_REASONS[entry.reason]}`,
+    entry.note ? `Note: ${entry.note}` : null,
+    '',
+    `Route: ${entry.route} (${(entry.distance / 1000).toFixed(2)} km, ${entry.type})`,
+    `Where: ${fmt(entry.at)}${entry.at ? ` https://www.openstreetmap.org/?mlat=${entry.at.lat.toFixed(5)}&mlon=${entry.at.lon.toFixed(5)}#map=17/${entry.at.lat.toFixed(5)}/${entry.at.lon.toFixed(5)}` : ''}`,
+    `Start: ${fmt(entry.start)}`,
+    `Build: ${entry.build} · ${entry.time}`,
+  ].filter((l) => l != null);
+  const subject = `RunTheTown report: ${REPORT_REASONS[entry.reason]}`;
+  closeReport();
+  toast('Thanks. Your e-mail app opens with the report; just send it.');
+  window.location.href = `mailto:${REPORT_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
+});
 
 // Running mode: run the streets (loops from here) or run in laps (a spot nearby).
 function setRunStyle(style) {
@@ -818,8 +888,10 @@ async function startRun({ demo }) {
   setPaused(false);
   map.removeLayer(routeLayer);
   navLayer.clearLayers().addTo(map);
-  L.polyline(route.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer);
-  L.polyline(route.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer);
+  n.lines = [
+    L.polyline(route.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    L.polyline(route.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+  ];
   n.doneLine = L.polyline([], { color: '#94a3b8', weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer);
   const extras = L.layerGroup().addTo(navLayer);
   drawKmMarkers(route, n.color, extras);
@@ -837,7 +909,10 @@ async function startRun({ demo }) {
   render(navigator_.start());
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
-    render(n.navigator.update(fix));
+    n.lastFix = fix;
+    const v = n.navigator.update(fix);
+    render(v);
+    if (v.offRoute && !demo) maybeReroute(n, fix);
   };
   if (demo) {
     n.source = new SimulatedRun(route, { rate: n.rate, clock });
@@ -860,6 +935,38 @@ async function startRun({ demo }) {
     n.navigator.tick();
     $('statTime').textContent = fmtTime(n.navigator.elapsed);
   }, 1000);
+}
+
+// Off the line for a while: plan the way from here back onto the route further on,
+// like a car navigator, instead of only asking the runner to go back. At most once
+// every 45 s, only with a decent GPS fix, and only when the map covers the runner.
+const REROUTE_AFTER_MS = 12000;
+function maybeReroute(n, fix) {
+  const nv = n.navigator;
+  const now = Date.now();
+  if (!nv.offSince || now - nv.offSince < REROUTE_AFTER_MS) return;
+  if (now - (n.lastReroute || 0) < 45000) return;
+  if (fix.accuracy != null && fix.accuracy > 40) return;
+  const area = engine.area;
+  if (!area) return;
+  n.lastReroute = now;
+  // Join the old line ~250 m ahead of where the runner left it (the next vertex past that).
+  const target = nv.progress + 250;
+  let joinIdx = nv.along.findIndex((a) => a >= target);
+  if (joinIdx < 0) joinIdx = nv.along.length - 1;
+  const fresh = rejoinRoute(area.graph, area.proj, { lat: fix.lat, lon: fix.lon }, nv.route, joinIdx);
+  if (!fresh) return;
+  n.route = fresh;
+  render(nv.reroute(fresh));
+  // Redraw the line to follow (the part already run stays grey).
+  n.lines?.forEach((l) => l.remove());
+  n.lines = [
+    L.polyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    L.polyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+  ];
+  n.doneLine?.bringToFront?.();
+  n.userMarker?.setZIndexOffset?.(1000);
+  toast('New route from here: it joins your run a little further on.');
 }
 
 function showAlert(text) {
@@ -974,6 +1081,11 @@ $('endBtn').addEventListener('click', () => {
   endTimer = setTimeout(resetEnd, 3000);
 });
 $('finishDone').addEventListener('click', endRun);
+$('reportRunBtn').addEventListener('click', () => {
+  const n = nav.active;
+  if (!n) return;
+  openReport(n.route, n.lastFix ? { lat: n.lastFix.lat, lon: n.lastFix.lon } : null);
+});
 $('navDemo').addEventListener('click', () => {
   const n = nav.active;
   if (!n?.demo) return;
