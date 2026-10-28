@@ -81,12 +81,13 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
 {
   const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' });
   const track = routes.places.find((p) => p.kind === 'track');
-  const r = engine.routeAtPlace(track);
+  const r = engine.routeAtPlace(track, { lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {} }); // 6 km: several laps
   const { nav, said, backJumps } = simulate(r, { noise: 3 });
   console.log(`\n${r.name} (${(r.distance / 1000).toFixed(2)} km, ${r.place.laps} laps): ` + said.filter((s) => /Lap|arrived|Turn/.test(s.text)).map((s) => s.text).join(' | '));
   check(nav.finished && backJumps === 0, 'lap route finishes without progress jumps');
   check(said.filter((s) => /^Lap \d+ of \d+\.$/.test(s.text)).length === r.place.laps, 'every lap announced once');
   check(said.some((s) => /^Lap 1 of/.test(s.text)) && said.findIndex((s) => /^Lap 1 of/.test(s.text)) < said.findIndex((s) => /^Lap 2 of/.test(s.text)), 'laps in order');
+  check(said.some((s) => /onto the track/i.test(s.text)) && said.some((s) => /Laps done\. Head back the same way/.test(s.text)) && !said.some((s) => /Turn around/.test(s.text)), 'the track is announced in words: onto the track, laps done, head back');
 }
 
 // Starting away from the route start: guided to it.

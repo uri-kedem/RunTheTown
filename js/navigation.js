@@ -54,6 +54,7 @@ const msg = (...bits) => bits.filter(Boolean).map((b) => (typeof b === 'string' 
 
 /** Short instruction for a cue: { verb: 'Turn left', street } */
 export function cueAction(c) {
+  if (c.type === 'turn' && !c.dir && c.text) return c.text; // spoken in words: "Onto the track"
   switch (c.type) {
     case 'lap': return `Lap ${c.lap} of ${c.laps}`;
     case 'uturn': return 'Turn around';
@@ -68,6 +69,7 @@ export function cueAction(c) {
 function cueSpeech(c, { ahead = null } = {}) {
   const lead = ahead != null ? `In ${distText(ahead)}, ` : '';
   const onto = c.street ? [' onto ', c.street] : [];
+  if (c.type === 'turn' && !c.dir && c.text) return msg(ahead != null ? `${lead}${c.text[0].toLowerCase()}${c.text.slice(1)}` : c.text);
   switch (c.type) {
     case 'lap': return msg(`Lap ${c.lap} of ${c.laps}.`);
     case 'uturn': return msg(`${lead}${ahead != null ? 'turn around' : 'Turn around and head back the same way'}`);

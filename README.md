@@ -100,6 +100,13 @@ for locked-screen guidance and the app stores.
      unnamed footway, service road, stairs or living street with 60% of its nodes on the dock is the
      dock quay (Tel Aviv's runs behind the clubhouses with no way through) and is dropped; the named
      promenade inland stays. Checked on the real Tel Aviv tiles (scratch test, 4 tiles around the Hilton).
+   - **Laps always include the way there and back** (`placeRoute`): the spot's way in is found on
+     the current graph at route time (spots are listed from an 8 km scan while the preview map covers
+     only a few km, so the spot's node id from the listing may not exist), `planLaps` first loads the
+     map out to the spot (`loadArea(start, distance to the spot + 600 m)`), and the leg is kept
+     however long it is — a run that comes out longer than asked says "Longer than asked: the way
+     there alone is X km" on the card. Before the map reaches the spot the dialog says "Laps plus the
+     way there and back from your start" instead of a lap count that would change.
    - **No sidewalk, no run** (Efrat: routes went out on the Wadi an-Nis and Route 60 connector roads).
      A tertiary / secondary / primary road is priced as a last resort (`HW.TRUNK`, cost 6.0, 8.0 quiet; loops
      with over 10% of it dropped whenever another candidate exists; out-and-backs and promenade loops never

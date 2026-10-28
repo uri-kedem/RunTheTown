@@ -547,7 +547,8 @@ function readLapsKm() {
   else if (ok && askedPlace?.ring && state.start) {
     // What that distance means here: the real plan (laps, plus the way there and back).
     const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: v, prefs: { ...state.prefs } });
-    msg.textContent = r ? `${r.highlights[0]}${r.highlights[1]?.includes('there and back') ? ` · ${r.highlights[1]}` : ''} · ${(r.distance / 1000).toFixed(1)} km in total` : '';
+    // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
+    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${(r.distance / 1000).toFixed(1)} km in total` : `Laps plus the way there and back from your start`) : '';
   }
   return ok ? Math.round(v * 10) / 10 : null;
 }
@@ -555,14 +556,30 @@ function closeLapsAsk() {
   $('lapsAsk').hidden = true;
   askedPlace = null;
 }
-function planLaps() {
+async function planLaps() {
   const km = readLapsKm();
   const place = askedPlace;
-  if (km == null || !place || !state.start) return;
+  if (km == null || !place || !state.start || busy) return;
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
   $('distanceInput').value = String(km);
   readDistance();
+  // The map must reach from the start to the spot (the spot list looks 8 km out, the
+  // preview map only a few), or there is no way there and back to plan.
+  const toPlace = haversine(state.start.lat, state.start.lon, place.lat, place.lon);
+  busy = true;
+  status('Loading the map to the track…');
+  try {
+    await engine.loadArea(state.start.lat, state.start.lon, Math.max(toPlace + 600, 1500), status);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'The map could not be loaded. Please try again.');
+    busy = false;
+    status(null);
+    return;
+  }
+  busy = false;
+  status(null);
   const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
   if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
   route.place.wantedKm = km;

@@ -191,14 +191,20 @@ export function placeRoute(area, place, { lat, lon, distanceKm, prefs = {} }) {
   const { graph: g, proj } = area;
   const D = distanceKm * 1000;
   const [sx, sy] = proj.toXY(lat, lon);
-  const startNode = g.nearest(sx, sy, { maxDist: 800, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  const startNode = g.nearest(sx, sy, { maxDist: 1500, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  // The spot's way in, found on THIS graph (the spot may have been listed on an earlier,
+  // smaller map; node ids do not carry over).
+  const [px, py] = proj.toXY(place.lat, place.lon);
+  const placeNode = g.nearest(px, py, { maxDist: 400 });
+  // The way there and back is always part of the run when one exists: a runner who picks
+  // a track 3 km away wants the route to it, even if the run comes out longer than asked.
   let leg = null;
-  if (startNode >= 0 && place.node >= 0 && startNode !== place.node) {
-    const p = g.shortestPath(startNode, place.node);
+  if (startNode >= 0 && placeNode >= 0 && startNode !== placeNode) {
+    const p = g.shortestPath(startNode, placeNode);
     if (p) {
       let L = 0;
       for (const e of p.edges) L += g.len[e];
-      if (L <= 0.45 * D) leg = { ...p, length: L };
+      leg = { ...p, length: L };
     }
   }
   const legLen = leg ? leg.length : 0;
@@ -214,16 +220,20 @@ export function placeRoute(area, place, { lat, lon, distanceKm, prefs = {} }) {
     const [a, b] = dir > 0 ? [arr[from], arr[i]] : [arr[i], arr[from]];
     return (Math.atan2((b[1] - a[1]) * Math.cos((a[0] * Math.PI) / 180), b[0] - a[0]) * 180) / Math.PI;
   };
-  const addPiece = (pts, pieceCues, pieceSights, { continuous = false } = {}) => {
-    // A gap between pieces (street node -> track edge) becomes a short connector.
+  const addPiece = (pts, pieceCues, pieceSights, { continuous = false, label = null } = {}) => {
+    // A gap between pieces (street node -> track edge) becomes a short connector, with no
+    // turn cue of its own: the join is announced in words by the piece it leads to.
     if (latlngs.length) {
       const last = latlngs[latlngs.length - 1];
-      if (haversine(last[0], last[1], pts[0][0], pts[0][1]) > 5) addPiece([last, pts[0]], [], []);
+      if (haversine(last[0], last[1], pts[0][0], pts[0][1]) > 5) addPiece([last, pts[0]], [], [], { continuous: true });
     }
     const base = latlngs.length ? latlngs.length - 1 : 0;
     const atBase = along;
-    if (!continuous && latlngs.length >= 2 && pts.length >= 2) {
-      // The turn where one piece joins the next (e.g. off the street onto the track).
+    if (label && latlngs.length >= 1) {
+      // Onto the track, off the track: said in words, not as a bearing-based turn.
+      cues.push({ type: 'turn', dir: null, angle: 0, at: atBase, idx: base, lat: pts[0][0], lon: pts[0][1], street: null, text: label });
+    } else if (!continuous && latlngs.length >= 2 && pts.length >= 2) {
+      // The turn where one piece joins the next.
       let a = headingAt(pts, 0, 1) - headingAt(latlngs, latlngs.length - 1, -1);
       a = ((a + 540) % 360) - 180;
       const abs = Math.abs(a);
@@ -251,13 +261,14 @@ export function placeRoute(area, place, { lat, lon, distanceKm, prefs = {} }) {
   if (leg) addPiece(legPts, buildCues(g, leg), withSights ? passedSights(g, leg) : []);
   const lapCues = place.kind === 'park' ? place.loop.cues : [];
   const lapSights = place.kind === 'park' && withSights ? place.loop.sights : [];
+  const onto = place.kind === 'track' ? 'Onto the track' : `Into ${place.name}`;
   for (let k = 0; k < laps; k++) {
-    const at = addPiece(place.ring, lapCues, k === 0 ? lapSights : [], { continuous: k > 0 }); // lap to lap: no turn, just carry on
+    const at = addPiece(place.ring, lapCues, k === 0 ? lapSights : [], { continuous: k > 0, label: k === 0 && leg ? onto : null }); // lap to lap: no turn, just carry on
     if (laps > 1) cues.push({ type: 'lap', lap: k + 1, laps, at, idx: latlngs.length - place.ring.length, lat: place.ring[0][0], lon: place.ring[0][1], text: `Lap ${k + 1} of ${laps}` });
   }
   if (leg) {
     const back = { nodes: [...leg.nodes].reverse(), edges: [...leg.edges].reverse() };
-    addPiece(legPts.slice().reverse(), buildCues(g, back), withSights ? passedSights(g, back) : []);
+    addPiece(legPts.slice().reverse(), buildCues(g, back), withSights ? passedSights(g, back) : [], { label: `${laps > 1 ? 'Laps done. ' : ''}Head back the same way` });
   }
   cues.sort((a, b) => a.at - b.at);
   const first = leg ? buildCues(g, leg)[0] : null;
@@ -281,7 +292,8 @@ export function placeRoute(area, place, { lat, lon, distanceKm, prefs = {} }) {
   const what = place.kind === 'track' ? `${laps} lap${laps > 1 ? 's' : ''} of the ${fmtKm(place.lapM)} track` : `${laps} loop${laps > 1 ? 's' : ''} of ${fmtKm(place.lapM)} inside the park`;
   const highlights = [what];
   if (leg) highlights.push(`${fmtKm(legLen)} to get there and back the same way`);
-  else highlights.push(`Starts at ${place.name}`);
+  else highlights.push(startNode < 0 ? 'No street found near your start: starts at the track' : placeNode < 0 ? `No way in found on the map: starts at ${place.name}` : `Starts at ${place.name}`);
+  if (leg && total > 1.15 * D) highlights.push(`Longer than asked: the way there alone is ${fmtKm(legLen)}`);
   if (place.kind === 'track') highlights.push(leg && g.hasElevation ? climbText(stats) : 'Car-free and flat');
   else if (g.hasElevation) highlights.push(climbText(stats));
   highlights.push(stopsText(stats)); // the lights and crossings on the way there and back (none on the track itself)

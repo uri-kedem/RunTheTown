@@ -87,6 +87,22 @@ const oval = (clat, clon, half = 84.39, r = 36.5, n = 40) => {
   check(later.length === 3 && later.find((s) => s.kind === 'track').node >= 0 && later.some((s) => s.kind === 'park'), 'after the map loads: track tied to the streets, park added');
   const lap = eng.routeAtPlace(later.find((s) => s.kind === 'track'), { lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {} });
   check(lap && lap.highlights.some((h) => /to get there and back/.test(h)), 'lap route runs there and back once the map is loaded');
+
+  // A track far from the start (4.6 km, well past half the run): the way there and back
+  // is still planned — the app first loads the map out to the spot (new graph, so the
+  // spot's node is found again) — and the card says the run comes out longer than asked.
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const far = { lat: CENTER[0] - 2400 / ky, lon: CENTER[1] - 2400 / kx };
+  const small = await eng.previewSpots(far.lat, far.lon, { distanceKm: 4 }); // a 4 km map: the track is outside it
+  const track = small.find((s) => s.kind === 'track');
+  check(!!track, `the track is listed from the far start (${(track?.fromStart / 1000).toFixed(1)} km away)`);
+  const before = eng.routeAtPlace(track, { lat: far.lat, lon: far.lon, distanceKm: 8, prefs: {} });
+  const toPlace = Math.hypot(2400 + 1250, 2400 + 850);
+  await eng.loadArea(far.lat, far.lon, toPlace + 600);
+  const after = eng.routeAtPlace(track, { lat: far.lat, lon: far.lon, distanceKm: 8, prefs: {} });
+  console.log('   far start, 8 km:', before?.highlights.join(' | '), ' -> after loading the map:', after?.highlights.join(' | '), `(${(after?.distance / 1000).toFixed(1)} km)`);
+  check(after && after.highlights.some((h) => /to get there and back/.test(h)) && after.place.laps >= 1, 'the way there and back is planned to a track past half the run');
+  check(after && after.distance > 8000 && after.highlights.some((h) => /Longer than asked/.test(h)), 'and the card says the run comes out longer than asked');
 }
 console.log(failures ? `\n${failures} FAILED` : '\nAll spots tests passed');
 process.exit(failures ? 1 : 0);
