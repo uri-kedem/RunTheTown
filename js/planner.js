@@ -684,12 +684,13 @@ function describe(g, route, start, prefs = {}) {
   }
 
   if (prefs.sights && s.sights.length >= 2) theme = outback ? 'Sightseeing out & back' : 'Sightseeing loop';
-  // The card states the facts a runner plans around: climb and descent, traffic lights
-  // and road crossings (plus the landmarks on a sightseeing tour). The landscape mix
-  // shapes the route and its name, but is not listed as percentages.
+  // The card states the facts a runner plans around: where the run goes (the share on
+  // park paths and promenades), climb and descent, traffic lights and road crossings
+  // (plus the landmarks on a sightseeing tour).
   const highlights = [];
   // Landmarks are only mentioned (card, map pins, voice) when sightseeing was asked for.
   const sights = prefs.sights ? s.sights : [];
+  highlights.push(whereText(s, g));
   if (sights.length) highlights.push(sightsText(sights));
   if (outback) highlights.push('Same way there and back');
   if (g.hasElevation) highlights.push(climbText(s));
@@ -741,6 +742,20 @@ export function climbText(s) {
  * "2 traffic lights · 5 road crossings" (crossings = streets to cross on foot, lit or not).
  * When the traffic-light data could not be fetched, the card says so rather than claiming none.
  */
+// Where the run goes, in one line: the share on park paths, promenades and the seafront
+// (the car-free ground the planner looks for first), and what the rest is.
+export function whereText(s, g) {
+  const pct = Math.round(s.promFrac * 20) * 5;
+  const bySea = g.openSea && s.seaFrac >= 0.3;
+  const ground = bySea ? 'the seafront promenade' : s.greenFrac >= s.waterFrac && s.greenFrac >= 0.2 ? 'park paths' : s.waterFrac >= 0.2 ? 'waterfront paths' : 'car-free paths';
+  const restQuiet = s.promFrac < 0.99 ? Math.max(0, s.quietFrac - s.promFrac) / (1 - s.promFrac) : 1; // paths count as quiet too
+  const rest = restQuiet >= 0.7 ? 'quiet streets' : 'streets';
+  if (pct >= 95) return `All of it on ${ground}`;
+  if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
+  if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;
+  return restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets';
+}
+
 export function stopsText(s) {
   const n = (k, one, many) => (k === 0 ? `no ${many}` : k === 1 ? `1 ${one}` : `${k} ${many}`);
   // When the traffic-light source is down, the card simply says nothing about lights.

@@ -54,7 +54,7 @@ for (const km of [3, 5, 10, 15]) {
 
 const plain = await run('6 km plain', { distanceKm: 6, prefs: {}, terrain: 'any' });
 check(plain.some((r) => r.stats.promFrac >= 0.15), 'plain routes use the pedestrian street / boulevard walkway (promenades)');
-check(plain.every((r) => !r.highlights.some((h) => /%|turn/.test(h))), 'cards show no landscape percentages or turn counts');
+check(plain.every((r) => /^(All of it on|\d+% on|Mostly quiet streets|City streets)/.test(r.highlights[0]) && !r.highlights.some((h) => /turn/.test(h))), 'cards open with where the run goes and show no turn counts');
 check(plain.every((r) => r.highlights.some((h) => /^\d+ m climb · \d+ m descent$/.test(h)) && r.highlights.some((h) => /traffic light/.test(h) && /road crossing/.test(h))), 'cards state climb & descent, traffic lights and road crossings');
 console.log('   card: ' + plain[0].highlights.join(' | '));
 check(stopsText({ stopsKnown: false, signals: 0, crossings: 2 }) === '2 road crossings' && !/light|unknown/.test(stopsText({ stopsKnown: false, signals: 0, crossings: 0 })), 'with the traffic-light source down, the card says nothing about lights');

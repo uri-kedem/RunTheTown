@@ -429,7 +429,7 @@ function showRoutes(routes) {
     card.className = 'card';
     card.style.setProperty('--c', COLORS[i]);
     // The card: name, distance, then the facts (climb & descent, traffic lights & road crossings,
-    // landmarks on a tour) and the elevation profile. No landscape percentages.
+    // landmarks on a tour) and the elevation profile.
     card.innerHTML = `
       <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
       <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
@@ -476,11 +476,10 @@ function drawPlaces(places, list = $('places')) {
     marker.on('popupopen', () => {
       if (p._details) return;
       engine.placeDetails(p).then((d) => {
-        p._details = d || {};
-        marker.setPopupContent(placePopup(p, i, p._details));
+        if (!d?.failed) p._details = d || {}; // a failed lookup is tried again on the next open
+        marker.setPopupContent(placePopup(p, i, d || {}));
       }).catch(() => {
-        p._details = {};
-        marker.setPopupContent(placePopup(p, i, p._details));
+        marker.setPopupContent(placePopup(p, i, {}));
       });
     });
     if (i >= 6) return; // the nearest few in the list, all on the map
@@ -1008,7 +1007,7 @@ function render(v) {
   const pos = v.fix ? [v.fix.lat, v.fix.lon] : null;
   if (pos) {
     n.userMarker.setLatLng(pos);
-    if (n.follow) map.setView(pos, Math.max(map.getZoom(), 16), { animate: !n.demo || n.rate <= 6 });
+    if (n.follow) map.setView(pos, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
   }
   if (v.finished && !n.done) {
     n.done = true;

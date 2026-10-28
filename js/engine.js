@@ -171,14 +171,14 @@ export class RouteEngine {
       const hit = await findCachedArea(lat, lon, radius);
       if (hit?.elev) {
         const p = makeProjection(hit.lat, hit.lon);
-        const grid = new ElevationGrid(p, hit.radius, hit.elev.n, Float32Array.from(hit.elev.values));
+        const grid = new ElevationGrid(p, hit.radius, hit.elev.n, hit.elev.values instanceof Float32Array ? hit.elev.values : Float32Array.from(hit.elev.values));
         // Re-centre: sample through the cached grid's own projection.
         return { at: (x, y) => { const [la, lo] = proj.toLatLon(x, y); const [cx, cy] = p.toXY(la, lo); return grid.at(cx, cy); } };
       }
     }
     try {
       const elev = await this.fetchElevation(proj, radius);
-      if (this.useCache) saveArea({ lat, lon, radius, elev: { n: elev.n, values: Array.from(elev.values) } });
+      if (this.useCache) saveArea({ lat, lon, radius, elev: { n: elev.n, values: elev.values } });
       return elev;
     } catch (err) {
       console.warn('Elevation unavailable:', err);
@@ -212,7 +212,12 @@ export class RouteEngine {
   scanSpots(lat, lon) {
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     this.scanMemo ||= new Map();
-    if (!this.scanMemo.has(key)) this.scanMemo.set(key, scanSpots(lat, lon, { fetchImpl: this.fetchImpl, pauseMs: this.scanPauseMs }));
+    if (!this.scanMemo.has(key)) {
+      const p = scanSpots(lat, lon, { fetchImpl: this.fetchImpl, pauseMs: this.scanPauseMs });
+      this.scanMemo.set(key, p);
+      // A scan that failed (offline, busy servers) is not remembered: the next ask tries again.
+      p.then((spots) => { if (spots.failed && this.scanMemo.get(key) === p) this.scanMemo.delete(key); });
+    }
     return this.scanMemo.get(key);
   }
 
@@ -267,6 +272,7 @@ export class RouteEngine {
       }
       const d = await lookupPlace(place, { fetchImpl: this.fetchImpl });
       if (this.useCache && Object.keys(d).length) tileCache.put(key, d);
+      if (d.failed && this.detailsMemo.get(key) === job) this.detailsMemo.delete(key); // offline: ask again next time
       return d;
     })();
     this.detailsMemo.set(key, job);

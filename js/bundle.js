@@ -1752,7 +1752,7 @@ async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl = fetc
         const cacheKey = 'lc:' + key;
         if (cache) {
           const hit = await cache.get(cacheKey);
-          if (hit && hit.length === 256 * 256) return Uint8Array.from(hit);
+          if (hit && hit.length === 256 * 256) return hit instanceof Uint8Array ? hit : Uint8Array.from(hit);
         }
         const res = await fetchImpl(landcoverTileUrl(LC_ZOOM, tx, ty, item), { signal });
         if (!res.ok) throw new Error(`land-cover tile ${res.status}`);
@@ -1765,7 +1765,7 @@ async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl = fetc
         const d = ctx.getImageData(0, 0, c.width, c.height).data;
         const out = new Uint8Array(c.width * c.height);
         for (let i = 0; i < out.length; i++) out[i] = d[i * 4]; // grey = the WorldCover class code
-        if (cache) cache.put(cacheKey, Array.from(out));
+        if (cache) cache.put(cacheKey, out); // IndexedDB stores typed arrays as they are
         return out;
       })());
     }
@@ -3241,12 +3241,13 @@ function describe(g, route, start, prefs = {}) {
   }
 
   if (prefs.sights && s.sights.length >= 2) theme = outback ? 'Sightseeing out & back' : 'Sightseeing loop';
-  // The card states the facts a runner plans around: climb and descent, traffic lights
-  // and road crossings (plus the landmarks on a sightseeing tour). The landscape mix
-  // shapes the route and its name, but is not listed as percentages.
+  // The card states the facts a runner plans around: where the run goes (the share on
+  // park paths and promenades), climb and descent, traffic lights and road crossings
+  // (plus the landmarks on a sightseeing tour).
   const highlights = [];
   // Landmarks are only mentioned (card, map pins, voice) when sightseeing was asked for.
   const sights = prefs.sights ? s.sights : [];
+  highlights.push(whereText(s, g));
   if (sights.length) highlights.push(sightsText(sights));
   if (outback) highlights.push('Same way there and back');
   if (g.hasElevation) highlights.push(climbText(s));
@@ -3298,6 +3299,20 @@ function climbText(s) {
  * "2 traffic lights · 5 road crossings" (crossings = streets to cross on foot, lit or not).
  * When the traffic-light data could not be fetched, the card says so rather than claiming none.
  */
+// Where the run goes, in one line: the share on park paths, promenades and the seafront
+// (the car-free ground the planner looks for first), and what the rest is.
+function whereText(s, g) {
+  const pct = Math.round(s.promFrac * 20) * 5;
+  const bySea = g.openSea && s.seaFrac >= 0.3;
+  const ground = bySea ? 'the seafront promenade' : s.greenFrac >= s.waterFrac && s.greenFrac >= 0.2 ? 'park paths' : s.waterFrac >= 0.2 ? 'waterfront paths' : 'car-free paths';
+  const restQuiet = s.promFrac < 0.99 ? Math.max(0, s.quietFrac - s.promFrac) / (1 - s.promFrac) : 1; // paths count as quiet too
+  const rest = restQuiet >= 0.7 ? 'quiet streets' : 'streets';
+  if (pct >= 95) return `All of it on ${ground}`;
+  if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
+  if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;
+  return restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets';
+}
+
 function stopsText(s) {
   const n = (k, one, many) => (k === 0 ? `no ${many}` : k === 1 ? `1 ${one}` : `${k} ${many}`);
   // When the traffic-light source is down, the card simply says nothing about lights.
@@ -3903,7 +3918,8 @@ async function lookupPlace(place, { fetchImpl = (...a) => fetch(...a) } = {}) {
       }
     }
   } catch {
-    /* no network or a timeout: nothing found */
+    /* no network or a timeout: nothing found, and the caller may ask again */
+    if (!Object.keys(d).length) Object.defineProperty(d, 'failed', { value: true, enumerable: false });
   }
   return d;
 }
@@ -4044,7 +4060,7 @@ async function scanSpots(lat, lon, { fetchImpl = (...a) => fetch(...a), pauseMs 
     for (const s of spots) s.fromStart = haversine(lat, lon, s.lat, s.lon);
     return spots.sort((a, b) => a.fromStart - b.fromStart);
   } catch {
-    return [];
+    return Object.assign([], { failed: true }); // an empty list that says why, so the caller can retry later
   }
 }
 
@@ -4088,14 +4104,51 @@ function openDB() {
       else if (e.oldVersion < 2) req.transaction.objectStore(STORE).clear(); // v1 kept whole map areas: drop them
       if (!db.objectStoreNames.contains(TILES)) db.createObjectStore(TILES);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onblocked = () => reject(new Error('database blocked by another tab'));
+    req.onsuccess = () => {
+      const d = req.result;
+      // Another tab upgrading the database: let go of it; the next call reopens.
+      d.onversionchange = () => { d.close(); dbPromise = null; };
+      resolve(d);
+    };
     req.onerror = () => reject(req.error);
   });
 }
 
+// Once per session: drop tile records past their 14 days, and the oldest ones beyond a
+// sensible number, so the store does not grow for ever on a phone. Best-effort, in the background.
+const MAX_TILES = 4000;
+let purged = false;
+function purge(d) {
+  if (purged) return;
+  purged = true;
+  try {
+    const t = d.transaction(TILES, 'readwrite');
+    const store = t.objectStore(TILES);
+    const count = store.count();
+    count.onsuccess = () => {
+      const extra = Math.max(0, count.result - MAX_TILES);
+      const old = [];
+      const now = Date.now();
+      store.openCursor().onsuccess = (e) => {
+        const c = e.target.result;
+        if (!c) {
+          if (extra) old.sort((a, b) => a.time - b.time).slice(0, extra).forEach((r) => store.delete(r.key));
+          return;
+        }
+        if (now - (c.value?.time || 0) >= MAX_AGE_MS) c.delete();
+        else if (extra) old.push({ key: c.key, time: c.value.time });
+        c.continue();
+      };
+    };
+  } catch {
+    /* best-effort */
+  }
+}
+
 let dbPromise = null;
 function db() {
-  dbPromise ||= openDB().catch((err) => {
+  dbPromise ||= openDB().then((d) => { purge(d); return d; }).catch((err) => {
     dbPromise = null;
     throw err;
   });
@@ -4355,14 +4408,14 @@ class RouteEngine {
       const hit = await findCachedArea(lat, lon, radius);
       if (hit?.elev) {
         const p = makeProjection(hit.lat, hit.lon);
-        const grid = new ElevationGrid(p, hit.radius, hit.elev.n, Float32Array.from(hit.elev.values));
+        const grid = new ElevationGrid(p, hit.radius, hit.elev.n, hit.elev.values instanceof Float32Array ? hit.elev.values : Float32Array.from(hit.elev.values));
         // Re-centre: sample through the cached grid's own projection.
         return { at: (x, y) => { const [la, lo] = proj.toLatLon(x, y); const [cx, cy] = p.toXY(la, lo); return grid.at(cx, cy); } };
       }
     }
     try {
       const elev = await this.fetchElevation(proj, radius);
-      if (this.useCache) saveArea({ lat, lon, radius, elev: { n: elev.n, values: Array.from(elev.values) } });
+      if (this.useCache) saveArea({ lat, lon, radius, elev: { n: elev.n, values: elev.values } });
       return elev;
     } catch (err) {
       console.warn('Elevation unavailable:', err);
@@ -4396,7 +4449,12 @@ class RouteEngine {
   scanSpots(lat, lon) {
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     this.scanMemo ||= new Map();
-    if (!this.scanMemo.has(key)) this.scanMemo.set(key, scanSpots(lat, lon, { fetchImpl: this.fetchImpl, pauseMs: this.scanPauseMs }));
+    if (!this.scanMemo.has(key)) {
+      const p = scanSpots(lat, lon, { fetchImpl: this.fetchImpl, pauseMs: this.scanPauseMs });
+      this.scanMemo.set(key, p);
+      // A scan that failed (offline, busy servers) is not remembered: the next ask tries again.
+      p.then((spots) => { if (spots.failed && this.scanMemo.get(key) === p) this.scanMemo.delete(key); });
+    }
     return this.scanMemo.get(key);
   }
 
@@ -4451,6 +4509,7 @@ class RouteEngine {
       }
       const d = await lookupPlace(place, { fetchImpl: this.fetchImpl });
       if (this.useCache && Object.keys(d).length) tileCache.put(key, d);
+      if (d.failed && this.detailsMemo.get(key) === job) this.detailsMemo.delete(key); // offline: ask again next time
       return d;
     })();
     this.detailsMemo.set(key, job);
@@ -4647,7 +4706,7 @@ class Navigator {
   update(fix) {
     this.tick();
     if (!this.started || this.paused || this.finished) return this.view();
-    if (fix.accuracy != null && fix.accuracy > MAX_ACCURACY) return this.view(fix);
+    if (fix.accuracy != null && fix.accuracy > MAX_ACCURACY) return this.view(); // a bad fix moves nothing, not even the dot
     const [x, y] = this.proj.toXY(fix.lat, fix.lon);
 
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
@@ -4692,10 +4751,10 @@ class Navigator {
         if (snap.at > this.progress) {
           const gain = snap.at - this.progress;
           if (gain > 0 && gain < 300 && !this.rejoined) this.odometer += gain;
-          this.rejoined = false; // on the route: measured along it (smooth)
           this.progress = snap.at;
           this.seg = snap.seg;
         }
+        this.rejoined = false; // on the route: measured along it (smooth), also after a rejoin behind the last progress
       }
     }
 
@@ -5487,7 +5546,7 @@ function showRoutes(routes) {
     card.className = 'card';
     card.style.setProperty('--c', COLORS[i]);
     // The card: name, distance, then the facts (climb & descent, traffic lights & road crossings,
-    // landmarks on a tour) and the elevation profile. No landscape percentages.
+    // landmarks on a tour) and the elevation profile.
     card.innerHTML = `
       <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
       <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
@@ -5534,11 +5593,10 @@ function drawPlaces(places, list = $('places')) {
     marker.on('popupopen', () => {
       if (p._details) return;
       engine.placeDetails(p).then((d) => {
-        p._details = d || {};
-        marker.setPopupContent(placePopup(p, i, p._details));
+        if (!d?.failed) p._details = d || {}; // a failed lookup is tried again on the next open
+        marker.setPopupContent(placePopup(p, i, d || {}));
       }).catch(() => {
-        p._details = {};
-        marker.setPopupContent(placePopup(p, i, p._details));
+        marker.setPopupContent(placePopup(p, i, {}));
       });
     });
     if (i >= 6) return; // the nearest few in the list, all on the map
@@ -6066,7 +6124,7 @@ function render(v) {
   const pos = v.fix ? [v.fix.lat, v.fix.lon] : null;
   if (pos) {
     n.userMarker.setLatLng(pos);
-    if (n.follow) map.setView(pos, Math.max(map.getZoom(), 16), { animate: !n.demo || n.rate <= 6 });
+    if (n.follow) map.setView(pos, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
   }
   if (v.finished && !n.done) {
     n.done = true;

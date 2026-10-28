@@ -182,10 +182,10 @@ for locked-screen guidance and the app stores.
    zebra crossing is free, while crossing the road at it isn't.
    - **Tapping a route** opens a pop-up with its name, distance, the facts below and one button, "Start run
      with voice guidance" (a demo run without GPS is a small link under it).
-   - **The route card** states what a runner plans around: metres of climb and descent, the number of
+   - **The route card** opens with where the run goes ("65% on park paths, the rest on quiet streets",
+     "All of it on the seafront promenade", "City streets") and then states what a runner plans around: metres of climb and descent, the number of
      traffic lights and the number of road crossings (marked crosswalks and busy roads to cross), plus the
-     landmarks on a sightseeing tour, and the elevation profile. The landscape mix shapes the route and
-     its name ("Park loop", "Waterfront loop") but is not shown as percentages. When the traffic-light
+     landmarks on a sightseeing tour, and the elevation profile. When the traffic-light
      query failed (busy Overpass servers) the card leaves traffic lights out and lists only the road
      crossings, with no notice; when elevation could not be fetched, the climb line is left out.
 9. **Sightseeing:** landmarks come from the same map tiles, but only the guidebook kind: museums,
@@ -318,14 +318,14 @@ Live runs on real OpenStreetMap data:
 Fixed the same day: shared tag objects (wrong street names), the preview/plan cost race, out-and-back overlap,
 the harbour cap, footbridges over water, lap cues said twice, the lost turnaround cue, stale/stuck speech,
 UI changes mid-run, a stale service-worker install, non-OK responses cached, reload loops, two area loads
-racing, a hanging tile index, all-or-nothing land cover, silent bundler failures. Still open:
+racing, a hanging tile index, all-or-nothing land cover, silent bundler failures.
+Fixed Oct 29: the cache handles a blocked open and another tab's upgrade, purges expired tile records once
+per session and caps the store at 4000 records; land cover and elevation grids are stored as typed arrays;
+a failed spot scan or details lookup is retried on the next ask; a rejected GPS fix (accuracy over 60 m)
+no longer moves the dot and the map follows at the zoom the runner chose; a rejoin behind the last
+progress no longer drops the next gain from the odometer. Still open:
 - Map tile 404s count as empty tiles and are cached 14 days (fine for sea; a CDN incident would stick).
-- IndexedDB open has no blocked/version-change handling; expired records are never purged; no size cap.
-- Typed arrays are stored as plain arrays in the cache (bigger and slower than needed).
-- A failed Nominatim scan / details lookup is remembered for the session (no retry when back online).
 - Sightseeing tours can run thousands of path searches with no yield on a big city.
-- Rejected GPS fixes (accuracy > 60 m) still move the dot; zoom is forced back to 16 on every fix.
-- A rejoin behind current progress drops the next forward gain from the odometer.
 - Hairpin bends on switchbacks read as "Turn around"; a U-turn via a parallel twin edge is under-priced.
 - A sightseeing tour with a large distance error can slip into the candidates when a later iteration fails.
 - Border nodes 1–2 px apart on a tile edge don't merge; on wide screens the sheet can cover a route's left edge.

@@ -124,7 +124,7 @@ export async function scanSpots(lat, lon, { fetchImpl = (...a) => fetch(...a), p
     for (const s of spots) s.fromStart = haversine(lat, lon, s.lat, s.lon);
     return spots.sort((a, b) => a.fromStart - b.fromStart);
   } catch {
-    return [];
+    return Object.assign([], { failed: true }); // an empty list that says why, so the caller can retry later
   }
 }
 

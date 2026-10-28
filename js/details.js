@@ -125,7 +125,8 @@ export async function lookupPlace(place, { fetchImpl = (...a) => fetch(...a) } =
       }
     }
   } catch {
-    /* no network or a timeout: nothing found */
+    /* no network or a timeout: nothing found, and the caller may ask again */
+    if (!Object.keys(d).length) Object.defineProperty(d, 'failed', { value: true, enumerable: false });
   }
   return d;
 }

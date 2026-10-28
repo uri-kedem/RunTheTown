@@ -22,14 +22,51 @@ function openDB() {
       else if (e.oldVersion < 2) req.transaction.objectStore(STORE).clear(); // v1 kept whole map areas: drop them
       if (!db.objectStoreNames.contains(TILES)) db.createObjectStore(TILES);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onblocked = () => reject(new Error('database blocked by another tab'));
+    req.onsuccess = () => {
+      const d = req.result;
+      // Another tab upgrading the database: let go of it; the next call reopens.
+      d.onversionchange = () => { d.close(); dbPromise = null; };
+      resolve(d);
+    };
     req.onerror = () => reject(req.error);
   });
 }
 
+// Once per session: drop tile records past their 14 days, and the oldest ones beyond a
+// sensible number, so the store does not grow for ever on a phone. Best-effort, in the background.
+const MAX_TILES = 4000;
+let purged = false;
+function purge(d) {
+  if (purged) return;
+  purged = true;
+  try {
+    const t = d.transaction(TILES, 'readwrite');
+    const store = t.objectStore(TILES);
+    const count = store.count();
+    count.onsuccess = () => {
+      const extra = Math.max(0, count.result - MAX_TILES);
+      const old = [];
+      const now = Date.now();
+      store.openCursor().onsuccess = (e) => {
+        const c = e.target.result;
+        if (!c) {
+          if (extra) old.sort((a, b) => a.time - b.time).slice(0, extra).forEach((r) => store.delete(r.key));
+          return;
+        }
+        if (now - (c.value?.time || 0) >= MAX_AGE_MS) c.delete();
+        else if (extra) old.push({ key: c.key, time: c.value.time });
+        c.continue();
+      };
+    };
+  } catch {
+    /* best-effort */
+  }
+}
+
 let dbPromise = null;
 function db() {
-  dbPromise ||= openDB().catch((err) => {
+  dbPromise ||= openDB().then((d) => { purge(d); return d; }).catch((err) => {
     dbPromise = null;
     throw err;
   });

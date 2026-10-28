@@ -64,7 +64,7 @@ export async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl
         const cacheKey = 'lc:' + key;
         if (cache) {
           const hit = await cache.get(cacheKey);
-          if (hit && hit.length === 256 * 256) return Uint8Array.from(hit);
+          if (hit && hit.length === 256 * 256) return hit instanceof Uint8Array ? hit : Uint8Array.from(hit);
         }
         const res = await fetchImpl(landcoverTileUrl(LC_ZOOM, tx, ty, item), { signal });
         if (!res.ok) throw new Error(`land-cover tile ${res.status}`);
@@ -77,7 +77,7 @@ export async function fetchLandcoverGrid(proj, radius, cell, { signal, fetchImpl
         const d = ctx.getImageData(0, 0, c.width, c.height).data;
         const out = new Uint8Array(c.width * c.height);
         for (let i = 0; i < out.length; i++) out[i] = d[i * 4]; // grey = the WorldCover class code
-        if (cache) cache.put(cacheKey, Array.from(out));
+        if (cache) cache.put(cacheKey, out); // IndexedDB stores typed arrays as they are
         return out;
       })());
     }

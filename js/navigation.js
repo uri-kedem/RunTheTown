@@ -186,7 +186,7 @@ export class Navigator {
   update(fix) {
     this.tick();
     if (!this.started || this.paused || this.finished) return this.view();
-    if (fix.accuracy != null && fix.accuracy > MAX_ACCURACY) return this.view(fix);
+    if (fix.accuracy != null && fix.accuracy > MAX_ACCURACY) return this.view(); // a bad fix moves nothing, not even the dot
     const [x, y] = this.proj.toXY(fix.lat, fix.lon);
 
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
@@ -231,10 +231,10 @@ export class Navigator {
         if (snap.at > this.progress) {
           const gain = snap.at - this.progress;
           if (gain > 0 && gain < 300 && !this.rejoined) this.odometer += gain;
-          this.rejoined = false; // on the route: measured along it (smooth)
           this.progress = snap.at;
           this.seg = snap.seg;
         }
+        this.rejoined = false; // on the route: measured along it (smooth), also after a rejoin behind the last progress
       }
     }
 
