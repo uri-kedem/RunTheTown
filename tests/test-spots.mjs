@@ -103,6 +103,18 @@ const oval = (clat, clon, half = 84.39, r = 36.5, n = 40) => {
   console.log('   far start, 8 km:', before?.highlights.join(' | '), ' -> after loading the map:', after?.highlights.join(' | '), `(${(after?.distance / 1000).toFixed(1)} km)`);
   check(after && after.highlights.some((h) => /to get there and back/.test(h)) && after.place.laps >= 1, 'the way there and back is planned to a track past half the run');
   check(after && after.distance > 8000 && after.highlights.some((h) => /Longer than asked/.test(h)), 'and the card says the run comes out longer than asked');
+
+  // A track on an island of paths (a fenced campus): the leg aims at the nearest node by
+  // the track that the start can actually reach, instead of giving up on the way there.
+  const g = eng.area.graph;
+  const sn = g.nearest(...eng.area.proj.toXY(far.lat, far.lon), { maxDist: 1500 });
+  const [px, py] = eng.area.proj.toXY(track.lat, track.lon);
+  const nearestAny = g.nearest(px, py, { maxDist: 400 });
+  const savedComp = g.comp[nearestAny];
+  g.comp[nearestAny] = 999999; // pretend the very nearest node is on its own island
+  const island = eng.routeAtPlace(track, { lat: far.lat, lon: far.lon, distanceKm: 8, prefs: {} });
+  g.comp[nearestAny] = savedComp;
+  check(island && island.highlights.some((h) => /to get there and back/.test(h)) && g.comp[sn] !== 999999, 'a track whose nearest node is cut off still gets the way there via a connected node');
 }
 console.log(failures ? `\n${failures} FAILED` : '\nAll spots tests passed');
 process.exit(failures ? 1 : 0);

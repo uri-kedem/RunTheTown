@@ -620,7 +620,7 @@ function describe(g, route, start, prefs = {}) {
   const heading = bearingName(headingDeg);
 
   let theme = 'City loop';
-  if (s.seaFrac >= 0.2) theme = 'Seaside loop';
+  if (s.seaFrac >= 0.2 && g.openSea) theme = 'Seaside loop';
   else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
   else if (s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
@@ -629,7 +629,7 @@ function describe(g, route, start, prefs = {}) {
   const outback = route.type === 'outback';
   if (outback) {
     theme = 'Out & back';
-    if (s.seaFrac >= 0.15) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
+    if (s.seaFrac >= 0.15 && g.openSea) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
     else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
     else if (s.greenFrac >= 0.25) theme += ' through the green';
   }

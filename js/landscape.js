@@ -125,6 +125,18 @@ export class LandscapeGrid {
     }
   }
 
+  // Share of the map's edge that is sea: an open coast or a harbour fills a whole side
+  // (25%+ of the perimeter), a tidal river through a city (the Thames, the Hudson) only
+  // the two points where it enters and leaves.
+  seaShare() {
+    if (!this.seaBody) return 0;
+    const n = this.n;
+    const b = this.seaBody;
+    let k = 0;
+    for (let i = 0; i < n; i++) k += b[i] + b[(n - 1) * n + i] + b[i * n] + b[i * n + n - 1];
+    return k / (4 * n);
+  }
+
   // Share of built-up ground (from space) within ~100 m of (x, y): 0 in open country,
   // close to 1 in a town. null until land cover has been merged.
   townShare(x, y, d = 4) {
@@ -142,9 +154,47 @@ export class LandscapeGrid {
   // "Along the water" = within ~75 m of a water body (3 cells), plus line buffers.
   // "By the sea" = within ~100 m of the sea itself (beaches are buffered separately).
   finish(reach = 3) {
+    this.promoteBigWater();
     if (this.seaBody) this.flood(this.seaBody, this.sea, reach + 1);
     if (this.seaBody && this.lakeBody) this.markHarbours();
     if (this.body) this.flood(this.body, this.water, reach);
+  }
+
+  // A great body of water is a sea to a runner whatever the map calls it: Sydney Harbour,
+  // Lake Michigan, Lake Zurich are 'lake' polygons in the tiles. Any lake-class body of
+  // 2,500 cells (~1.5 km²) or more, or 800+ cells running off the edge of the map, joins
+  // the sea layer (seaside bonus, and its marinas become harbours).
+  promoteBigWater(minCells = 2500, minEdgeCells = 800) {
+    if (!this.lakeBody) return;
+    const n = this.n;
+    const b = this.lakeBody;
+    const seen = new Uint8Array(n * n);
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let s0 = 0; s0 < n * n; s0++) {
+      if (!b[s0] || seen[s0]) continue;
+      const cells = [s0];
+      seen[s0] = 1;
+      let edge = false;
+      for (let k = 0; k < cells.length; k++) {
+        const i = cells[k];
+        const r = (i / n) | 0;
+        const c = i - r * n;
+        if (r === 0 || c === 0 || r === n - 1 || c === n - 1) edge = true;
+        for (const [dr, dc] of nb) {
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= n || cc >= n) continue;
+          const j = rr * n + cc;
+          if (!b[j] || seen[j]) continue;
+          seen[j] = 1;
+          cells.push(j);
+        }
+      }
+      if (cells.length >= minCells || (edge && cells.length >= minEdgeCells)) {
+        this.seaBody ||= new Uint8Array(n * n);
+        for (const i of cells) { this.seaBody[i] = 1; b[i] = 0; }
+      }
+    }
   }
 
   // A small water polygon that lies in or touches the sea is a harbour or marina basin

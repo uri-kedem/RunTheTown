@@ -225,6 +225,7 @@ export class Graph {
       this.z[i] = elev ? elev.at(x, y) : 0;
     }
     this.hasElevation = !!elev;
+    this.openSea = !!grid && grid.seaShare() >= 0.2; // the sea here is a coast or a harbour, not a tidal river
     this.ea = Int32Array.from(ea);
     this.eb = Int32Array.from(eb);
     this.hw = Uint8Array.from(ehw);

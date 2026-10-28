@@ -201,7 +201,11 @@ export function placeRoute(area, place, { lat, lon, distanceKm, prefs = {} }) {
   // The spot's way in, found on THIS graph (the spot may have been listed on an earlier,
   // smaller map; node ids do not carry over).
   const [px, py] = proj.toXY(place.lat, place.lon);
-  const placeNode = g.nearest(px, py, { maxDist: 400 });
+  // …and reachable from the start: a track inside a fenced campus may sit on an island
+  // of paths, so the leg aims at the nearest node by the track in the start's own network.
+  const comp = startNode >= 0 ? g.comp[startNode] : -1;
+  let placeNode = comp >= 0 ? g.nearest(px, py, { maxDist: 400, filter: (i) => g.comp[i] === comp }) : -1;
+  if (placeNode < 0) placeNode = g.nearest(px, py, { maxDist: 400 });
   // The way there and back is always part of the run when one exists: a runner who picks
   // a track 3 km away wants the route to it, even if the run comes out longer than asked.
   let leg = null;

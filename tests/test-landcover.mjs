@@ -161,6 +161,14 @@ check(/esa-worldcover.*N30E033.*assets=map/.test(landcoverTileUrl(13, 4887, 3324
   big.finish();
   let dock = 0; for (const v of big.dock) dock += v;
   check(dock === 0, `a lagoon bigger than the harbour cap leaves no dock marks (${dock})`);
+
+  // A great lake-class body (Sydney Harbour is a 'lake' in the tiles) is a sea to a runner:
+  // its shore gets the seaside layer; a pond does not.
+  const harbour = new LandscapeGrid(proj, 3000, cell);
+  harbour.addFeatures([{ kind: 'water', shape: 'body', buffer: 0, relation: true, rings: [[ll(-2000, 500), ll(2000, 500), ll(2000, 2900), ll(-2000, 2900), ll(-2000, 500)]] }]); // 4 km × 2.4 km
+  harbour.addFeatures([{ kind: 'water', shape: 'body', buffer: 0, relation: true, rings: [[ll(-200, -2000), ll(200, -2000), ll(200, -1600), ll(-200, -1600), ll(-200, -2000)]] }]); // a pond
+  harbour.finish();
+  check(harbour.at('sea', 0, 440) === 1 && harbour.at('sea', 0, -1560) === 0, 'a harbour-sized water body gives a seaside shore; a pond does not');
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll land-cover checks passed');

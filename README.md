@@ -143,6 +143,10 @@ for locked-screen guidance and the app stores.
      `LANDSCAPE_SHARE`), nothing else is offered — fewer than three options then, and the results
      note says so. A run that is 80% streets is no fun even if it touches the beach. A Sightseeing
      tour is exempt (landmarks rank it).
+   - **Big water is sea** (`LandscapeGrid.promoteBigWater`): a lake-class body of 2,500+ cells (~1.5 km²), or 800+
+     running off the map's edge, joins the sea layer — Sydney Harbour, Lake Michigan and Lake Zurich are 'lake'
+     polygons in the tiles. Routes are *named* "Seaside" / "along the sea" only where the sea fills 20%+ of the
+     map's edge (`Graph.openSea`); the Thames and the Hudson are tidal "sea" in the data but read "along the water".
    - **The sea first.** The `sea` grid layer (ocean polygons + beaches, ~100 m inland) is kept apart from
      rivers and lakes: seaside edges cost ×0.7 on top of the water bonus, score `+0.6·seaFrac`, and the
      first option gets `seaBoost` (+1.2 once 30% of the run is by the sea) — so from Ramat Aviv the beach
