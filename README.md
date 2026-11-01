@@ -238,6 +238,15 @@ for locked-screen guidance and the app stores.
    - says when you're off the route and which way it is (left / right / behind), and confirms when you're back;
    - gives kilometer splits with pace and distance to go, and calls out sights ("On your right: Habima Theatre");
    - English voice, with Hebrew-only names read by a Hebrew voice;
+   - **Settings** (menu → Settings, or "Voice" in the route pop-up; `js/settings.js`, kept on the phone
+     as `rtt-settings`): *Voice*: the house voices Zoe (female) and Tom (male), the best copy of each on
+     the phone (Premium over Enhanced over compact), with Play buttons, a hint with the iOS download path
+     when one is missing, and "More voices" for the phone's other English voices; a downloaded Siri voice
+     is taken first when the browser exposes one. *Units*: kilometers or miles (cards, stats, the distance
+     field, cues in feet and miles, splits every mile, pace per mile). *Announcements*: splits, landmarks,
+     quiet mode (turns and off-route only), warn before a turn 100/200/300 m. *Language*: English (Hebrew
+     marked soon). *Map during the run*: follow me, keep the screen on. *About*: version and "Check for
+     update". iPhone users download better voices under Settings → Accessibility → Spoken Content → Voices;
    - keeps the screen awake (Wake Lock) and has Mute / Pause / End (two taps);
    - **Rerouting:** after 12 s off the line with a decent GPS fix, the app plans the way from where the
      runner is back onto the route about 250 m further on (`rejoinRoute` in `js/planner.js`: shortest

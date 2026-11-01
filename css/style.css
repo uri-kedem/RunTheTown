@@ -471,3 +471,31 @@ body[data-mode="tour"] #runStyleField { display: none; }
 .ask-note { font-size: 12px; color: var(--ink-3); margin-top: -4px; }
 .nav-foot { text-align: center; margin-top: 6px; }
 .nav-foot .link { font-size: 12.5px; color: var(--ink-3); }
+
+/* Settings */
+.settings h2 { margin-top: 26px; }
+.settings h2:first-child { margin-top: 4px; }
+.set-sub { margin: -2px 0 10px; font-size: 14px; }
+.set-hint { font-size: 13px; color: var(--ink-3); margin: 8px 0 0; }
+.settings .segmented { margin: 4px 0 2px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.set-row > span { display: block; min-width: 0; }
+.set-row b { display: block; font-size: 15px; }
+.set-row small { display: block; font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
+.set-row .ghost { flex: none; white-space: nowrap; }
+.switch { appearance: none; -webkit-appearance: none; width: 48px; height: 28px; border-radius: 999px; background: #cbd5e1; position: relative; flex: none; margin: 0; cursor: pointer; transition: background 0.15s; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: left 0.15s; }
+.switch:checked { background: var(--brand); }
+.switch:checked::after { left: 23px; }
+.switch:disabled { opacity: 0.4; }
+/* Voice picker */
+.voice-list { display: grid; gap: 6px; }
+.voice-row { display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--bg); text-align: left; cursor: pointer; }
+.voice-row.on { border-color: var(--ink); background: var(--bg-2); }
+.voice-row .who { flex: 1; min-width: 0; }
+.voice-row b { display: block; font-size: 15px; color: var(--ink); }
+.voice-row small { color: var(--ink-2); font-size: 12.5px; }
+.voice-row .play { border: 0; border-radius: 999px; background: var(--brand); color: #fff; width: 34px; height: 34px; display: grid; place-items: center; flex: none; }
+.voice-row .play svg { width: 14px; height: 14px; fill: currentColor; margin-left: 2px; }
+.voice-row .tick { width: 20px; flex: none; color: var(--brand); font-weight: 800; }
+.voice-row.missing { opacity: 0.6; }

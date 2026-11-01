@@ -25,20 +25,43 @@ const WINDOW_AHEAD = 400; // ...and this far ahead (stops jumping to a parallel 
 const HEBREW = /[֐-׿]/;
 const NAV_COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 
+export const MILE = 1609.344;
+export const FOOT = 0.3048;
+
 export function roundDist(m) {
   if (m < 100) return Math.max(10, Math.round(m / 10) * 10);
   if (m < 1000) return Math.round(m / 50) * 50;
   return Math.round(m / 100) * 100;
 }
-export function distText(m) {
+// Spoken distance: metres and kilometres, or feet and miles ("In 500 feet", "a quarter mile").
+export function distText(m, units = 'km') {
+  if (units === 'mi') {
+    const mi = m / MILE;
+    if (mi >= 0.95) { const r = Math.round(mi * 10) / 10; return `${r === 1 ? 'one mile' : `${String(r).replace(/\.0$/, '')} miles`}`; }
+    if (mi >= 0.7) return 'three quarters of a mile';
+    if (mi >= 0.45) return 'half a mile';
+    if (mi >= 0.22) return 'a quarter mile';
+    const ft = m / FOOT;
+    return `${Math.max(50, Math.round(ft / 50) * 50)} feet`;
+  }
   const r = roundDist(m);
   return r >= 1000 ? `${(r / 1000).toFixed(1).replace(/\.0$/, '')} kilometers` : `${r} meters`;
 }
-export function paceText(secPerKm) {
+export function paceText(secPerKm, units = 'km') {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0) return '';
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return s ? `${m} minutes ${s} seconds per kilometer` : `${m} minutes per kilometer`;
+  const per = units === 'mi' ? secPerKm * (MILE / 1000) : secPerKm;
+  const m = Math.floor(per / 60);
+  const s = Math.round(per % 60);
+  const unit = units === 'mi' ? 'mile' : 'kilometer';
+  return s ? `${m} minutes ${s} seconds per ${unit}` : `${m} minutes per ${unit}`;
+}
+// On-screen length: "3.2 km" / "450 m", or "2.0 mi" / "800 ft".
+export function lenText(m, units = 'km', { decimals = 1 } = {}) {
+  if (units === 'mi') {
+    const mi = m / MILE;
+    return mi >= 0.2 ? `${mi.toFixed(decimals)} mi` : `${Math.round(m / FOOT / 10) * 10} ft`;
+  }
+  return m >= 1000 ? `${(m / 1000).toFixed(decimals)} km` : `${Math.round(m)} m`;
 }
 export function paceShort(secPerKm) {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return '–:––';
@@ -66,14 +89,14 @@ export function cueAction(c) {
   }
 }
 
-function cueSpeech(c, { ahead = null } = {}) {
-  const lead = ahead != null ? `In ${distText(ahead)}, ` : '';
+function cueSpeech(c, { ahead = null, units = 'km' } = {}) {
+  const lead = ahead != null ? `In ${distText(ahead, units)}, ` : '';
   const onto = c.street ? [' onto ', c.street] : [];
   if (c.type === 'turn' && !c.dir && c.text) return msg(ahead != null ? `${lead}${c.text[0].toLowerCase()}${c.text.slice(1)}` : c.text);
   switch (c.type) {
     case 'lap': return msg(`Lap ${c.lap} of ${c.laps}.`);
     case 'uturn': return msg(`${lead}${ahead != null ? 'turn around' : 'Turn around and head back the same way'}`);
-    case 'arrive': return msg(ahead != null ? `In ${distText(ahead)}, you'll be back at the start` : 'You have arrived back at the start');
+    case 'arrive': return msg(ahead != null ? `In ${distText(ahead, units)}, you'll be back at the start` : 'You have arrived back at the start');
     case 'slight': return msg(`${lead}${ahead != null ? 'b' : 'B'}ear ${c.dir}`, ...onto);
     case 'sharp': return msg(`${lead}${ahead != null ? 'm' : 'M'}ake a sharp ${c.dir}`, ...onto);
     default: return msg(`${lead}${ahead != null ? 't' : 'T'}urn ${c.dir}`, ...onto);
@@ -86,15 +109,24 @@ const lower = (parts) => parts.map((p, i) => (i === 0 ? { ...p, text: p.text[0].
  * (for the screen) and pushes spoken messages to opts.speak(parts, {priority}).
  */
 export class Navigator {
-  constructor(route, { speak = () => {}, now = () => Date.now() } = {}) {
+  /**
+   * opts: speak, now, and the runner's settings: units 'km' | 'mi', splits (every km / mile),
+   * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
+   * ahead a turn is announced, m).
+   */
+  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX } = {}) {
     this.speak = speak;
     this.now = now;
+    this.units = units;
+    this.splitM = units === 'mi' ? MILE : 1000;
+    this.saying = { splits: splits && !quiet, landmarks: landmarks && !quiet, quiet };
+    this.warnM = Math.max(PRE_MIN + 20, warnM);
     this.proj = makeProjection(route.latlngs[0][0], route.latlngs[0][1]);
     this.setRoute(route);
     this.odometer = 0; // meters actually run (from GPS), for splits and pace
     this.anchor = null;
     this.moving = null; // heading of travel (deg), from recent movement
-    this.nextSplit = 1000;
+    this.nextSplit = this.splitM;
     this.lastSplit = { t: 0, odo: 0 };
     this.elapsed = 0; // ms, excluding pauses
     this.paused = false;
@@ -154,7 +186,7 @@ export class Navigator {
     const d = this.route.cues?.[0];
     this.speak(
       msg(
-        `Starting your ${(this.total / 1000).toFixed(1)} kilometer run. `,
+        `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
         d?.street ? ' on ' : null,
         d?.street || null,
@@ -286,7 +318,7 @@ export class Navigator {
   offRouteSpeech(x, y, snap) {
     const dx = snap.x - x, dy = snap.y - y;
     const bearing = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-    const far = distText(snap.dist);
+    const far = distText(snap.dist, this.units);
     const what = this.progress < 30 ? 'Head to the start of the route. It' : "You're off the route. It";
     if (this.moving != null) {
       const rel = ((bearing - this.moving + 540) % 360) - 180; // + = right
@@ -309,7 +341,7 @@ export class Navigator {
         c.pre = c.now = true; // passed (e.g. GPS skipped it)
         continue;
       }
-      if (ahead > PRE_MAX) break;
+      if (ahead > this.warnM) break;
       if (c.type === 'arrive') break; // handled by finish()
       if (c.type === 'lap') {
         // Lap counts are said once, as the lap starts; never announced ahead.
@@ -331,7 +363,7 @@ export class Navigator {
         // Only the next turn gets an early heads-up.
         if (!c.pre && ahead > PRE_MIN) {
           c.pre = true;
-          this.speak(cueSpeech(c, { ahead }), { priority: 1 });
+          this.speak(cueSpeech(c, { ahead, units: this.units }), { priority: 1 });
         }
         break;
       }
@@ -339,6 +371,7 @@ export class Navigator {
   }
 
   announceSights() {
+    if (!this.saying.landmarks) return;
     for (const s of this.sights) {
       if (s.said) continue;
       const ahead = s.at - this.progress;
@@ -353,15 +386,17 @@ export class Navigator {
 
   announceSplit() {
     if (this.odometer < this.nextSplit) return;
-    const km = Math.round(this.nextSplit / 1000);
+    const n = Math.round(this.nextSplit / this.splitM);
     const dt = (this.elapsed - this.lastSplit.t) / 1000;
-    const dd = (this.odometer - this.lastSplit.odo) / 1000;
+    const dd = (this.odometer - this.lastSplit.odo) / 1000; // km
     this.lastSplit = { t: this.elapsed, odo: this.odometer };
-    this.nextSplit += 1000;
+    this.nextSplit += this.splitM;
+    if (!this.saying.splits) return;
     const left = Math.max(0, this.total - this.progress);
-    const parts = [`${km} kilometer${km > 1 ? 's' : ''}.`];
-    if (dd > 0.5) parts.push(`Last kilometer ${paceText(dt / dd)}.`);
-    if (left > 300) parts.push(`${distText(left)} to go.`);
+    const unit = this.units === 'mi' ? 'mile' : 'kilometer';
+    const parts = [`${n} ${unit}${n > 1 ? 's' : ''}.`];
+    if (dd > 0.5 * (this.splitM / 1000)) parts.push(`Last ${unit} ${paceText(dt / dd, this.units)}.`);
+    if (left > 300) parts.push(`${distText(left, this.units)} to go.`);
     this.speak(msg(parts.join(' ')), { priority: 1 });
   }
 
@@ -370,8 +405,9 @@ export class Navigator {
     this.progress = this.total;
     this.seg = this.xy.length - 2;
     const mins = Math.round(this.elapsed / 60000);
-    const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000))}.` : '';
-    this.speak(msg(`You have arrived back at the start. Great run! ${(this.odometer / 1000).toFixed(1)} kilometers in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
+    const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
+    const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
+    this.speak(msg(`You have arrived back at the start. Great run! ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 
   /** Everything the screen needs. */
@@ -414,16 +450,68 @@ export class Voice {
     this.voices = { en: null, he: null };
     this.log = []; // everything said (for tests and the on-screen caption)
     this.onSay = null;
+    this.preferred = null; // voiceURI the runner chose, or null for the default
     if (synth) {
       const pick = () => {
         const vs = synth.getVoices?.() || [];
-        const by = (re) => vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
-        this.voices.en = by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
+        const siri = (v) => /siri/i.test(v.name) && /siri/i.test(v.voiceURI + ' ' + v.name) && !/compact/i.test(v.voiceURI); // a downloaded Siri voice, when the browser exposes it
+        const good = (v) => /enhanced|premium/i.test(v.voiceURI + v.name); // the better copy of a phone voice
+        const by = (re) => vs.find((v) => re.test(v.lang) && v.localService && siri(v)) || vs.find((v) => re.test(v.lang) && v.localService && good(v)) || vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
+        const chosen = this.preferred && vs.find((v) => v.voiceURI === this.preferred);
+        this.voices.en = chosen || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
         this.voices.he = by(/^(he|iw)/i) || null;
       };
+      this.pick = pick;
       pick();
       synth.addEventListener?.('voiceschanged', pick);
     }
+  }
+  /** The runner's choice of English voice (a voiceURI); null goes back to the default. */
+  setVoice(uri) {
+    this.preferred = uri || null;
+    this.pick?.();
+  }
+  /**
+   * Up to `max` English voices worth offering, the well-known phone voices first
+   * (one entry per name; the enhanced version of a voice wins over its compact one).
+   * Each: { uri, name, lang, accent, current }.
+   */
+  options(max = 5) {
+    const vs = this.synth?.getVoices?.() || [];
+    const ACCENT = { US: 'American', GB: 'British', AU: 'Australian', IE: 'Irish', ZA: 'South African', IN: 'Indian', CA: 'Canadian', NZ: 'New Zealand' };
+    const FAVOURITES = ['siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
+    const en = vs.filter((v) => /^en[-_]/i.test(v.lang));
+    const byName = new Map();
+    for (const v of en) {
+      const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase();
+      const better = /enhanced|premium/i.test(v.voiceURI + v.name) || (v.localService && !byName.get(key)?.localService);
+      if (!byName.has(key) || better) byName.set(key, v);
+    }
+    const rank = (v) => {
+      const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase();
+      const i = FAVOURITES.findIndex((f) => key.startsWith(f));
+      return (i < 0 ? 100 : i) + (v.localService ? 0 : 50);
+    };
+    const current = this.voices.en?.voiceURI;
+    return [...byName.values()].sort((a, b) => rank(a) - rank(b)).slice(0, max).map((v) => ({
+      uri: v.voiceURI,
+      name: v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').replace(/^(Google|Microsoft)\s+/i, ''),
+      lang: v.lang,
+      accent: ACCENT[(v.lang.split(/[-_]/)[1] || '').toUpperCase()] || v.lang,
+      current: v.voiceURI === current,
+    }));
+  }
+  /** Speaks a sample cue with one voice (from a tap), without touching the run's queue. */
+  preview(uri, text = 'In 200 meters, turn left onto Rothschild Boulevard. Then keep going along the promenade.') {
+    if (!this.synth) return;
+    const v = (this.synth.getVoices?.() || []).find((x) => x.voiceURI === uri);
+    try { this.synth.cancel(); } catch {}
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = v?.lang || 'en-US';
+    if (v) u.voice = v;
+    u.rate = 1.02;
+    this.current = u;
+    try { this.synth.speak(u); } catch {}
   }
   get available() { return !!this.synth; }
   /** Must be called from a tap (iOS only allows speech that starts from a user action). */

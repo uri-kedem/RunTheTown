@@ -3,12 +3,28 @@
 import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
 import { rejoinRoute } from './planner.js';
 import { haversine } from './geo.js';
-import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort } from './navigation.js';
+import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
+import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { fallbackLinks } from './details.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
 const $ = (id) => document.getElementById(id);
+
+// ---------- Settings (kept on the phone) ----------
+const settings = loadSettings();
+// Units on screen: numbers in km or miles, short lengths in m or ft.
+const U = {
+  get mi() { return settings.units === 'mi'; },
+  get unit() { return settings.units === 'mi' ? 'mi' : 'km'; },
+  num(m, dec = 1) { return (this.mi ? m / MILE : m / 1000).toFixed(dec); }, // "5.2"
+  len(m) { return lenText(m, settings.units); }, // "5.2 km" / "450 m"
+  lenShort(m) { return this.mi ? lenText(m, 'mi') : m >= 1000 ? `${(m / 1000).toFixed(1).replace(/\.0$/, '')} km` : `${Math.round(m / 10) * 10} m`; },
+  toKm(v) { return this.mi ? v * (MILE / 1000) : v; }, // a typed distance -> km
+  fromKm(km) { return this.mi ? km / (MILE / 1000) : km; },
+  pace(secPerKm) { return paceShort(this.mi ? secPerKm * (MILE / 1000) : secPerKm); },
+  paceLabel() { return this.mi ? 'min/mi' : 'min/km'; },
+};
 
 const state = {
   start: null, // { lat, lon, label }
@@ -109,8 +125,8 @@ function previewSpots() {
     if (!state.routes.length) drawPlaces(spots, $('spotsPrefs'));
     hint.hidden = false;
     hint.textContent = spots.length
-      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap one to plan your laps`
-      : final ? 'No athletics tracks or stadiums within 8 km of here' : 'Looking for running tracks and parks nearby…';
+      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within ${U.lenShort(8000)} · tap one to plan your laps`
+      : final ? `No athletics tracks or stadiums within ${U.lenShort(8000)} of here` : 'Looking for running tracks and parks nearby…';
     $('spotsEmpty').hidden = !(final && !spots.length);
   };
   previewSpots.timer = setTimeout(async () => {
@@ -338,17 +354,20 @@ const LONG_RUN_KM = 15;
 state.distanceValid = true;
 
 // The runner types the distance. Accepts "10", "7.5" or "7,5".
+// Limits in the unit on screen (the planner works in km).
+const limits = () => ({ min: Math.round(U.fromKm(MIN_KM) * 10) / 10, max: Math.round(U.fromKm(MAX_DISTANCE_KM) * 10) / 10 });
 function readDistance() {
   const raw = $('distanceInput').value.trim().replace(',', '.');
   const v = Number(raw);
-  const ok = raw !== '' && Number.isFinite(v) && v >= MIN_KM && v <= MAX_DISTANCE_KM;
+  const { min, max } = limits();
+  const ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
   state.distanceValid = ok;
-  if (ok) state.distanceKm = Math.round(v * 10) / 10;
+  if (ok) state.distanceKm = Math.round(U.toKm(v) * 10) / 10;
   $('distanceBox').classList.toggle('invalid', !ok && raw !== '');
   const msg = $('distanceMsg');
   msg.classList.toggle('error', !ok);
-  if (!ok) msg.textContent = raw === '' ? 'Type how many kilometers you want to run' : `Enter a distance between ${MIN_KM} and ${MAX_DISTANCE_KM} km`;
-  else if (v > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
+  if (!ok) msg.textContent = raw === '' ? `Type how many ${U.mi ? 'miles' : 'kilometers'} you want to run` : `Enter a distance between ${min} and ${max} ${U.unit}`;
+  else if (state.distanceKm > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
   else msg.textContent = '';
   updateGoButton();
 }
@@ -405,11 +424,12 @@ $('goBtn').addEventListener('click', async () => {
 });
 
 let lastTapped = -1; // the route the runner tapped last: a second tap on it opens the pop-up
-function showRoutes(routes) {
-  lastTapped = -1;
+function showRoutes(routes, { keep = false } = {}) {
+  const keepIdx = keep ? state.selected : 0;
+  if (!keep) lastTapped = -1;
   $('prefsView').hidden = true;
   $('resultsView').hidden = false;
-  const bits = [`${state.distanceKm} km`];
+  const bits = [`${U.num(state.distanceKm * 1000)} ${U.unit}`];
   const p = state.prefs;
   if (p.green) bits.push('parks');
   if (p.water) bits.push('waterfront');
@@ -432,7 +452,7 @@ function showRoutes(routes) {
     // landmarks on a tour) and the elevation profile.
     card.innerHTML = `
       <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
-      <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
+      <div class="card-dist">${U.num(r.distance, 2)}<small>${U.unit}</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
     // First tap picks the route (map and card light up); a second tap on it opens the pop-up.
@@ -441,11 +461,11 @@ function showRoutes(routes) {
   });
   drawRoutes();
   drawPlaces(routes.places || []);
-  selectRoute(0, { fit: true });
+  selectRoute(keepIdx, { fit: !keep });
 }
 
 // ---------- Running spots: athletics tracks and big parks ----------
-const fmtKmShort = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace(/\.0$/, '')} km` : `${Math.round(m / 10) * 10} m`);
+const fmtKmShort = (m) => U.lenShort(m);
 const PLACE_ICON = {
   track: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="6"/><rect x="7.5" y="9.5" width="9" height="5" rx="2.5"/></svg>',
   stadium: '<svg viewBox="0 0 24 24"><path d="M3 9c0-2 4-3.5 9-3.5s9 1.5 9 3.5v6c0 2-4 3.5-9 3.5S3 17 3 15z"/><path d="M3 9c0 2 4 3.5 9 3.5s9-1.5 9-3.5"/></svg>',
@@ -533,7 +553,7 @@ function runAtPlace(i) {
   askedPlace = place;
   $('lapsAskTitle').textContent = place.kind === 'park' ? `Loops in ${place.name}` : `Laps at ${place.name}`;
   $('lapsKm').value = '';
-  $('lapsMsg').textContent = place.lapM ? `One ${place.kind === 'park' ? 'loop' : 'lap'} is ${place.lapM >= 1000 ? (place.lapM / 1000).toFixed(1) + ' km' : place.lapM + ' m'}` : '';
+  $('lapsMsg').textContent = place.lapM ? `One ${place.kind === 'park' ? 'loop' : 'lap'} is ${U.len(place.lapM)}` : '';
   $('lapsMsg').classList.remove('error');
   $('lapsGo').disabled = true;
   $('lapsAsk').hidden = false;
@@ -542,19 +562,20 @@ function runAtPlace(i) {
 function readLapsKm() {
   const raw = $('lapsKm').value.trim().replace(',', '.');
   const v = Number(raw);
-  const ok = raw !== '' && Number.isFinite(v) && v >= MIN_KM && v <= MAX_DISTANCE_KM;
+  const { min, max } = limits();
+  const ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
   $('lapsGo').disabled = !ok;
   $('lapsBox').classList.toggle('invalid', !ok && raw !== '');
   const msg = $('lapsMsg');
   msg.classList.toggle('error', !ok && raw !== '');
-  if (!ok && raw !== '') msg.textContent = `Enter a distance between ${MIN_KM} and ${MAX_DISTANCE_KM} km`;
+  if (!ok && raw !== '') msg.textContent = `Enter a distance between ${min} and ${max} ${U.unit}`;
   else if (ok && askedPlace?.ring && state.start) {
     // What that distance means here: the real plan (laps, plus the way there and back).
-    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: v, prefs: { ...state.prefs } });
+    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: { ...state.prefs } });
     // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
-    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${(r.distance / 1000).toFixed(1)} km in total` : `Laps plus the way there and back from your start`) : '';
+    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
   }
-  return ok ? Math.round(v * 10) / 10 : null;
+  return ok ? Math.round(U.toKm(v) * 10) / 10 : null;
 }
 function closeLapsAsk() {
   $('lapsAsk').hidden = true;
@@ -567,7 +588,7 @@ async function planLaps() {
   if (busy) return toast('Still working on the last search — one moment.');
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
-  $('distanceInput').value = String(km);
+  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
   readDistance();
   // The map must reach from the start to the spot (the spot list looks 8 km out, the
   // preview map only a few), or there is no way there and back to plan.
@@ -600,7 +621,7 @@ $('lapsBox').addEventListener('click', () => $('lapsKm').focus());
 $('lapsQuick').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  $('lapsKm').value = b.dataset.km;
+  $('lapsKm').value = U.mi ? b.dataset.mi : b.dataset.km;
   readLapsKm();
 });
 $('lapsGo').addEventListener('click', planLaps);
@@ -684,7 +705,7 @@ function drawSights(route, layer) {
   for (const sg of list) {
     const html = `<div class="sight-pin"><i>★</i>${labels ? `<span>${escapeHtml(sg.name)}</span>` : ''}</div>`;
     L.marker([sg.lat, sg.lon], { icon: L.divIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 500 })
-      .bindPopup(`<b>${escapeHtml(sg.name)}</b>${sg.local && sg.local !== sg.name ? `<br><span dir="auto">${escapeHtml(sg.local)}</span>` : ''}<br><small>${escapeHtml(sg.kind || '')} · ${(sg.at / 1000).toFixed(1)} km into the run</small>`)
+      .bindPopup(`<b>${escapeHtml(sg.name)}</b>${sg.local && sg.local !== sg.name ? `<br><span dir="auto">${escapeHtml(sg.local)}</span>` : ''}<br><small>${escapeHtml(sg.kind || '')} · ${U.len(sg.at)} into the run</small>`)
       .addTo(layer);
   }
 }
@@ -744,7 +765,9 @@ function openRouteAsk(i) {
   const r = state.routes[i];
   if (!r) return;
   $('routeAskName').textContent = r.name;
-  $('routeAskDist').textContent = (r.distance / 1000).toFixed(2);
+  $('routeAskDist').textContent = U.num(r.distance, 2);
+  $('routeAskUnit').textContent = U.unit;
+  $('voiceBtn').textContent = voiceLabelText();
   $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
   $('routeAsk').hidden = false;
 }
@@ -756,6 +779,145 @@ $('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk'))
 $('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
 $('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
 $('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openReport(state.routes[state.selected], null); });
+
+// ---------- Settings page ----------
+// Voice (Zoe and Tom, the house voices, plus the phone's others), units, announcements,
+// language, the map during the run, about. Every change is saved at once and applies to
+// the next run; units apply to the screen right away.
+voice.setVoice(settings.voice);
+
+function applyUnits() {
+  const { min, max } = limits();
+  $('distanceUnit').textContent = U.unit;
+  $('lapsUnit').textContent = U.unit;
+  $('distanceHint').textContent = `${min}–${max} ${U.unit}`;
+  for (const b of $('lapsQuick').querySelectorAll('button')) b.textContent = `${U.mi ? b.dataset.mi : b.dataset.km} ${U.unit}`;
+  $('statDistLabel').textContent = `${U.unit} run`;
+  $('statPaceLabel').textContent = U.paceLabel();
+  $('statLeftLabel').textContent = `${U.unit} to go`;
+  // The typed distance keeps its meaning: shown in the new unit.
+  if (state.distanceValid) $('distanceInput').value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10);
+  readDistance();
+  if (state.routes.length) showRoutes(state.routes, { keep: true });
+  if (!$('routeAsk').hidden && state.routes[state.selected]) openRouteAsk(state.selected);
+  if (state.spots.length && !state.routes.length) drawPlaces(state.spots, $('spotsPrefs'));
+}
+
+const voiceLabelText = () => `Voice: ${voice.voices.en?.name?.replace(/\s*\((enhanced|premium|compact)\)/i, '') || 'default'}`;
+let voiceShowAll = false;
+function voiceRows() {
+  const all = voice.synth?.getVoices?.() || [];
+  const house = houseVoices(all);
+  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not on this phone yet`, missing: !h.voice }));
+  const houseUris = new Set(rows.map((r) => r.uri).filter(Boolean));
+  const others = voice.options(8).filter((o) => !houseUris.has(o.uri) && !/^(zoe|tom)\b/i.test(o.name)).map((o) => ({ uri: o.uri, name: o.name, sub: `${o.accent} English`, missing: false }));
+  return { rows, others, houseMissing: house.filter((h) => !h.voice) };
+}
+function currentVoiceUri() {
+  return voice.voices.en?.voiceURI || null;
+}
+function renderVoices() {
+  const { rows, others, houseMissing } = voiceRows();
+  const cur = currentVoiceUri();
+  const list = $('voiceList');
+  list.innerHTML = '';
+  const shown = voiceShowAll ? [...rows, ...others] : rows;
+  for (const o of shown) {
+    const row = document.createElement('div');
+    const on = !!o.uri && o.uri === cur;
+    row.className = 'voice-row' + (on ? ' on' : '') + (o.missing ? ' missing' : '');
+    row.innerHTML = `<span class="tick">${on ? '✓' : ''}</span><span class="who"><b>${escapeHtml(o.name)}</b><small>${escapeHtml(o.sub)}</small></span>` +
+      (o.uri ? `<button type="button" class="play" aria-label="Play ${escapeHtml(o.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg></button>` : '');
+    row.addEventListener('click', (e) => {
+      if (!o.uri) return;
+      voice.unlock();
+      settings.voice = o.uri;
+      voice.setVoice(o.uri);
+      saveSettings(settings);
+      renderVoices();
+      if (e.target.closest('.play')) voice.preview(o.uri);
+    });
+    list.appendChild(row);
+  }
+  const hint = $('voiceHint');
+  if (houseMissing.length) {
+    hint.hidden = false;
+    hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
+  } else hint.hidden = true;
+  $('voiceMore').hidden = voiceShowAll || !others.length;
+  $('voiceBtn').textContent = voiceLabelText();
+}
+$('voiceMore').addEventListener('click', () => { voiceShowAll = true; renderVoices(); });
+voice.synth?.addEventListener?.('voiceschanged', () => { if (!$('settings').hidden) renderVoices(); });
+
+function setSegment(id, value) {
+  for (const b of $(id).querySelectorAll('button')) { const on = b.dataset.v === String(value); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+}
+function renderSettings() {
+  renderVoices();
+  setSegment('setUnits', settings.units);
+  setSegment('setWarn', settings.warnM);
+  for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
+  setSegment('setLang', settings.language);
+  $('setSplits').checked = settings.splits;
+  $('setLandmarks').checked = settings.landmarks;
+  $('setQuiet').checked = settings.quiet;
+  $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet;
+  $('setFollow').checked = settings.follow;
+  $('setAwake').checked = settings.awake;
+  $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
+}
+$('setUnits').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.units) return;
+  settings.units = b.dataset.v;
+  saveSettings(settings);
+  setSegment('setUnits', settings.units);
+  applyUnits();
+  renderSettings();
+});
+$('setWarn').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  settings.warnM = Number(b.dataset.v);
+  saveSettings(settings);
+  setSegment('setWarn', settings.warnM);
+});
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setAwake', 'awake']]) {
+  $(id).addEventListener('change', (e) => {
+    settings[key] = e.target.checked;
+    saveSettings(settings);
+    if (key === 'quiet') { $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet; }
+    if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
+    if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
+  });
+}
+$('setUpdate').addEventListener('click', async () => {
+  toast('Checking for a new version…');
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+    const res = await fetch(`index.html?x=${Date.now()}`, { cache: 'no-store' });
+    const html = await res.text();
+    const live = html.match(/data-build="([^"]+)"/)?.[1];
+    const here = $('buildTag')?.dataset.build;
+    if (live && live !== here) toast(`Version ${live} is out. It loads the next time you open the app (or reload now).`);
+    else toast(`You have the latest version (${here}).`);
+  } catch {
+    toast('Could not check right now.');
+  }
+});
+function openSettings() {
+  openDrawer(false);
+  $('terms').hidden = true;
+  $('install').hidden = true;
+  voice.unlock();
+  renderSettings();
+  $('settings').hidden = false;
+  $('settings').scrollTop = 0;
+  highlightNav('settings');
+}
+$('settingsBack').addEventListener('click', () => { $('settings').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 
 // ---------- Report a problem ----------
 // A runner who meets a locked gate, a road without a sidewalk or a wrong turn can say so
@@ -863,7 +1025,7 @@ const fmtTime = (ms) => {
   const ss = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
-const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m < 100 ? Math.max(10, Math.round(m / 10) * 10) : Math.round(m / 50) * 50} m`);
+const fmtDist = (m) => (U.mi ? U.len(m) : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m < 100 ? Math.max(10, Math.round(m / 10) * 10) : Math.round(m / 50) * 50} m`);
 
 async function startRun({ demo }) {
   const route = state.routes[state.selected];
@@ -873,8 +1035,10 @@ async function startRun({ demo }) {
   const navigator_ = new Navigator(route, {
     speak: (parts, opts) => voice.say(parts, opts),
     now: demo ? () => clock.t : () => Date.now(),
+    units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
   });
-  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: true, rate: 6 });
+  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
+  $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
   startMarker?.dragging?.disable(); // the start stays put during the run
@@ -898,7 +1062,7 @@ async function startRun({ demo }) {
   map.setView(route.latlngs[0], 17);
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
-  const locked = await screenLock.acquire();
+  const locked = settings.awake ? await screenLock.acquire() : false;
   if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = locked
     ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
@@ -996,9 +1160,9 @@ function render(v) {
   }
   showAlert(null);
   $('statTime').textContent = fmtTime(v.elapsed);
-  $('statDist').textContent = (v.odometer / 1000).toFixed(2);
-  $('statPace').textContent = paceShort(v.pace);
-  $('statLeft').textContent = (v.remaining / 1000).toFixed(1);
+  $('statDist').textContent = U.num(v.odometer, 2);
+  $('statPace').textContent = U.pace(v.pace);
+  $('statLeft').textContent = U.num(v.remaining, 1);
   $('navProgress').style.width = `${Math.min(100, (v.progress / n.navigator.total) * 100)}%`;
 
   // Done part of the route in grey, the runner's dot, and the map following.
@@ -1020,9 +1184,9 @@ function showFinish(v) {
   if (!n) return;
   n.source?.stop();
   $('finishStats').innerHTML = `
-    <div><b>${(v.odometer / 1000).toFixed(2)}</b><span>km</span></div>
+    <div><b>${U.num(v.odometer, 2)}</b><span>${U.unit}</span></div>
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
-    <div><b>${paceShort(v.pace)}</b><span>min/km</span></div>`;
+    <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
   $('navFinish').hidden = false;
 }
 
@@ -1197,10 +1361,13 @@ function navigate(target) {
   if (target === 'home') {
     $('terms').hidden = true;
     $('install').hidden = true;
+    $('settings').hidden = true;
     setView('home');
     highlightNav(null);
     return;
   }
+  if (target === 'settings') return openSettings();
+  $('settings').hidden = true;
   if (target === 'terms' || target === 'install') {
     for (const id of ['terms', 'install']) $(id).hidden = id !== target;
     $(target).scrollTop = 0;
@@ -1228,7 +1395,8 @@ setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 
 // Expose for testing/debugging.
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate };
+applyUnits();
+window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings };
 
 // Arriving somewhere new: try to find the runner right away.
 locate({ quiet: true });

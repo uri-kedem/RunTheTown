@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=81c1f52f" />
+    <link rel="manifest" href="manifest.webmanifest?v=5797485b" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=81c1f52f" />
+    <link rel="stylesheet" href="css/style.css?v=5797485b" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -37,10 +37,13 @@
       <button type="button" class="rail-item" data-nav="install" id="railInstall">
         <img class="ic mark install" src="img/install-outline.2d915cdb.png" alt="" /><span>Install on your phone</span>
       </button>
+      <button type="button" class="rail-item" data-nav="settings">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg><span>Settings</span>
+      </button>
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="81c1f52f">81c1f52f</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="5797485b">5797485b</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -152,6 +155,52 @@
       </div>
     </section>
 
+    <!-- Settings -->
+    <section class="page" id="settings" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="settingsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title">Settings</div>
+      </div>
+      <div class="page-body settings">
+        <h2>Voice</h2>
+        <p class="set-sub">Who reads your directions. Tap Play to hear a sample.</p>
+        <div class="voice-list" id="voiceList"></div>
+        <p class="set-hint" id="voiceHint" hidden></p>
+        <button type="button" class="link" id="voiceMore" hidden>More voices on this phone</button>
+
+        <h2>Units</h2>
+        <div class="segmented" id="setUnits" role="radiogroup">
+          <button type="button" data-v="km" role="radio" aria-checked="true" class="on">Kilometers</button>
+          <button type="button" data-v="mi" role="radio" aria-checked="false">Miles</button>
+        </div>
+
+        <h2>Announcements</h2>
+        <label class="set-row"><span><b>Splits</b><small>Every kilometer or mile: time, pace, distance to go</small></span><input type="checkbox" id="setSplits" class="switch" /></label>
+        <label class="set-row"><span><b>Landmarks</b><small>Sights called out as you pass them on a tour</small></span><input type="checkbox" id="setLandmarks" class="switch" /></label>
+        <label class="set-row"><span><b>Quiet mode</b><small>Only turns and off-route warnings</small></span><input type="checkbox" id="setQuiet" class="switch" /></label>
+        <div class="set-row"><span><b>Warn before a turn</b><small>How far ahead the next turn is announced</small></span></div>
+        <div class="segmented" id="setWarn" role="radiogroup">
+          <button type="button" data-v="100" role="radio" aria-checked="false">100 m</button>
+          <button type="button" data-v="200" role="radio" aria-checked="true" class="on">200 m</button>
+          <button type="button" data-v="300" role="radio" aria-checked="false">300 m</button>
+        </div>
+
+        <h2>Language</h2>
+        <div class="segmented" id="setLang" role="radiogroup">
+          <button type="button" data-v="en" role="radio" aria-checked="true" class="on">English</button>
+          <button type="button" data-v="he" role="radio" aria-checked="false" disabled>עברית · soon</button>
+        </div>
+
+        <h2>Map during the run</h2>
+        <label class="set-row"><span><b>Follow me</b><small>The map moves with you; drag it to look around, tap Re-center to come back</small></span><input type="checkbox" id="setFollow" class="switch" /></label>
+        <label class="set-row"><span><b>Keep the screen on</b><small>Directions stop if the phone locks</small></span><input type="checkbox" id="setAwake" class="switch" /></label>
+
+        <h2>About</h2>
+        <div class="set-row"><span><b>RunTheTown</b><small>Version <span id="settingsBuild"></span> · Map data © OpenStreetMap contributors</small></span><button type="button" class="ghost" id="setUpdate">Check for update</button></div>
+        <p class="set-hint"><button type="button" class="link" data-nav="terms">Terms &amp; policy</button></p>
+      </div>
+    </section>
+
     <div id="map" aria-label="Map"></div>
 
     <header class="topbar">
@@ -199,11 +248,11 @@
         <div class="spots-empty" id="spotsEmpty" hidden>No athletics track, stadium or park loop was found within 8 km of this start. Try another start, or run the streets.</div>
 
         <div class="field streets-only">
-          <div class="field-head"><label for="distanceInput">Distance</label><span class="hint">1–42.2 km</span></div>
+          <div class="field-head"><label for="distanceInput">Distance</label><span class="hint" id="distanceHint">1–42.2 km</span></div>
           <div class="distance-value" id="distanceBox">
             <input id="distanceInput" type="text" inputmode="decimal" autocomplete="off" value="5" placeholder="10"
               aria-label="Distance in kilometers" aria-describedby="distanceMsg" />
-            <span>km</span>
+            <span id="distanceUnit">km</span>
           </div>
           <div class="distance-msg" id="distanceMsg" aria-live="polite"></div>
         </div>
@@ -253,13 +302,14 @@
     <div class="ask" id="routeAsk" hidden>
       <div class="ask-card route-card-pop">
         <div class="ask-title" id="routeAskName"></div>
-        <div class="route-pop-dist"><b id="routeAskDist"></b> km</div>
+        <div class="route-pop-dist"><b id="routeAskDist"></b> <span id="routeAskUnit">km</span></div>
         <ul class="route-pop-facts" id="routeAskFacts"></ul>
         <button type="button" class="primary" id="startRunBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>Start run with voice guidance
         </button>
         <div class="route-pop-foot">
           <button type="button" class="link" id="routeAskClose">Back to the routes</button>
+          <button type="button" class="link" id="voiceBtn" data-nav="settings">Voice</button>
           <button type="button" class="link" id="reportRouteBtn">Report a problem</button>
           <button type="button" class="link" id="demoRunBtn">Demo run (no GPS)</button>
         </div>
@@ -288,9 +338,9 @@
         <div class="nav-progress"><i id="navProgress"></i></div>
         <div class="nav-stats">
           <div><b id="statTime">0:00</b><span>time</span></div>
-          <div><b id="statDist">0.00</b><span>km run</span></div>
-          <div><b id="statPace">–:––</b><span>min/km</span></div>
-          <div><b id="statLeft">0.0</b><span>km to go</span></div>
+          <div><b id="statDist">0.00</b><span id="statDistLabel">km run</span></div>
+          <div><b id="statPace">–:––</b><span id="statPaceLabel">min/km</span></div>
+          <div><b id="statLeft">0.0</b><span id="statLeftLabel">km to go</span></div>
         </div>
         <div class="nav-buttons">
           <button type="button" id="muteBtn" aria-pressed="false">
@@ -320,13 +370,13 @@
         <div class="ask-sub">How many kilometers do you want to run?</div>
         <div class="distance-value" id="lapsBox">
           <input id="lapsKm" type="text" inputmode="decimal" autocomplete="off" placeholder="–" aria-label="Distance in kilometers" />
-          <span>km</span>
+          <span id="lapsUnit">km</span>
         </div>
         <div class="chips quick" id="lapsQuick">
-          <button type="button" data-km="3">3 km</button>
-          <button type="button" data-km="5">5 km</button>
-          <button type="button" data-km="8">8 km</button>
-          <button type="button" data-km="10">10 km</button>
+          <button type="button" data-km="3" data-mi="2">3 km</button>
+          <button type="button" data-km="5" data-mi="3">5 km</button>
+          <button type="button" data-km="8" data-mi="5">8 km</button>
+          <button type="button" data-km="10" data-mi="6">10 km</button>
         </div>
         <div class="distance-msg" id="lapsMsg" aria-live="polite"></div>
         <div class="ask-actions">
@@ -365,6 +415,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=81c1f52f"></script>
+    <script src="js/bundle.js?v=5797485b"></script>
   </body>
 </html>

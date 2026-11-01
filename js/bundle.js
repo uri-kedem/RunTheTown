@@ -4545,20 +4545,43 @@ const WINDOW_AHEAD = 400; // ...and this far ahead (stops jumping to a parallel 
 const HEBREW = /[֐-׿]/;
 const NAV_COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 
+const MILE = 1609.344;
+const FOOT = 0.3048;
+
 function roundDist(m) {
   if (m < 100) return Math.max(10, Math.round(m / 10) * 10);
   if (m < 1000) return Math.round(m / 50) * 50;
   return Math.round(m / 100) * 100;
 }
-function distText(m) {
+// Spoken distance: metres and kilometres, or feet and miles ("In 500 feet", "a quarter mile").
+function distText(m, units = 'km') {
+  if (units === 'mi') {
+    const mi = m / MILE;
+    if (mi >= 0.95) { const r = Math.round(mi * 10) / 10; return `${r === 1 ? 'one mile' : `${String(r).replace(/\.0$/, '')} miles`}`; }
+    if (mi >= 0.7) return 'three quarters of a mile';
+    if (mi >= 0.45) return 'half a mile';
+    if (mi >= 0.22) return 'a quarter mile';
+    const ft = m / FOOT;
+    return `${Math.max(50, Math.round(ft / 50) * 50)} feet`;
+  }
   const r = roundDist(m);
   return r >= 1000 ? `${(r / 1000).toFixed(1).replace(/\.0$/, '')} kilometers` : `${r} meters`;
 }
-function paceText(secPerKm) {
+function paceText(secPerKm, units = 'km') {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0) return '';
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return s ? `${m} minutes ${s} seconds per kilometer` : `${m} minutes per kilometer`;
+  const per = units === 'mi' ? secPerKm * (MILE / 1000) : secPerKm;
+  const m = Math.floor(per / 60);
+  const s = Math.round(per % 60);
+  const unit = units === 'mi' ? 'mile' : 'kilometer';
+  return s ? `${m} minutes ${s} seconds per ${unit}` : `${m} minutes per ${unit}`;
+}
+// On-screen length: "3.2 km" / "450 m", or "2.0 mi" / "800 ft".
+function lenText(m, units = 'km', { decimals = 1 } = {}) {
+  if (units === 'mi') {
+    const mi = m / MILE;
+    return mi >= 0.2 ? `${mi.toFixed(decimals)} mi` : `${Math.round(m / FOOT / 10) * 10} ft`;
+  }
+  return m >= 1000 ? `${(m / 1000).toFixed(decimals)} km` : `${Math.round(m)} m`;
 }
 function paceShort(secPerKm) {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return '–:––';
@@ -4586,14 +4609,14 @@ function cueAction(c) {
   }
 }
 
-function cueSpeech(c, { ahead = null } = {}) {
-  const lead = ahead != null ? `In ${distText(ahead)}, ` : '';
+function cueSpeech(c, { ahead = null, units = 'km' } = {}) {
+  const lead = ahead != null ? `In ${distText(ahead, units)}, ` : '';
   const onto = c.street ? [' onto ', c.street] : [];
   if (c.type === 'turn' && !c.dir && c.text) return msg(ahead != null ? `${lead}${c.text[0].toLowerCase()}${c.text.slice(1)}` : c.text);
   switch (c.type) {
     case 'lap': return msg(`Lap ${c.lap} of ${c.laps}.`);
     case 'uturn': return msg(`${lead}${ahead != null ? 'turn around' : 'Turn around and head back the same way'}`);
-    case 'arrive': return msg(ahead != null ? `In ${distText(ahead)}, you'll be back at the start` : 'You have arrived back at the start');
+    case 'arrive': return msg(ahead != null ? `In ${distText(ahead, units)}, you'll be back at the start` : 'You have arrived back at the start');
     case 'slight': return msg(`${lead}${ahead != null ? 'b' : 'B'}ear ${c.dir}`, ...onto);
     case 'sharp': return msg(`${lead}${ahead != null ? 'm' : 'M'}ake a sharp ${c.dir}`, ...onto);
     default: return msg(`${lead}${ahead != null ? 't' : 'T'}urn ${c.dir}`, ...onto);
@@ -4606,15 +4629,24 @@ const lower = (parts) => parts.map((p, i) => (i === 0 ? { ...p, text: p.text[0].
  * (for the screen) and pushes spoken messages to opts.speak(parts, {priority}).
  */
 class Navigator {
-  constructor(route, { speak = () => {}, now = () => Date.now() } = {}) {
+  /**
+   * opts: speak, now, and the runner's settings: units 'km' | 'mi', splits (every km / mile),
+   * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
+   * ahead a turn is announced, m).
+   */
+  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX } = {}) {
     this.speak = speak;
     this.now = now;
+    this.units = units;
+    this.splitM = units === 'mi' ? MILE : 1000;
+    this.saying = { splits: splits && !quiet, landmarks: landmarks && !quiet, quiet };
+    this.warnM = Math.max(PRE_MIN + 20, warnM);
     this.proj = makeProjection(route.latlngs[0][0], route.latlngs[0][1]);
     this.setRoute(route);
     this.odometer = 0; // meters actually run (from GPS), for splits and pace
     this.anchor = null;
     this.moving = null; // heading of travel (deg), from recent movement
-    this.nextSplit = 1000;
+    this.nextSplit = this.splitM;
     this.lastSplit = { t: 0, odo: 0 };
     this.elapsed = 0; // ms, excluding pauses
     this.paused = false;
@@ -4674,7 +4706,7 @@ class Navigator {
     const d = this.route.cues?.[0];
     this.speak(
       msg(
-        `Starting your ${(this.total / 1000).toFixed(1)} kilometer run. `,
+        `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
         d?.street ? ' on ' : null,
         d?.street || null,
@@ -4806,7 +4838,7 @@ class Navigator {
   offRouteSpeech(x, y, snap) {
     const dx = snap.x - x, dy = snap.y - y;
     const bearing = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-    const far = distText(snap.dist);
+    const far = distText(snap.dist, this.units);
     const what = this.progress < 30 ? 'Head to the start of the route. It' : "You're off the route. It";
     if (this.moving != null) {
       const rel = ((bearing - this.moving + 540) % 360) - 180; // + = right
@@ -4829,7 +4861,7 @@ class Navigator {
         c.pre = c.now = true; // passed (e.g. GPS skipped it)
         continue;
       }
-      if (ahead > PRE_MAX) break;
+      if (ahead > this.warnM) break;
       if (c.type === 'arrive') break; // handled by finish()
       if (c.type === 'lap') {
         // Lap counts are said once, as the lap starts; never announced ahead.
@@ -4851,7 +4883,7 @@ class Navigator {
         // Only the next turn gets an early heads-up.
         if (!c.pre && ahead > PRE_MIN) {
           c.pre = true;
-          this.speak(cueSpeech(c, { ahead }), { priority: 1 });
+          this.speak(cueSpeech(c, { ahead, units: this.units }), { priority: 1 });
         }
         break;
       }
@@ -4859,6 +4891,7 @@ class Navigator {
   }
 
   announceSights() {
+    if (!this.saying.landmarks) return;
     for (const s of this.sights) {
       if (s.said) continue;
       const ahead = s.at - this.progress;
@@ -4873,15 +4906,17 @@ class Navigator {
 
   announceSplit() {
     if (this.odometer < this.nextSplit) return;
-    const km = Math.round(this.nextSplit / 1000);
+    const n = Math.round(this.nextSplit / this.splitM);
     const dt = (this.elapsed - this.lastSplit.t) / 1000;
-    const dd = (this.odometer - this.lastSplit.odo) / 1000;
+    const dd = (this.odometer - this.lastSplit.odo) / 1000; // km
     this.lastSplit = { t: this.elapsed, odo: this.odometer };
-    this.nextSplit += 1000;
+    this.nextSplit += this.splitM;
+    if (!this.saying.splits) return;
     const left = Math.max(0, this.total - this.progress);
-    const parts = [`${km} kilometer${km > 1 ? 's' : ''}.`];
-    if (dd > 0.5) parts.push(`Last kilometer ${paceText(dt / dd)}.`);
-    if (left > 300) parts.push(`${distText(left)} to go.`);
+    const unit = this.units === 'mi' ? 'mile' : 'kilometer';
+    const parts = [`${n} ${unit}${n > 1 ? 's' : ''}.`];
+    if (dd > 0.5 * (this.splitM / 1000)) parts.push(`Last ${unit} ${paceText(dt / dd, this.units)}.`);
+    if (left > 300) parts.push(`${distText(left, this.units)} to go.`);
     this.speak(msg(parts.join(' ')), { priority: 1 });
   }
 
@@ -4890,8 +4925,9 @@ class Navigator {
     this.progress = this.total;
     this.seg = this.xy.length - 2;
     const mins = Math.round(this.elapsed / 60000);
-    const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000))}.` : '';
-    this.speak(msg(`You have arrived back at the start. Great run! ${(this.odometer / 1000).toFixed(1)} kilometers in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
+    const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
+    const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
+    this.speak(msg(`You have arrived back at the start. Great run! ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 
   /** Everything the screen needs. */
@@ -4934,16 +4970,68 @@ class Voice {
     this.voices = { en: null, he: null };
     this.log = []; // everything said (for tests and the on-screen caption)
     this.onSay = null;
+    this.preferred = null; // voiceURI the runner chose, or null for the default
     if (synth) {
       const pick = () => {
         const vs = synth.getVoices?.() || [];
-        const by = (re) => vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
-        this.voices.en = by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
+        const siri = (v) => /siri/i.test(v.name) && /siri/i.test(v.voiceURI + ' ' + v.name) && !/compact/i.test(v.voiceURI); // a downloaded Siri voice, when the browser exposes it
+        const good = (v) => /enhanced|premium/i.test(v.voiceURI + v.name); // the better copy of a phone voice
+        const by = (re) => vs.find((v) => re.test(v.lang) && v.localService && siri(v)) || vs.find((v) => re.test(v.lang) && v.localService && good(v)) || vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
+        const chosen = this.preferred && vs.find((v) => v.voiceURI === this.preferred);
+        this.voices.en = chosen || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
         this.voices.he = by(/^(he|iw)/i) || null;
       };
+      this.pick = pick;
       pick();
       synth.addEventListener?.('voiceschanged', pick);
     }
+  }
+  /** The runner's choice of English voice (a voiceURI); null goes back to the default. */
+  setVoice(uri) {
+    this.preferred = uri || null;
+    this.pick?.();
+  }
+  /**
+   * Up to `max` English voices worth offering, the well-known phone voices first
+   * (one entry per name; the enhanced version of a voice wins over its compact one).
+   * Each: { uri, name, lang, accent, current }.
+   */
+  options(max = 5) {
+    const vs = this.synth?.getVoices?.() || [];
+    const ACCENT = { US: 'American', GB: 'British', AU: 'Australian', IE: 'Irish', ZA: 'South African', IN: 'Indian', CA: 'Canadian', NZ: 'New Zealand' };
+    const FAVOURITES = ['siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
+    const en = vs.filter((v) => /^en[-_]/i.test(v.lang));
+    const byName = new Map();
+    for (const v of en) {
+      const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase();
+      const better = /enhanced|premium/i.test(v.voiceURI + v.name) || (v.localService && !byName.get(key)?.localService);
+      if (!byName.has(key) || better) byName.set(key, v);
+    }
+    const rank = (v) => {
+      const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase();
+      const i = FAVOURITES.findIndex((f) => key.startsWith(f));
+      return (i < 0 ? 100 : i) + (v.localService ? 0 : 50);
+    };
+    const current = this.voices.en?.voiceURI;
+    return [...byName.values()].sort((a, b) => rank(a) - rank(b)).slice(0, max).map((v) => ({
+      uri: v.voiceURI,
+      name: v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').replace(/^(Google|Microsoft)\s+/i, ''),
+      lang: v.lang,
+      accent: ACCENT[(v.lang.split(/[-_]/)[1] || '').toUpperCase()] || v.lang,
+      current: v.voiceURI === current,
+    }));
+  }
+  /** Speaks a sample cue with one voice (from a tap), without touching the run's queue. */
+  preview(uri, text = 'In 200 meters, turn left onto Rothschild Boulevard. Then keep going along the promenade.') {
+    if (!this.synth) return;
+    const v = (this.synth.getVoices?.() || []).find((x) => x.voiceURI === uri);
+    try { this.synth.cancel(); } catch {}
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = v?.lang || 'en-US';
+    if (v) u.voice = v;
+    u.rate = 1.02;
+    this.current = u;
+    try { this.synth.speak(u); } catch {}
   }
   get available() { return !!this.synth; }
   /** Must be called from a tap (iOS only allows speech that starts from a user action). */
@@ -5114,8 +5202,74 @@ class SimulatedRun {
   stop() { clearInterval(this.timer); }
 }
 
+// ---- settings.js ----
+// The runner's settings, kept on the phone (localStorage 'rtt-settings'). Every value has
+// a default, unknown keys are ignored, and reading never throws: a private window or a
+// blocked storage just means the defaults.
+
+const DEFAULTS = Object.freeze({
+  voice: null, // voiceURI of the chosen English voice, or null for the house voice
+  units: 'km', // 'km' | 'mi'
+  splits: true, // say every kilometre / mile with the pace
+  landmarks: true, // call out sights on a tour
+  quiet: false, // only turns and off-route warnings
+  warnM: 200, // how far ahead a turn is announced: 100 | 200 | 300
+  follow: true, // the map follows the runner
+  awake: true, // keep the screen on during a run
+  language: 'en', // 'en' for now; 'he' is coming
+});
+
+const KEY = 'rtt-settings';
+
+function loadSettings(storage = globalThis.localStorage) {
+  const out = { ...DEFAULTS };
+  try {
+    const raw = storage?.getItem(KEY);
+    const saved = raw ? JSON.parse(raw) : {};
+    for (const k of Object.keys(DEFAULTS)) {
+      if (!(k in saved)) continue;
+      const ok = k === 'voice' ? saved[k] == null || typeof saved[k] === 'string' : typeof saved[k] === typeof DEFAULTS[k];
+      if (ok) out[k] = saved[k];
+    }
+    // The voice used to be kept on its own; carry it over once.
+    const oldVoice = storage?.getItem('rtt-voice');
+    if (oldVoice && !out.voice) out.voice = oldVoice;
+  } catch {
+    /* defaults */
+  }
+  if (!['km', 'mi'].includes(out.units)) out.units = 'km';
+  if (![100, 200, 300].includes(out.warnM)) out.warnM = 200;
+  return out;
+}
+
+function saveSettings(settings, storage = globalThis.localStorage) {
+  try {
+    const slim = {};
+    for (const k of Object.keys(DEFAULTS)) if (k in settings) slim[k] = settings[k];
+    storage?.setItem(KEY, JSON.stringify(slim));
+    storage?.removeItem('rtt-voice');
+  } catch {
+    /* storage full or blocked: the setting still holds for this session */
+  }
+}
+
+// The two house voices: Zoe (female) and Tom (male), the best copy of each that is on the
+// phone (Premium over Enhanced over compact). `voices` is speechSynthesis.getVoices().
+const HOUSE_VOICES = [
+  { id: 'zoe', name: 'Zoe', gender: 'female', match: /^zoe\b/i },
+  { id: 'tom', name: 'Tom', gender: 'male', match: /^tom\b/i },
+];
+function houseVoices(voices) {
+  const grade = (v) => (/premium/i.test(v.voiceURI + v.name) ? 3 : /enhanced/i.test(v.voiceURI + v.name) ? 2 : 1);
+  return HOUSE_VOICES.map((h) => {
+    const found = voices.filter((v) => /^en[-_]/i.test(v.lang) && h.match.test(v.name)).sort((a, b) => grade(b) - grade(a))[0] || null;
+    return { ...h, voice: found, quality: found ? ['', 'standard', 'enhanced', 'premium'][grade(found)] : null };
+  });
+}
+
 // ---- app.js ----
 // UI: map, start point, preferences and route results.
+
 
 
 
@@ -5126,6 +5280,21 @@ class SimulatedRun {
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
 const $ = (id) => document.getElementById(id);
+
+// ---------- Settings (kept on the phone) ----------
+const settings = loadSettings();
+// Units on screen: numbers in km or miles, short lengths in m or ft.
+const U = {
+  get mi() { return settings.units === 'mi'; },
+  get unit() { return settings.units === 'mi' ? 'mi' : 'km'; },
+  num(m, dec = 1) { return (this.mi ? m / MILE : m / 1000).toFixed(dec); }, // "5.2"
+  len(m) { return lenText(m, settings.units); }, // "5.2 km" / "450 m"
+  lenShort(m) { return this.mi ? lenText(m, 'mi') : m >= 1000 ? `${(m / 1000).toFixed(1).replace(/\.0$/, '')} km` : `${Math.round(m / 10) * 10} m`; },
+  toKm(v) { return this.mi ? v * (MILE / 1000) : v; }, // a typed distance -> km
+  fromKm(km) { return this.mi ? km / (MILE / 1000) : km; },
+  pace(secPerKm) { return paceShort(this.mi ? secPerKm * (MILE / 1000) : secPerKm); },
+  paceLabel() { return this.mi ? 'min/mi' : 'min/km'; },
+};
 
 const state = {
   start: null, // { lat, lon, label }
@@ -5226,8 +5395,8 @@ function previewSpots() {
     if (!state.routes.length) drawPlaces(spots, $('spotsPrefs'));
     hint.hidden = false;
     hint.textContent = spots.length
-      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within 8 km · tap one to plan your laps`
-      : final ? 'No athletics tracks or stadiums within 8 km of here' : 'Looking for running tracks and parks nearby…';
+      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within ${U.lenShort(8000)} · tap one to plan your laps`
+      : final ? `No athletics tracks or stadiums within ${U.lenShort(8000)} of here` : 'Looking for running tracks and parks nearby…';
     $('spotsEmpty').hidden = !(final && !spots.length);
   };
   previewSpots.timer = setTimeout(async () => {
@@ -5455,17 +5624,20 @@ const LONG_RUN_KM = 15;
 state.distanceValid = true;
 
 // The runner types the distance. Accepts "10", "7.5" or "7,5".
+// Limits in the unit on screen (the planner works in km).
+const limits = () => ({ min: Math.round(U.fromKm(MIN_KM) * 10) / 10, max: Math.round(U.fromKm(MAX_DISTANCE_KM) * 10) / 10 });
 function readDistance() {
   const raw = $('distanceInput').value.trim().replace(',', '.');
   const v = Number(raw);
-  const ok = raw !== '' && Number.isFinite(v) && v >= MIN_KM && v <= MAX_DISTANCE_KM;
+  const { min, max } = limits();
+  const ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
   state.distanceValid = ok;
-  if (ok) state.distanceKm = Math.round(v * 10) / 10;
+  if (ok) state.distanceKm = Math.round(U.toKm(v) * 10) / 10;
   $('distanceBox').classList.toggle('invalid', !ok && raw !== '');
   const msg = $('distanceMsg');
   msg.classList.toggle('error', !ok);
-  if (!ok) msg.textContent = raw === '' ? 'Type how many kilometers you want to run' : `Enter a distance between ${MIN_KM} and ${MAX_DISTANCE_KM} km`;
-  else if (v > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
+  if (!ok) msg.textContent = raw === '' ? `Type how many ${U.mi ? 'miles' : 'kilometers'} you want to run` : `Enter a distance between ${min} and ${max} ${U.unit}`;
+  else if (state.distanceKm > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
   else msg.textContent = '';
   updateGoButton();
 }
@@ -5522,11 +5694,12 @@ $('goBtn').addEventListener('click', async () => {
 });
 
 let lastTapped = -1; // the route the runner tapped last: a second tap on it opens the pop-up
-function showRoutes(routes) {
-  lastTapped = -1;
+function showRoutes(routes, { keep = false } = {}) {
+  const keepIdx = keep ? state.selected : 0;
+  if (!keep) lastTapped = -1;
   $('prefsView').hidden = true;
   $('resultsView').hidden = false;
-  const bits = [`${state.distanceKm} km`];
+  const bits = [`${U.num(state.distanceKm * 1000)} ${U.unit}`];
   const p = state.prefs;
   if (p.green) bits.push('parks');
   if (p.water) bits.push('waterfront');
@@ -5549,7 +5722,7 @@ function showRoutes(routes) {
     // landmarks on a tour) and the elevation profile.
     card.innerHTML = `
       <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
-      <div class="card-dist">${(r.distance / 1000).toFixed(2)}<small>km</small></div>
+      <div class="card-dist">${U.num(r.distance, 2)}<small>${U.unit}</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
     // First tap picks the route (map and card light up); a second tap on it opens the pop-up.
@@ -5558,11 +5731,11 @@ function showRoutes(routes) {
   });
   drawRoutes();
   drawPlaces(routes.places || []);
-  selectRoute(0, { fit: true });
+  selectRoute(keepIdx, { fit: !keep });
 }
 
 // ---------- Running spots: athletics tracks and big parks ----------
-const fmtKmShort = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace(/\.0$/, '')} km` : `${Math.round(m / 10) * 10} m`);
+const fmtKmShort = (m) => U.lenShort(m);
 const PLACE_ICON = {
   track: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="6"/><rect x="7.5" y="9.5" width="9" height="5" rx="2.5"/></svg>',
   stadium: '<svg viewBox="0 0 24 24"><path d="M3 9c0-2 4-3.5 9-3.5s9 1.5 9 3.5v6c0 2-4 3.5-9 3.5S3 17 3 15z"/><path d="M3 9c0 2 4 3.5 9 3.5s9-1.5 9-3.5"/></svg>',
@@ -5650,7 +5823,7 @@ function runAtPlace(i) {
   askedPlace = place;
   $('lapsAskTitle').textContent = place.kind === 'park' ? `Loops in ${place.name}` : `Laps at ${place.name}`;
   $('lapsKm').value = '';
-  $('lapsMsg').textContent = place.lapM ? `One ${place.kind === 'park' ? 'loop' : 'lap'} is ${place.lapM >= 1000 ? (place.lapM / 1000).toFixed(1) + ' km' : place.lapM + ' m'}` : '';
+  $('lapsMsg').textContent = place.lapM ? `One ${place.kind === 'park' ? 'loop' : 'lap'} is ${U.len(place.lapM)}` : '';
   $('lapsMsg').classList.remove('error');
   $('lapsGo').disabled = true;
   $('lapsAsk').hidden = false;
@@ -5659,19 +5832,20 @@ function runAtPlace(i) {
 function readLapsKm() {
   const raw = $('lapsKm').value.trim().replace(',', '.');
   const v = Number(raw);
-  const ok = raw !== '' && Number.isFinite(v) && v >= MIN_KM && v <= MAX_DISTANCE_KM;
+  const { min, max } = limits();
+  const ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
   $('lapsGo').disabled = !ok;
   $('lapsBox').classList.toggle('invalid', !ok && raw !== '');
   const msg = $('lapsMsg');
   msg.classList.toggle('error', !ok && raw !== '');
-  if (!ok && raw !== '') msg.textContent = `Enter a distance between ${MIN_KM} and ${MAX_DISTANCE_KM} km`;
+  if (!ok && raw !== '') msg.textContent = `Enter a distance between ${min} and ${max} ${U.unit}`;
   else if (ok && askedPlace?.ring && state.start) {
     // What that distance means here: the real plan (laps, plus the way there and back).
-    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: v, prefs: { ...state.prefs } });
+    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: { ...state.prefs } });
     // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
-    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${(r.distance / 1000).toFixed(1)} km in total` : `Laps plus the way there and back from your start`) : '';
+    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
   }
-  return ok ? Math.round(v * 10) / 10 : null;
+  return ok ? Math.round(U.toKm(v) * 10) / 10 : null;
 }
 function closeLapsAsk() {
   $('lapsAsk').hidden = true;
@@ -5684,7 +5858,7 @@ async function planLaps() {
   if (busy) return toast('Still working on the last search — one moment.');
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
-  $('distanceInput').value = String(km);
+  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
   readDistance();
   // The map must reach from the start to the spot (the spot list looks 8 km out, the
   // preview map only a few), or there is no way there and back to plan.
@@ -5717,7 +5891,7 @@ $('lapsBox').addEventListener('click', () => $('lapsKm').focus());
 $('lapsQuick').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  $('lapsKm').value = b.dataset.km;
+  $('lapsKm').value = U.mi ? b.dataset.mi : b.dataset.km;
   readLapsKm();
 });
 $('lapsGo').addEventListener('click', planLaps);
@@ -5801,7 +5975,7 @@ function drawSights(route, layer) {
   for (const sg of list) {
     const html = `<div class="sight-pin"><i>★</i>${labels ? `<span>${escapeHtml(sg.name)}</span>` : ''}</div>`;
     L.marker([sg.lat, sg.lon], { icon: L.divIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 500 })
-      .bindPopup(`<b>${escapeHtml(sg.name)}</b>${sg.local && sg.local !== sg.name ? `<br><span dir="auto">${escapeHtml(sg.local)}</span>` : ''}<br><small>${escapeHtml(sg.kind || '')} · ${(sg.at / 1000).toFixed(1)} km into the run</small>`)
+      .bindPopup(`<b>${escapeHtml(sg.name)}</b>${sg.local && sg.local !== sg.name ? `<br><span dir="auto">${escapeHtml(sg.local)}</span>` : ''}<br><small>${escapeHtml(sg.kind || '')} · ${U.len(sg.at)} into the run</small>`)
       .addTo(layer);
   }
 }
@@ -5861,7 +6035,9 @@ function openRouteAsk(i) {
   const r = state.routes[i];
   if (!r) return;
   $('routeAskName').textContent = r.name;
-  $('routeAskDist').textContent = (r.distance / 1000).toFixed(2);
+  $('routeAskDist').textContent = U.num(r.distance, 2);
+  $('routeAskUnit').textContent = U.unit;
+  $('voiceBtn').textContent = voiceLabelText();
   $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
   $('routeAsk').hidden = false;
 }
@@ -5873,6 +6049,145 @@ $('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk'))
 $('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
 $('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
 $('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openReport(state.routes[state.selected], null); });
+
+// ---------- Settings page ----------
+// Voice (Zoe and Tom, the house voices, plus the phone's others), units, announcements,
+// language, the map during the run, about. Every change is saved at once and applies to
+// the next run; units apply to the screen right away.
+voice.setVoice(settings.voice);
+
+function applyUnits() {
+  const { min, max } = limits();
+  $('distanceUnit').textContent = U.unit;
+  $('lapsUnit').textContent = U.unit;
+  $('distanceHint').textContent = `${min}–${max} ${U.unit}`;
+  for (const b of $('lapsQuick').querySelectorAll('button')) b.textContent = `${U.mi ? b.dataset.mi : b.dataset.km} ${U.unit}`;
+  $('statDistLabel').textContent = `${U.unit} run`;
+  $('statPaceLabel').textContent = U.paceLabel();
+  $('statLeftLabel').textContent = `${U.unit} to go`;
+  // The typed distance keeps its meaning: shown in the new unit.
+  if (state.distanceValid) $('distanceInput').value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10);
+  readDistance();
+  if (state.routes.length) showRoutes(state.routes, { keep: true });
+  if (!$('routeAsk').hidden && state.routes[state.selected]) openRouteAsk(state.selected);
+  if (state.spots.length && !state.routes.length) drawPlaces(state.spots, $('spotsPrefs'));
+}
+
+const voiceLabelText = () => `Voice: ${voice.voices.en?.name?.replace(/\s*\((enhanced|premium|compact)\)/i, '') || 'default'}`;
+let voiceShowAll = false;
+function voiceRows() {
+  const all = voice.synth?.getVoices?.() || [];
+  const house = houseVoices(all);
+  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not on this phone yet`, missing: !h.voice }));
+  const houseUris = new Set(rows.map((r) => r.uri).filter(Boolean));
+  const others = voice.options(8).filter((o) => !houseUris.has(o.uri) && !/^(zoe|tom)\b/i.test(o.name)).map((o) => ({ uri: o.uri, name: o.name, sub: `${o.accent} English`, missing: false }));
+  return { rows, others, houseMissing: house.filter((h) => !h.voice) };
+}
+function currentVoiceUri() {
+  return voice.voices.en?.voiceURI || null;
+}
+function renderVoices() {
+  const { rows, others, houseMissing } = voiceRows();
+  const cur = currentVoiceUri();
+  const list = $('voiceList');
+  list.innerHTML = '';
+  const shown = voiceShowAll ? [...rows, ...others] : rows;
+  for (const o of shown) {
+    const row = document.createElement('div');
+    const on = !!o.uri && o.uri === cur;
+    row.className = 'voice-row' + (on ? ' on' : '') + (o.missing ? ' missing' : '');
+    row.innerHTML = `<span class="tick">${on ? '✓' : ''}</span><span class="who"><b>${escapeHtml(o.name)}</b><small>${escapeHtml(o.sub)}</small></span>` +
+      (o.uri ? `<button type="button" class="play" aria-label="Play ${escapeHtml(o.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg></button>` : '');
+    row.addEventListener('click', (e) => {
+      if (!o.uri) return;
+      voice.unlock();
+      settings.voice = o.uri;
+      voice.setVoice(o.uri);
+      saveSettings(settings);
+      renderVoices();
+      if (e.target.closest('.play')) voice.preview(o.uri);
+    });
+    list.appendChild(row);
+  }
+  const hint = $('voiceHint');
+  if (houseMissing.length) {
+    hint.hidden = false;
+    hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
+  } else hint.hidden = true;
+  $('voiceMore').hidden = voiceShowAll || !others.length;
+  $('voiceBtn').textContent = voiceLabelText();
+}
+$('voiceMore').addEventListener('click', () => { voiceShowAll = true; renderVoices(); });
+voice.synth?.addEventListener?.('voiceschanged', () => { if (!$('settings').hidden) renderVoices(); });
+
+function setSegment(id, value) {
+  for (const b of $(id).querySelectorAll('button')) { const on = b.dataset.v === String(value); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+}
+function renderSettings() {
+  renderVoices();
+  setSegment('setUnits', settings.units);
+  setSegment('setWarn', settings.warnM);
+  for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
+  setSegment('setLang', settings.language);
+  $('setSplits').checked = settings.splits;
+  $('setLandmarks').checked = settings.landmarks;
+  $('setQuiet').checked = settings.quiet;
+  $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet;
+  $('setFollow').checked = settings.follow;
+  $('setAwake').checked = settings.awake;
+  $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
+}
+$('setUnits').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.units) return;
+  settings.units = b.dataset.v;
+  saveSettings(settings);
+  setSegment('setUnits', settings.units);
+  applyUnits();
+  renderSettings();
+});
+$('setWarn').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  settings.warnM = Number(b.dataset.v);
+  saveSettings(settings);
+  setSegment('setWarn', settings.warnM);
+});
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setAwake', 'awake']]) {
+  $(id).addEventListener('change', (e) => {
+    settings[key] = e.target.checked;
+    saveSettings(settings);
+    if (key === 'quiet') { $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet; }
+    if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
+    if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
+  });
+}
+$('setUpdate').addEventListener('click', async () => {
+  toast('Checking for a new version…');
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+    const res = await fetch(`index.html?x=${Date.now()}`, { cache: 'no-store' });
+    const html = await res.text();
+    const live = html.match(/data-build="([^"]+)"/)?.[1];
+    const here = $('buildTag')?.dataset.build;
+    if (live && live !== here) toast(`Version ${live} is out. It loads the next time you open the app (or reload now).`);
+    else toast(`You have the latest version (${here}).`);
+  } catch {
+    toast('Could not check right now.');
+  }
+});
+function openSettings() {
+  openDrawer(false);
+  $('terms').hidden = true;
+  $('install').hidden = true;
+  voice.unlock();
+  renderSettings();
+  $('settings').hidden = false;
+  $('settings').scrollTop = 0;
+  highlightNav('settings');
+}
+$('settingsBack').addEventListener('click', () => { $('settings').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 
 // ---------- Report a problem ----------
 // A runner who meets a locked gate, a road without a sidewalk or a wrong turn can say so
@@ -5980,7 +6295,7 @@ const fmtTime = (ms) => {
   const ss = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
-const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m < 100 ? Math.max(10, Math.round(m / 10) * 10) : Math.round(m / 50) * 50} m`);
+const fmtDist = (m) => (U.mi ? U.len(m) : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m < 100 ? Math.max(10, Math.round(m / 10) * 10) : Math.round(m / 50) * 50} m`);
 
 async function startRun({ demo }) {
   const route = state.routes[state.selected];
@@ -5990,8 +6305,10 @@ async function startRun({ demo }) {
   const navigator_ = new Navigator(route, {
     speak: (parts, opts) => voice.say(parts, opts),
     now: demo ? () => clock.t : () => Date.now(),
+    units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
   });
-  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: true, rate: 6 });
+  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
+  $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
   startMarker?.dragging?.disable(); // the start stays put during the run
@@ -6015,7 +6332,7 @@ async function startRun({ demo }) {
   map.setView(route.latlngs[0], 17);
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
-  const locked = await screenLock.acquire();
+  const locked = settings.awake ? await screenLock.acquire() : false;
   if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = locked
     ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
@@ -6113,9 +6430,9 @@ function render(v) {
   }
   showAlert(null);
   $('statTime').textContent = fmtTime(v.elapsed);
-  $('statDist').textContent = (v.odometer / 1000).toFixed(2);
-  $('statPace').textContent = paceShort(v.pace);
-  $('statLeft').textContent = (v.remaining / 1000).toFixed(1);
+  $('statDist').textContent = U.num(v.odometer, 2);
+  $('statPace').textContent = U.pace(v.pace);
+  $('statLeft').textContent = U.num(v.remaining, 1);
   $('navProgress').style.width = `${Math.min(100, (v.progress / n.navigator.total) * 100)}%`;
 
   // Done part of the route in grey, the runner's dot, and the map following.
@@ -6137,9 +6454,9 @@ function showFinish(v) {
   if (!n) return;
   n.source?.stop();
   $('finishStats').innerHTML = `
-    <div><b>${(v.odometer / 1000).toFixed(2)}</b><span>km</span></div>
+    <div><b>${U.num(v.odometer, 2)}</b><span>${U.unit}</span></div>
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
-    <div><b>${paceShort(v.pace)}</b><span>min/km</span></div>`;
+    <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
   $('navFinish').hidden = false;
 }
 
@@ -6314,10 +6631,13 @@ function navigate(target) {
   if (target === 'home') {
     $('terms').hidden = true;
     $('install').hidden = true;
+    $('settings').hidden = true;
     setView('home');
     highlightNav(null);
     return;
   }
+  if (target === 'settings') return openSettings();
+  $('settings').hidden = true;
   if (target === 'terms' || target === 'install') {
     for (const id of ['terms', 'install']) $(id).hidden = id !== target;
     $(target).scrollTop = 0;
@@ -6345,7 +6665,8 @@ setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
 
 // Expose for testing/debugging.
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate };
+applyUnits();
+window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings };
 
 // Arriving somewhere new: try to find the runner right away.
 locate({ quiet: true });
