@@ -4978,7 +4978,10 @@ class Voice {
         const good = (v) => /enhanced|premium/i.test(v.voiceURI + v.name); // the better copy of a phone voice
         const by = (re) => vs.find((v) => re.test(v.lang) && v.localService && siri(v)) || vs.find((v) => re.test(v.lang) && v.localService && good(v)) || vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
         const chosen = this.preferred && vs.find((v) => v.voiceURI === this.preferred);
-        this.voices.en = chosen || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
+        // No choice yet: the best-ranked voice (house voices, then the well-known phone voices),
+        // never simply the first one the phone lists (on iPhone that is "Fred").
+        const ranked = chosen ? null : this.options(1)[0];
+        this.voices.en = chosen || (ranked && vs.find((v) => v.voiceURI === ranked.uri)) || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
         this.voices.he = by(/^(he|iw)/i) || null;
       };
       this.pick = pick;
@@ -4999,7 +5002,7 @@ class Voice {
   options(max = 5) {
     const vs = this.synth?.getVoices?.() || [];
     const ACCENT = { US: 'American', GB: 'British', AU: 'Australian', IE: 'Irish', ZA: 'South African', IN: 'Indian', CA: 'Canadian', NZ: 'New Zealand' };
-    const FAVOURITES = ['siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
+    const FAVOURITES = ['zoe', 'tom', 'siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
     const en = vs.filter((v) => /^en[-_]/i.test(v.lang));
     const byName = new Map();
     for (const v of en) {
@@ -5256,13 +5259,14 @@ function saveSettings(settings, storage = globalThis.localStorage) {
 // The two house voices: Zoe (female) and Tom (male), the best copy of each that is on the
 // phone (Premium over Enhanced over compact). `voices` is speechSynthesis.getVoices().
 const HOUSE_VOICES = [
-  { id: 'zoe', name: 'Zoe', gender: 'female', match: /^zoe\b/i },
-  { id: 'tom', name: 'Tom', gender: 'male', match: /^tom\b/i },
+  { id: 'zoe', name: 'Zoe', gender: 'female', match: /\bzoe\b/i },
+  { id: 'tom', name: 'Tom', gender: 'male', match: /\btom\b/i },
 ];
 function houseVoices(voices) {
   const grade = (v) => (/premium/i.test(v.voiceURI + v.name) ? 3 : /enhanced/i.test(v.voiceURI + v.name) ? 2 : 1);
   return HOUSE_VOICES.map((h) => {
-    const found = voices.filter((v) => /^en[-_]/i.test(v.lang) && h.match.test(v.name)).sort((a, b) => grade(b) - grade(a))[0] || null;
+    // The name or the identifier ("com.apple.voice.premium.en-US.Zoe"), whichever iOS fills in.
+    const found = voices.filter((v) => /^en[-_]/i.test(v.lang) && (h.match.test(v.name) || h.match.test(String(v.voiceURI).split('.').pop() || ''))).sort((a, b) => grade(b) - grade(a))[0] || null;
     return { ...h, voice: found, quality: found ? ['', 'standard', 'enhanced', 'premium'][grade(found)] : null };
   });
 }
@@ -6114,10 +6118,21 @@ function renderVoices() {
     hint.hidden = false;
     hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
   } else hint.hidden = true;
-  $('voiceMore').hidden = voiceShowAll || !others.length;
+  $('voiceMore').hidden = !others.length;
+  $('voiceMore').textContent = voiceShowAll ? 'Fewer voices' : 'More voices on this phone';
   $('voiceBtn').textContent = voiceLabelText();
 }
-$('voiceMore').addEventListener('click', () => { voiceShowAll = true; renderVoices(); });
+$('voiceMore').addEventListener('click', () => { voiceShowAll = !voiceShowAll; renderVoices(); });
+// Everything the browser reports, for checking why a downloaded voice is not offered.
+$('voiceDiag').addEventListener('click', () => {
+  const box = $('voiceDiagList');
+  if (!box.hidden) { box.hidden = true; return; }
+  const all = voice.synth?.getVoices?.() || [];
+  box.textContent = all.length
+    ? `${all.length} voices · ${navigator.userAgent.match(/(?:iPhone|CPU) OS (\d+_\d+)/)?.[1]?.replace('_', '.') || navigator.platform}\n` + all.map((v) => `${v.name} · ${v.lang}${v.localService ? '' : ' · online'} · ${v.voiceURI}`).join('\n')
+    : 'The browser reports no voices at all.';
+  box.hidden = false;
+});
 voice.synth?.addEventListener?.('voiceschanged', () => { if (!$('settings').hidden) renderVoices(); });
 
 function setSegment(id, value) {

@@ -844,10 +844,21 @@ function renderVoices() {
     hint.hidden = false;
     hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
   } else hint.hidden = true;
-  $('voiceMore').hidden = voiceShowAll || !others.length;
+  $('voiceMore').hidden = !others.length;
+  $('voiceMore').textContent = voiceShowAll ? 'Fewer voices' : 'More voices on this phone';
   $('voiceBtn').textContent = voiceLabelText();
 }
-$('voiceMore').addEventListener('click', () => { voiceShowAll = true; renderVoices(); });
+$('voiceMore').addEventListener('click', () => { voiceShowAll = !voiceShowAll; renderVoices(); });
+// Everything the browser reports, for checking why a downloaded voice is not offered.
+$('voiceDiag').addEventListener('click', () => {
+  const box = $('voiceDiagList');
+  if (!box.hidden) { box.hidden = true; return; }
+  const all = voice.synth?.getVoices?.() || [];
+  box.textContent = all.length
+    ? `${all.length} voices · ${navigator.userAgent.match(/(?:iPhone|CPU) OS (\d+_\d+)/)?.[1]?.replace('_', '.') || navigator.platform}\n` + all.map((v) => `${v.name} · ${v.lang}${v.localService ? '' : ' · online'} · ${v.voiceURI}`).join('\n')
+    : 'The browser reports no voices at all.';
+  box.hidden = false;
+});
 voice.synth?.addEventListener?.('voiceschanged', () => { if (!$('settings').hidden) renderVoices(); });
 
 function setSegment(id, value) {

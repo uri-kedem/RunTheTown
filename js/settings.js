@@ -51,13 +51,14 @@ export function saveSettings(settings, storage = globalThis.localStorage) {
 // The two house voices: Zoe (female) and Tom (male), the best copy of each that is on the
 // phone (Premium over Enhanced over compact). `voices` is speechSynthesis.getVoices().
 export const HOUSE_VOICES = [
-  { id: 'zoe', name: 'Zoe', gender: 'female', match: /^zoe\b/i },
-  { id: 'tom', name: 'Tom', gender: 'male', match: /^tom\b/i },
+  { id: 'zoe', name: 'Zoe', gender: 'female', match: /\bzoe\b/i },
+  { id: 'tom', name: 'Tom', gender: 'male', match: /\btom\b/i },
 ];
 export function houseVoices(voices) {
   const grade = (v) => (/premium/i.test(v.voiceURI + v.name) ? 3 : /enhanced/i.test(v.voiceURI + v.name) ? 2 : 1);
   return HOUSE_VOICES.map((h) => {
-    const found = voices.filter((v) => /^en[-_]/i.test(v.lang) && h.match.test(v.name)).sort((a, b) => grade(b) - grade(a))[0] || null;
+    // The name or the identifier ("com.apple.voice.premium.en-US.Zoe"), whichever iOS fills in.
+    const found = voices.filter((v) => /^en[-_]/i.test(v.lang) && (h.match.test(v.name) || h.match.test(String(v.voiceURI).split('.').pop() || ''))).sort((a, b) => grade(b) - grade(a))[0] || null;
     return { ...h, voice: found, quality: found ? ['', 'standard', 'enhanced', 'premium'][grade(found)] : null };
   });
 }

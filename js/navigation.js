@@ -458,7 +458,10 @@ export class Voice {
         const good = (v) => /enhanced|premium/i.test(v.voiceURI + v.name); // the better copy of a phone voice
         const by = (re) => vs.find((v) => re.test(v.lang) && v.localService && siri(v)) || vs.find((v) => re.test(v.lang) && v.localService && good(v)) || vs.find((v) => re.test(v.lang) && v.localService) || vs.find((v) => re.test(v.lang));
         const chosen = this.preferred && vs.find((v) => v.voiceURI === this.preferred);
-        this.voices.en = chosen || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
+        // No choice yet: the best-ranked voice (house voices, then the well-known phone voices),
+        // never simply the first one the phone lists (on iPhone that is "Fred").
+        const ranked = chosen ? null : this.options(1)[0];
+        this.voices.en = chosen || (ranked && vs.find((v) => v.voiceURI === ranked.uri)) || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
         this.voices.he = by(/^(he|iw)/i) || null;
       };
       this.pick = pick;
@@ -479,7 +482,7 @@ export class Voice {
   options(max = 5) {
     const vs = this.synth?.getVoices?.() || [];
     const ACCENT = { US: 'American', GB: 'British', AU: 'Australian', IE: 'Irish', ZA: 'South African', IN: 'Indian', CA: 'Canadian', NZ: 'New Zealand' };
-    const FAVOURITES = ['siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
+    const FAVOURITES = ['zoe', 'tom', 'siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'catherine', 'gordon', 'fred', 'google us english', 'google uk english female', 'google uk english male', 'microsoft aria', 'microsoft guy', 'microsoft sonia', 'microsoft ryan'];
     const en = vs.filter((v) => /^en[-_]/i.test(v.lang));
     const byName = new Map();
     for (const v of en) {
