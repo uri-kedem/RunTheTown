@@ -34,8 +34,10 @@ export function runnableTags(tags) {
   // A trunk road is kept only as a city street: not an expressway, slip road or tunnel.
   if (h === 'trunk' && (tags.motorroad === 'yes' || tags.expressway === 'yes' || (tags.tunnel && tags.tunnel !== 'no'))) return null;
   const surf = surfaceKind(tags);
-  if (surf === 'unpaved') return null;
-  if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : null;
+  // Country ways (unpaved roads and paths, dirt tracks): in the network, but only switched
+  // on when the made network cannot carry the run (see RouteEngine.plan).
+  if (surf === 'unpaved') return { highway: h === 'track' ? 'path' : h, rough: 1, country: 1 };
+  if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : { highway: 'path', rough: 1, country: 1 };
   // A shared foot-and-bike path (bicycle=designated) is a made surface: promenades, boardwalks
   // and park paths are mapped that way, and they run on for kilometres.
   const bike = isBikeRoute(h, tags.bicycle, tags.foot);
@@ -335,7 +337,7 @@ export function parseOverpass(json) {
   for (const el of json.elements || []) {
     if (el.type === 'way' && el.nodes && !el.geometry && el.tags?.highway) {
       const run = runnableTags(el.tags);
-      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike } : el.tags });
+      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.country || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike, country: run.country || 0 } : el.tags });
       continue;
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;

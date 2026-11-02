@@ -70,6 +70,8 @@ export class Graph {
     const ename = [];
     const eprom = [];
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
+    const ecountry = []; // 1 = an unpaved road or a dirt track: off unless the planner switches country mode on
+    let countryWays = 0;
     const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
@@ -137,8 +139,8 @@ export class Graph {
           skippedAfloat++; // quays count with the pontoons
           continue;
         }
-        if (cnt && road.tags.rough && wild / cnt >= 0.5) {
-          skippedWild++;
+        if (cnt && road.tags.rough && !road.tags.country && wild / cnt >= 0.5) {
+          skippedWild++; // a country track through the fields stays: it is the countryside's road
           continue;
         }
         if (cnt && small && closed / cnt >= 0.5) {
@@ -183,6 +185,8 @@ export class Graph {
         }
       }
       const rough = road.tags.rough ? 1 : 0;
+      const country = road.tags.country ? 1 : 0;
+      if (country) countryWays++;
       const prom = rough ? 0 : promenadeOf(road.tags);
       const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
@@ -198,6 +202,7 @@ export class Graph {
           ename.push(nid);
           eprom.push(prom);
           erough.push(rough);
+          ecountry.push(country);
           ebike.push(bike);
         }
         prev = cur;
@@ -238,9 +243,14 @@ export class Graph {
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
     this.rough = Uint8Array.from(erough);
+    this.country = Uint8Array.from(ecountry);
+    this.countryWays = countryWays; // unpaved roads and tracks parsed (used only in country mode)
+    this.allowCountry = false; // RouteEngine.plan switches this on when the made network cannot carry the run
     this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
+    this.nodeCountryOnly = new Uint8Array(n).fill(1); // 1 = every way at the node is a country way
+    for (let e = 0; e < m; e++) if (!ecountry[e]) this.nodeCountryOnly[ea[e]] = this.nodeCountryOnly[eb[e]] = 0;
     for (let e = 0; e < m; e++) {
       const a = ea[e];
       const b = eb[e];
@@ -493,6 +503,7 @@ export class Graph {
     heap.clear();
     for (let k = adjStart[src]; k < adjStart[src + 1]; k++) {
       const c = this.arcCost(k) + (fromArc >= 0 ? this.turnCost(fromArc, k) : 0);
+      if (c === Infinity) continue; // a switched-off way (country mode off)
       stamp[k] = stampV;
       dist[k] = c;
       prevArc[k] = -1;
@@ -510,6 +521,7 @@ export class Graph {
       }
       for (let k2 = adjStart[v]; k2 < adjStart[v + 1]; k2++) {
         const nd = d + this.arcCost(k2) + this.turnCost(k, k2);
+        if (nd === Infinity) continue;
         if (stamp[k2] !== stampV || nd < dist[k2]) {
           stamp[k2] = stampV;
           dist[k2] = nd;
@@ -544,6 +556,7 @@ export class Graph {
     const order = [src];
     for (let k = adjStart[src]; k < adjStart[src + 1]; k++) {
       const c = this.arcCost(k);
+      if (c === Infinity) continue;
       stamp[k] = stampV;
       dist[k] = c;
       prevArc[k] = -1;
@@ -561,6 +574,7 @@ export class Graph {
       }
       for (let k2 = adjStart[v]; k2 < adjStart[v + 1]; k2++) {
         const nd = d + this.arcCost(k2) + this.turnCost(k, k2);
+        if (nd === Infinity) continue;
         if (stamp[k2] !== stampV || nd < dist[k2]) {
           stamp[k2] = stampV;
           dist[k2] = nd;

@@ -248,6 +248,13 @@ for locked-screen guidance and the app stores.
      marked soon). *Map during the run*: follow me, keep the screen on. *About*: version and "Check for
      update". iPhone users download better voices under Settings → Accessibility → Spoken Content → Voices;
    - keeps the screen awake (Wake Lock) and has Mute / Pause / End (two taps);
+   - **Turning around on purpose:** running against the route's direction, close to the line, for
+     70 m is read as a deliberate turnaround (`Navigator.turnedAround`). On an out-and-back the guide
+     switches to the return leg at the matching point ("Turned around? Following the route back from
+     here. 3.8 kilometers to go"), skipping the turns in between. On a loop there is no return leg,
+     so the app builds the way back to the start along what was already run (`backRoute` in
+     `js/planner.js`, street-aware cues) and says "Heading back the way you came". The off-route
+     warning and rerouting stay out of it while the turn is being read.
    - **Rerouting:** after 12 s off the line with a decent GPS fix, the app plans the way from where the
      runner is back onto the route about 250 m further on (`rejoinRoute` in `js/planner.js`: shortest
      path on the loaded graph, refused when it is a detour of more than 4× the straight line), announces
@@ -306,6 +313,26 @@ Live runs on real OpenStreetMap data:
   loop 63% along the water. From the Yarkon area: the park loop and the Hadar Yosef track are found and
   turned into lap routes with correct cues. Planning takes 2.5–6 s including the download.
 
+## Country mode (villages and open country)
+Made surfaces first, always. But in a village or the countryside the paved network may be a few
+hundred metres of main street, with everything else unpaved lanes and farm tracks (Achi and
+Niabauri in Guria, Georgia: 9 unpaved lanes and 12 dirt tracks dropped, 10 residential pieces
+kept → "No runnable paths found near the start point"). Unpaved roads, unpaved paths and dirt
+tracks are now parsed as `country` ways (rough as well; `Graph.country`, `countryWays`) and kept
+switched off (`allowCountry = false`: their cost is infinite and Dijkstra skips them, and the
+start never sits on a country-only node). `RouteEngine.plan` plans on made surfaces; when that
+throws (no start, no route), it switches country mode on and plans again. Such a run is flagged
+(`routes.country`): the app shows "Country run: … unpaved lanes and tracks are included. Watch your
+footing", the cards open with "90% on unpaved lanes and tracks", list the metres on them and the
+route is named "Country loop". A town run never touches a country way (test-country.mjs).
+
+## Voices on iPhone
+Safari and home-screen web apps only get the built-in voices (Samantha, Daniel, Karen, Moira, Tessa,
+Rishi, Fred, Rocko…); the Enhanced/Premium voices a user downloads, and the Siri voices, are not
+offered to the Web Speech API (Apple: "optionally downloadable voices are not available"). The
+Settings page says so on iPhone and lists the available voices; Zoe and Tom are taken automatically
+wherever the browser does expose them (Chrome/Edge on desktop, and the native app later).
+
 ## Known limits of the MVP
 
 - Traffic-light data depends on the public Overpass servers, which are often overloaded. Routes still
@@ -318,6 +345,7 @@ Live runs on real OpenStreetMap data:
   when the phone is locked or another app is in front; that needs a native app (or a watch via Garmin/Strava).
 - GPS and voice need `https://` on a phone (see "On your phone" above).
 - Rerouting joins the old line further on; it never replans the rest of the run around a blocked path.
+- Downloaded iPhone voices (Zoe, Tom) are not available to web apps; the native app will have them.
 - Whether a track is free to use isn't in the map tiles. Tracks are shown when they're mapped; check
   opening hours on site.
 - Promenades are recognised by name and by being car-free paths along water or parks; an unnamed

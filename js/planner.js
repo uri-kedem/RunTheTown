@@ -17,6 +17,7 @@ export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   g.stopWeight = prefs.avoidStops === false ? 0 : 1; // avoid lights & crosswalks (on by default)
   for (let e = 0; e < g.m; e++) {
     let c = table[g.hw[e]];
+    if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
     if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
@@ -82,7 +83,7 @@ export async function planLoops(g, opts) {
   // is used only when nothing better lies within ~250 m more.
   const start = g.nearest(startXY[0], startXY[1], {
     maxDist: 800,
-    filter: (i) => g.compSize[g.comp[i]] >= Math.min(300, maxComp * 0.5),
+    filter: (i) => g.compSize[g.comp[i]] >= Math.min(300, maxComp * 0.5) && (g.allowCountry || !g.nodeCountryOnly?.[i]),
     scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0),
   });
   if (start < 0) throw new Error('No runnable paths found near the start point. Try moving the pin onto a street.');
@@ -411,6 +412,44 @@ export function rejoinRoute(g, proj, from, route, joinIdx) {
   return { ...route, latlngs, cues, sights, distance, joined: joinIdx, rerouted: true };
 }
 
+/**
+ * The way back the runner came: from where they are (`from`), along the part of the route
+ * already run (up to vertex `seg`), to the start. Street-aware cues from the graph; the
+ * polyline is re-threaded through graph nodes (a gap is bridged by the shortest path).
+ * Null when the runner is not near a street.
+ */
+export function backRoute(g, proj, from, route, seg) {
+  if (!route?.latlngs || seg < 0) return null;
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const here = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  if (here < 0) return null;
+  const pts = route.latlngs.slice(0, Math.min(seg, route.latlngs.length - 1) + 1).reverse();
+  const nodes = [here];
+  for (const [la, lo] of pts) {
+    const [x, y] = proj.toXY(la, lo);
+    const v = g.nearest(x, y, { maxDist: 6 });
+    if (v >= 0 && v !== nodes[nodes.length - 1]) nodes.push(v);
+  }
+  const path = { nodes: [nodes[0]], edges: [] };
+  for (let i = 1; i < nodes.length; i++) {
+    const a = path.nodes[path.nodes.length - 1];
+    const b = nodes[i];
+    let e = -1;
+    for (let k = g.adjStart[a]; k < g.adjStart[a + 1]; k++) if (g.adjNode[k] === b) { e = g.adjEdge[k]; break; }
+    if (e >= 0) { path.nodes.push(b); path.edges.push(e); continue; }
+    const p = g.shortestPath(a, b);
+    if (!p) return null;
+    path.nodes.push(...p.nodes.slice(1));
+    path.edges.push(...p.edges);
+  }
+  if (!path.edges.length) return null;
+  let distance = 0;
+  for (const e of path.edges) distance += g.len[e];
+  const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const cues = buildCues(g, path);
+  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+}
+
 // Attractive nodes (water or green, per preferences) that a loop of length D can
 // reach: one per compass sector and distance band (band 0 ≈ 0.28·D away is
 // used for single-anchor loops; all bands feed the two-anchor triangles).
@@ -568,7 +607,7 @@ export function scenicOf(g, e, prefs = {}) {
 }
 
 export function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -580,7 +619,8 @@ export function routeStats(g, route, D, prefs = {}) {
     sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
-    if (g.rough[e]) rough += L;
+    if (g.country?.[e]) country += L; // unpaved roads and tracks (country mode)
+    else if (g.rough[e]) rough += L;
     if (g.hw[e] === HW.PATH || g.hw[e] === HW.LOCAL) quiet += L;
     if (g.hw[e] >= HW.SECONDARY) busy += L;
     if (g.hw[e] === HW.TRUNK) trunk += L;
@@ -612,6 +652,7 @@ export function routeStats(g, route, D, prefs = {}) {
     scenicFrac: scenic / total,
     promFrac: prom / total,
     roughFrac: rough / total,
+    countryFrac: country / total,
     signals,
     crossings,
     stopsKnown: g.stopsKnown !== false, // false when the traffic-light query failed (busy servers)
@@ -674,6 +715,7 @@ function describe(g, route, start, prefs = {}) {
   else if (s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
+  if (s.countryFrac >= 0.5) theme = 'Country loop';
   if (g.hasElevation && s.gainPerKm >= 25) theme = 'Hilly ' + theme.toLowerCase();
   const outback = route.type === 'outback';
   if (outback) {
@@ -698,6 +740,8 @@ function describe(g, route, start, prefs = {}) {
   // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
   const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
   if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
+  const countryM = Math.round((s.countryFrac * s.distance) / 50) * 50;
+  if (countryM >= 100) highlights.push(`${countryM >= 1000 ? `${(countryM / 1000).toFixed(1)} km` : `${countryM} m`} on unpaved lanes and tracks`);
 
   // Elevation profile, downsampled to ~80 points.
   const profile = [];
@@ -750,6 +794,7 @@ export function whereText(s, g) {
   const ground = bySea ? 'the seafront promenade' : s.greenFrac >= s.waterFrac && s.greenFrac >= 0.2 ? 'park paths' : s.waterFrac >= 0.2 ? 'waterfront paths' : 'car-free paths';
   const restQuiet = s.promFrac < 0.99 ? Math.max(0, s.quietFrac - s.promFrac) / (1 - s.promFrac) : 1; // paths count as quiet too
   const rest = restQuiet >= 0.7 ? 'quiet streets' : 'streets';
+  if (s.countryFrac >= 0.5) return `${Math.round(s.countryFrac * 20) * 5}% on unpaved lanes and tracks`;
   if (pct >= 95) return `All of it on ${ground}`;
   if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
   if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;

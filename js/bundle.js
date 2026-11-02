@@ -91,8 +91,10 @@ function runnableTags(tags) {
   // A trunk road is kept only as a city street: not an expressway, slip road or tunnel.
   if (h === 'trunk' && (tags.motorroad === 'yes' || tags.expressway === 'yes' || (tags.tunnel && tags.tunnel !== 'no'))) return null;
   const surf = surfaceKind(tags);
-  if (surf === 'unpaved') return null;
-  if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : null;
+  // Country ways (unpaved roads and paths, dirt tracks): in the network, but only switched
+  // on when the made network cannot carry the run (see RouteEngine.plan).
+  if (surf === 'unpaved') return { highway: h === 'track' ? 'path' : h, rough: 1, country: 1 };
+  if (h === 'track') return surf === 'paved' ? { highway: 'service', rough: 0 } : { highway: 'path', rough: 1, country: 1 };
   // A shared foot-and-bike path (bicycle=designated) is a made surface: promenades, boardwalks
   // and park paths are mapped that way, and they run on for kilometres.
   const bike = isBikeRoute(h, tags.bicycle, tags.foot);
@@ -392,7 +394,7 @@ function parseOverpass(json) {
   for (const el of json.elements || []) {
     if (el.type === 'way' && el.nodes && !el.geometry && el.tags?.highway) {
       const run = runnableTags(el.tags);
-      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike } : el.tags });
+      if (run) roads.push({ id: el.id, nodes: el.nodes, tags: run.rough || run.bike || run.country || run.highway !== el.tags.highway ? { ...el.tags, highway: run.highway, rough: run.rough, bike: run.bike, country: run.country || 0 } : el.tags });
       continue;
     }
     if (el.type !== 'way' && el.type !== 'relation') continue;
@@ -754,11 +756,15 @@ async function fetchVectorTiles(tiles, { cache = null, onProgress = () => {}, fe
 // Trunk roads are kept when they are city streets (not slip roads, expressways or
 // tunnels): in towns like Eilat the main boulevard is Route 90, and without it the
 // side streets fall apart into islands. The planner prices them above primaries.
+//
+// Country roads: in a village or the open countryside the only ways there are may be
+// unpaved lanes and farm tracks. Those are parsed too, marked `country` (and rough), and
+// the planner only switches them on when the made network around the start cannot carry
+// the run (see RouteEngine.plan); a city run never touches them.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
   if (p.foot === 'no' || p.foot === 'private' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
-  const unpaved = p.surface === 'unpaved';
   switch (p.class) {
     case 'primary':
     case 'secondary':
@@ -767,15 +773,16 @@ function highwayFor(p, long) {
     case 'trunk':
       return isExpressway(p) ? null : 'trunk';
     case 'minor':
-      return unpaved ? null : 'residential';
+      return 'residential'; // unpaved: a country lane (see countryFor)
     case 'service':
-      if (long || unpaved || /^(parking_aisle|driveway|drive-through)$/.test(p.service || '')) return null;
+      if (long || /^(parking_aisle|driveway|drive-through)$/.test(p.service || '')) return null;
       return 'service';
     case 'track':
-      return p.surface === 'paved' && !long ? 'service' : null; // a paved farm/park track is just a small road
+      if (long) return null;
+      return p.surface === 'paved' ? 'service' : 'track'; // a paved farm/park track is just a small road; a dirt one is a country track
     case 'path': {
       const s = p.subclass || 'path';
-      if (unpaved || s === 'bridleway') return null;
+      if (s === 'bridleway') return null;
       if (s === 'steps') return long ? null : 'steps';
       if (/^(footway|cycleway|pedestrian|path)$/.test(s)) return s;
       return 'path';
@@ -786,14 +793,15 @@ function highwayFor(p, long) {
 }
 // 1 for a way whose surface is unknown and whose kind is usually a trail (highway=path).
 const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' && !isBikeRoute(highway, p.bicycle, p.foot) ? 1 : 0);
+// 1 for a country way: an unpaved road or path, or a dirt track. Always rough as well.
+const countryFor = (highway, p) => (p.surface === 'unpaved' || highway === 'track' ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
   if (p.foot === 'no' || p.foot === 'private' || p.access === 'no') return 'no foot access';
   if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
-  if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
-  if (p.class === 'track') return 'dirt track';
   if (p.subclass === 'bridleway') return 'bridleway';
+  if (p.class === 'track') return 'long dirt track';
   if (p.class === 'service') return 'parking aisle / driveway';
   if (p.class === 'trunk') return p.brunnel === 'tunnel' ? 'trunk tunnel' : p.ramp ? 'trunk slip road' : 'expressway';
   if (/^(primary|secondary|tertiary|minor|path|track)$/.test(p.class)) return `${p.class} (not for this run length)`;
@@ -879,12 +887,14 @@ function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
         audit.dropped[why] = (audit.dropped[why] || 0) + 1;
         continue;
       }
-      const rough = roughFor(highway, f.props);
-      const bike = isBikeRoute(highway, f.props.bicycle, f.props.foot);
-      const kind = rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
+      const country = countryFor(highway, f.props);
+      const rough = country || roughFor(highway, f.props);
+      const bike = !country && isBikeRoute(highway, f.props.bicycle, f.props.foot);
+      const kind = country ? `${highway} (country)` : rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
       audit.kept[kind] = (audit.kept[kind] || 0) + 1;
-      const tags = { highway };
+      const tags = { highway: highway === 'track' ? 'path' : highway };
       if (rough) tags.rough = 1;
+      if (country) tags.country = 1;
       if (bike) tags.bike = 1;
       if (f.props.brunnel === 'bridge') tags.bridge = 'yes'; // a crossing worth keeping even with no sidewalk
       for (const line of f.geom) {
@@ -1869,6 +1879,8 @@ class Graph {
     const ename = [];
     const eprom = [];
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
+    const ecountry = []; // 1 = an unpaved road or a dirt track: off unless the planner switches country mode on
+    let countryWays = 0;
     const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
@@ -1936,8 +1948,8 @@ class Graph {
           skippedAfloat++; // quays count with the pontoons
           continue;
         }
-        if (cnt && road.tags.rough && wild / cnt >= 0.5) {
-          skippedWild++;
+        if (cnt && road.tags.rough && !road.tags.country && wild / cnt >= 0.5) {
+          skippedWild++; // a country track through the fields stays: it is the countryside's road
           continue;
         }
         if (cnt && small && closed / cnt >= 0.5) {
@@ -1982,6 +1994,8 @@ class Graph {
         }
       }
       const rough = road.tags.rough ? 1 : 0;
+      const country = road.tags.country ? 1 : 0;
+      if (country) countryWays++;
       const prom = rough ? 0 : promenadeOf(road.tags);
       const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
@@ -1997,6 +2011,7 @@ class Graph {
           ename.push(nid);
           eprom.push(prom);
           erough.push(rough);
+          ecountry.push(country);
           ebike.push(bike);
         }
         prev = cur;
@@ -2037,9 +2052,14 @@ class Graph {
     // pedestrian streets, and car-free paths along the water or through parks.
     this.prom = Float32Array.from(eprom);
     this.rough = Uint8Array.from(erough);
+    this.country = Uint8Array.from(ecountry);
+    this.countryWays = countryWays; // unpaved roads and tracks parsed (used only in country mode)
+    this.allowCountry = false; // RouteEngine.plan switches this on when the made network cannot carry the run
     this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
+    this.nodeCountryOnly = new Uint8Array(n).fill(1); // 1 = every way at the node is a country way
+    for (let e = 0; e < m; e++) if (!ecountry[e]) this.nodeCountryOnly[ea[e]] = this.nodeCountryOnly[eb[e]] = 0;
     for (let e = 0; e < m; e++) {
       const a = ea[e];
       const b = eb[e];
@@ -2292,6 +2312,7 @@ class Graph {
     heap.clear();
     for (let k = adjStart[src]; k < adjStart[src + 1]; k++) {
       const c = this.arcCost(k) + (fromArc >= 0 ? this.turnCost(fromArc, k) : 0);
+      if (c === Infinity) continue; // a switched-off way (country mode off)
       stamp[k] = stampV;
       dist[k] = c;
       prevArc[k] = -1;
@@ -2309,6 +2330,7 @@ class Graph {
       }
       for (let k2 = adjStart[v]; k2 < adjStart[v + 1]; k2++) {
         const nd = d + this.arcCost(k2) + this.turnCost(k, k2);
+        if (nd === Infinity) continue;
         if (stamp[k2] !== stampV || nd < dist[k2]) {
           stamp[k2] = stampV;
           dist[k2] = nd;
@@ -2343,6 +2365,7 @@ class Graph {
     const order = [src];
     for (let k = adjStart[src]; k < adjStart[src + 1]; k++) {
       const c = this.arcCost(k);
+      if (c === Infinity) continue;
       stamp[k] = stampV;
       dist[k] = c;
       prevArc[k] = -1;
@@ -2360,6 +2383,7 @@ class Graph {
       }
       for (let k2 = adjStart[v]; k2 < adjStart[v + 1]; k2++) {
         const nd = d + this.arcCost(k2) + this.turnCost(k, k2);
+        if (nd === Infinity) continue;
         if (stamp[k2] !== stampV || nd < dist[k2]) {
           stamp[k2] = stampV;
           dist[k2] = nd;
@@ -2574,6 +2598,7 @@ function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   g.stopWeight = prefs.avoidStops === false ? 0 : 1; // avoid lights & crosswalks (on by default)
   for (let e = 0; e < g.m; e++) {
     let c = table[g.hw[e]];
+    if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
     if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
@@ -2639,7 +2664,7 @@ async function planLoops(g, opts) {
   // is used only when nothing better lies within ~250 m more.
   const start = g.nearest(startXY[0], startXY[1], {
     maxDist: 800,
-    filter: (i) => g.compSize[g.comp[i]] >= Math.min(300, maxComp * 0.5),
+    filter: (i) => g.compSize[g.comp[i]] >= Math.min(300, maxComp * 0.5) && (g.allowCountry || !g.nodeCountryOnly?.[i]),
     scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0),
   });
   if (start < 0) throw new Error('No runnable paths found near the start point. Try moving the pin onto a street.');
@@ -2968,6 +2993,44 @@ function rejoinRoute(g, proj, from, route, joinIdx) {
   return { ...route, latlngs, cues, sights, distance, joined: joinIdx, rerouted: true };
 }
 
+/**
+ * The way back the runner came: from where they are (`from`), along the part of the route
+ * already run (up to vertex `seg`), to the start. Street-aware cues from the graph; the
+ * polyline is re-threaded through graph nodes (a gap is bridged by the shortest path).
+ * Null when the runner is not near a street.
+ */
+function backRoute(g, proj, from, route, seg) {
+  if (!route?.latlngs || seg < 0) return null;
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const here = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  if (here < 0) return null;
+  const pts = route.latlngs.slice(0, Math.min(seg, route.latlngs.length - 1) + 1).reverse();
+  const nodes = [here];
+  for (const [la, lo] of pts) {
+    const [x, y] = proj.toXY(la, lo);
+    const v = g.nearest(x, y, { maxDist: 6 });
+    if (v >= 0 && v !== nodes[nodes.length - 1]) nodes.push(v);
+  }
+  const path = { nodes: [nodes[0]], edges: [] };
+  for (let i = 1; i < nodes.length; i++) {
+    const a = path.nodes[path.nodes.length - 1];
+    const b = nodes[i];
+    let e = -1;
+    for (let k = g.adjStart[a]; k < g.adjStart[a + 1]; k++) if (g.adjNode[k] === b) { e = g.adjEdge[k]; break; }
+    if (e >= 0) { path.nodes.push(b); path.edges.push(e); continue; }
+    const p = g.shortestPath(a, b);
+    if (!p) return null;
+    path.nodes.push(...p.nodes.slice(1));
+    path.edges.push(...p.edges);
+  }
+  if (!path.edges.length) return null;
+  let distance = 0;
+  for (const e of path.edges) distance += g.len[e];
+  const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const cues = buildCues(g, path);
+  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+}
+
 // Attractive nodes (water or green, per preferences) that a loop of length D can
 // reach: one per compass sector and distance band (band 0 ≈ 0.28·D away is
 // used for single-anchor loops; all bands feed the two-anchor triangles).
@@ -3125,7 +3188,7 @@ function scenicOf(g, e, prefs = {}) {
 }
 
 function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -3137,7 +3200,8 @@ function routeStats(g, route, D, prefs = {}) {
     sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
-    if (g.rough[e]) rough += L;
+    if (g.country?.[e]) country += L; // unpaved roads and tracks (country mode)
+    else if (g.rough[e]) rough += L;
     if (g.hw[e] === HW.PATH || g.hw[e] === HW.LOCAL) quiet += L;
     if (g.hw[e] >= HW.SECONDARY) busy += L;
     if (g.hw[e] === HW.TRUNK) trunk += L;
@@ -3169,6 +3233,7 @@ function routeStats(g, route, D, prefs = {}) {
     scenicFrac: scenic / total,
     promFrac: prom / total,
     roughFrac: rough / total,
+    countryFrac: country / total,
     signals,
     crossings,
     stopsKnown: g.stopsKnown !== false, // false when the traffic-light query failed (busy servers)
@@ -3231,6 +3296,7 @@ function describe(g, route, start, prefs = {}) {
   else if (s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
+  if (s.countryFrac >= 0.5) theme = 'Country loop';
   if (g.hasElevation && s.gainPerKm >= 25) theme = 'Hilly ' + theme.toLowerCase();
   const outback = route.type === 'outback';
   if (outback) {
@@ -3255,6 +3321,8 @@ function describe(g, route, start, prefs = {}) {
   // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
   const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
   if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
+  const countryM = Math.round((s.countryFrac * s.distance) / 50) * 50;
+  if (countryM >= 100) highlights.push(`${countryM >= 1000 ? `${(countryM / 1000).toFixed(1)} km` : `${countryM} m`} on unpaved lanes and tracks`);
 
   // Elevation profile, downsampled to ~80 points.
   const profile = [];
@@ -3307,6 +3375,7 @@ function whereText(s, g) {
   const ground = bySea ? 'the seafront promenade' : s.greenFrac >= s.waterFrac && s.greenFrac >= 0.2 ? 'park paths' : s.waterFrac >= 0.2 ? 'waterfront paths' : 'car-free paths';
   const restQuiet = s.promFrac < 0.99 ? Math.max(0, s.quietFrac - s.promFrac) / (1 - s.promFrac) : 1; // paths count as quiet too
   const rest = restQuiet >= 0.7 ? 'quiet streets' : 'streets';
+  if (s.countryFrac >= 0.5) return `${Math.round(s.countryFrac * 20) * 5}% on unpaved lanes and tracks`;
   if (pct >= 95) return `All of it on ${ground}`;
   if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
   if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;
@@ -4426,16 +4495,38 @@ class RouteEngine {
   async plan({ lat, lon, distanceKm, prefs, terrain, onStatus = () => {}, turnWeight = 1 }) {
     const D = Math.min(MAX_DISTANCE_KM, distanceKm) * 1000;
     const area = await this.loadArea(lat, lon, radiusFor(D), onStatus);
-    applyPreferences(area.graph, { prefs, terrain });
-    area.graph.turnWeight = turnWeight;
-    onStatus('Designing routes…');
-    const routes = await planLoops(area.graph, {
-      startXY: area.proj.toXY(lat, lon),
-      distance: D,
-      prefs,
-      terrain,
-      onProgress: (p) => onStatus(`Designing routes… ${Math.round(p * 100)}%`),
-    });
+    const g = area.graph;
+    g.turnWeight = turnWeight;
+    const design = () => {
+      applyPreferences(g, { prefs, terrain });
+      onStatus('Designing routes…');
+      return planLoops(g, {
+        startXY: area.proj.toXY(lat, lon),
+        distance: D,
+        prefs,
+        terrain,
+        onProgress: (p) => onStatus(`Designing routes… ${Math.round(p * 100)}%`),
+      });
+    };
+    // Made surfaces first. In a village or open country the paved network may not reach the
+    // start or carry the distance: then the unpaved lanes and dirt tracks are switched on
+    // (country mode) and the run says so on its cards.
+    g.allowCountry = false;
+    let routes;
+    let country = false;
+    try {
+      routes = await design();
+    } catch (err) {
+      if (!g.countryWays) throw err;
+      g.allowCountry = true;
+      country = true;
+      try {
+        routes = await design();
+      } finally {
+        g.allowCountry = false;
+      }
+    }
+    routes.country = country;
     routes.partialMap = area.failedTiles > 0;
     routes.stopsUnknown = !area.stopsKnown;
     // Running spots nearby (tracks, big parks), with how far they are from the start.
@@ -4537,6 +4628,7 @@ const BACK_M = 25; // back within this = on route again
 const OFF_FIXES = 2; // consecutive far fixes before warning
 const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
+const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
 const ARRIVE_M = 30;
 const MAX_ACCURACY = 60; // ignore GPS fixes worse than this (m)
 const WINDOW_BACK = 60; // search the route this far behind current progress...
@@ -4634,9 +4726,11 @@ class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX } = {}) {
+  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
     this.speak = speak;
     this.now = now;
+    this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
+    this.backTravel = 0; // metres run against the route's direction, near the line
     this.units = units;
     this.splitM = units === 'mi' ? MILE : 1000;
     this.saying = { splits: splits && !quiet, landmarks: landmarks && !quiet, quiet };
@@ -4679,6 +4773,7 @@ class Navigator {
     this.lastOffSaid = -Infinity;
     this.snapped = null;
     this.rejoined = false;
+    this.backTravel = 0;
   }
 
   /**
@@ -4744,14 +4839,28 @@ class Navigator {
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
     if (!this.anchor) this.anchor = { x, y };
     const moved = Math.hypot(x - this.anchor.x, y - this.anchor.y);
+    let hop = 0;
     if (moved >= 8) {
-      if (moved < 300) this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI;
+      if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
       if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
       this.anchor = { x, y };
     }
 
     // Snap to the route near where we were; if lost, anywhere ahead.
-    let snap = this.snap(x, y, this.progress - WINDOW_BACK, this.progress + WINDOW_AHEAD);
+    let snap = this.snap(x, y, this.progress - Math.max(WINDOW_BACK, this.backTravel + 40), this.progress + WINDOW_AHEAD);
+
+    // Turned around? Running against the route's direction, close to the line, for REVERSE_M:
+    // on an out-and-back that means the return leg (switch to it, skipping the turnaround);
+    // on a loop it means heading home the way they came (the app builds that route).
+    if (hop && !this.finished) {
+      const near = this.snap(x, y, this.progress - 600, this.progress + 60, 0); // the line just behind too
+      const against = near.dist <= OFF_M && this.turnAngle(this.moving, this.segHeading(near.seg)) > 120;
+      this.backTravel = against ? this.backTravel + hop : 0;
+      if (this.backTravel >= REVERSE_M) {
+        this.backTravel = 0;
+        if (this.turnedAround(x, y)) return this.view(fix);
+      }
+    }
     if (snap.dist > OFF_M && this.offRoute) {
       // Rejoin anywhere the runner could plausibly have got to since leaving the route
       // (so crossing a later part of the loop while lost doesn't skip ahead).
@@ -4797,6 +4906,49 @@ class Navigator {
     this.announceSplit();
     if (!this.finished && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.finish();
     return this.view(fix);
+  }
+
+  // Heading (deg) of the route along segment i.
+  segHeading(i) {
+    const j = Math.max(0, Math.min(this.xy.length - 2, i));
+    const [ax, ay] = this.xy[j];
+    const [bx, by] = this.xy[j + 1];
+    return (Math.atan2(bx - ax, by - ay) * 180) / Math.PI;
+  }
+  turnAngle(a, b) {
+    let d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+  /**
+   * The runner turned around. Looks for a later part of the route that runs the way they
+   * now run, within OFF_M (the return leg of an out-and-back): progress jumps there and the
+   * rest of the route is followed from that point. On a loop there is no such leg: the
+   * onTurnaround callback gets the chance to build the way back; returns true when handled.
+   */
+  turnedAround(x, y) {
+    const n = this.xy.length;
+    let best = null;
+    for (let i = 0; i < n - 1; i++) {
+      if (this.along[i + 1] < this.progress + 80) continue; // only later parts of the route
+      if (this.turnAngle(this.moving, this.segHeading(i)) > 60) continue;
+      const s = this.snap(x, y, this.along[i], this.along[i + 1], 0);
+      if (s.dist <= OFF_M && (!best || s.at < best.at)) best = s;
+    }
+    if (best) {
+      this.progress = best.at;
+      this.seg = best.seg;
+      this.snapped = best;
+      this.offRoute = false;
+      this.farCount = 0;
+      this.rejoined = true; // the jump is not distance run
+      this.turnarounds = (this.turnarounds || 0) + 1;
+      for (const c of this.cues) if (c.at < this.progress - 10) c.pre = c.now = true; // skipped turns are not announced
+      const left = Math.max(0, this.total - this.progress);
+      this.speak(msg(`Turned around? Following the route back from here. ${distText(left, this.units)} to go.`), { priority: 3 });
+      return true;
+    }
+    if (this.onTurnaround) return !!this.onTurnaround({ x, y, progress: this.progress, seg: this.seg });
+    return false;
   }
 
   snap(x, y, from, to, k = 0.06) {
@@ -5687,6 +5839,7 @@ $('goBtn').addEventListener('click', async () => {
     state.routes = routes;
     showRoutes(routes);
     if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
+    if (routes.country) toast('Country run: there is no paved network here, so unpaved lanes and tracks are included. Watch your footing.');
   } catch (err) {
     console.error(err);
     toast(err.message || 'Something went wrong. Please try again.');
@@ -6082,7 +6235,7 @@ let voiceShowAll = false;
 function voiceRows() {
   const all = voice.synth?.getVoices?.() || [];
   const house = houseVoices(all);
-  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not on this phone yet`, missing: !h.voice }));
+  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not offered by this browser`, missing: !h.voice }));
   const houseUris = new Set(rows.map((r) => r.uri).filter(Boolean));
   const others = voice.options(8).filter((o) => !houseUris.has(o.uri) && !/^(zoe|tom)\b/i.test(o.name)).map((o) => ({ uri: o.uri, name: o.name, sub: `${o.accent} English`, missing: false }));
   return { rows, others, houseMissing: house.filter((h) => !h.voice) };
@@ -6095,7 +6248,7 @@ function renderVoices() {
   const cur = currentVoiceUri();
   const list = $('voiceList');
   list.innerHTML = '';
-  const shown = voiceShowAll ? [...rows, ...others] : rows;
+  const shown = voiceShowAll || houseMissing.length === rows.length ? [...rows, ...others] : rows;
   for (const o of shown) {
     const row = document.createElement('div');
     const on = !!o.uri && o.uri === cur;
@@ -6116,9 +6269,12 @@ function renderVoices() {
   const hint = $('voiceHint');
   if (houseMissing.length) {
     hint.hidden = false;
-    hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
+    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    hint.textContent = ios
+      ? `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not available here: on iPhone, Safari and home-screen apps only get the built-in voices, not the ones you download (Apple's rule). They will read your directions in the App Store version. Until then pick one of the voices below.`
+      : `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not on this device. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}.`;
   } else hint.hidden = true;
-  $('voiceMore').hidden = !others.length;
+  $('voiceMore').hidden = !others.length || houseMissing.length === rows.length;
   $('voiceMore').textContent = voiceShowAll ? 'Fewer voices' : 'More voices on this phone';
   $('voiceBtn').textContent = voiceLabelText();
 }
@@ -6321,6 +6477,7 @@ async function startRun({ demo }) {
     speak: (parts, opts) => voice.say(parts, opts),
     now: demo ? () => clock.t : () => Date.now(),
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
+    onTurnaround: (where) => turnedAroundOnLoop(where),
   });
   const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
   $('recenterBtn').hidden = settings.follow;
@@ -6415,6 +6572,27 @@ function maybeReroute(n, fix) {
   n.doneLine?.bringToFront?.();
   n.userMarker?.setZIndexOffset?.(1000);
   toast('New route from here: it joins your run a little further on.');
+}
+
+// The runner turned around on a loop (no return leg to switch to): the rest of the run is
+// the way back to the start along what they have already run.
+function turnedAroundOnLoop({ seg }) {
+  const n = nav.active;
+  const area = engine.area;
+  if (!n || !area || !n.lastFix) return false;
+  const fresh = backRoute(area.graph, area.proj, { lat: n.lastFix.lat, lon: n.lastFix.lon }, n.route, seg);
+  if (!fresh) return false;
+  n.route = fresh;
+  render(n.navigator.reroute(fresh, { say: false }));
+  n.lines?.forEach((l) => l.remove());
+  n.lines = [
+    L.polyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    L.polyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+  ];
+  n.doneLine?.setLatLngs([]);
+  voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  toast('Turned around: the route now leads back to the start the way you came.');
+  return true;
 }
 
 function showAlert(text) {

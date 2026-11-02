@@ -17,6 +17,7 @@ const BACK_M = 25; // back within this = on route again
 const OFF_FIXES = 2; // consecutive far fixes before warning
 const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
+const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
 const ARRIVE_M = 30;
 const MAX_ACCURACY = 60; // ignore GPS fixes worse than this (m)
 const WINDOW_BACK = 60; // search the route this far behind current progress...
@@ -114,9 +115,11 @@ export class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX } = {}) {
+  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
     this.speak = speak;
     this.now = now;
+    this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
+    this.backTravel = 0; // metres run against the route's direction, near the line
     this.units = units;
     this.splitM = units === 'mi' ? MILE : 1000;
     this.saying = { splits: splits && !quiet, landmarks: landmarks && !quiet, quiet };
@@ -159,6 +162,7 @@ export class Navigator {
     this.lastOffSaid = -Infinity;
     this.snapped = null;
     this.rejoined = false;
+    this.backTravel = 0;
   }
 
   /**
@@ -224,14 +228,28 @@ export class Navigator {
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
     if (!this.anchor) this.anchor = { x, y };
     const moved = Math.hypot(x - this.anchor.x, y - this.anchor.y);
+    let hop = 0;
     if (moved >= 8) {
-      if (moved < 300) this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI;
+      if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
       if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
       this.anchor = { x, y };
     }
 
     // Snap to the route near where we were; if lost, anywhere ahead.
-    let snap = this.snap(x, y, this.progress - WINDOW_BACK, this.progress + WINDOW_AHEAD);
+    let snap = this.snap(x, y, this.progress - Math.max(WINDOW_BACK, this.backTravel + 40), this.progress + WINDOW_AHEAD);
+
+    // Turned around? Running against the route's direction, close to the line, for REVERSE_M:
+    // on an out-and-back that means the return leg (switch to it, skipping the turnaround);
+    // on a loop it means heading home the way they came (the app builds that route).
+    if (hop && !this.finished) {
+      const near = this.snap(x, y, this.progress - 600, this.progress + 60, 0); // the line just behind too
+      const against = near.dist <= OFF_M && this.turnAngle(this.moving, this.segHeading(near.seg)) > 120;
+      this.backTravel = against ? this.backTravel + hop : 0;
+      if (this.backTravel >= REVERSE_M) {
+        this.backTravel = 0;
+        if (this.turnedAround(x, y)) return this.view(fix);
+      }
+    }
     if (snap.dist > OFF_M && this.offRoute) {
       // Rejoin anywhere the runner could plausibly have got to since leaving the route
       // (so crossing a later part of the loop while lost doesn't skip ahead).
@@ -277,6 +295,49 @@ export class Navigator {
     this.announceSplit();
     if (!this.finished && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.finish();
     return this.view(fix);
+  }
+
+  // Heading (deg) of the route along segment i.
+  segHeading(i) {
+    const j = Math.max(0, Math.min(this.xy.length - 2, i));
+    const [ax, ay] = this.xy[j];
+    const [bx, by] = this.xy[j + 1];
+    return (Math.atan2(bx - ax, by - ay) * 180) / Math.PI;
+  }
+  turnAngle(a, b) {
+    let d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+  /**
+   * The runner turned around. Looks for a later part of the route that runs the way they
+   * now run, within OFF_M (the return leg of an out-and-back): progress jumps there and the
+   * rest of the route is followed from that point. On a loop there is no such leg: the
+   * onTurnaround callback gets the chance to build the way back; returns true when handled.
+   */
+  turnedAround(x, y) {
+    const n = this.xy.length;
+    let best = null;
+    for (let i = 0; i < n - 1; i++) {
+      if (this.along[i + 1] < this.progress + 80) continue; // only later parts of the route
+      if (this.turnAngle(this.moving, this.segHeading(i)) > 60) continue;
+      const s = this.snap(x, y, this.along[i], this.along[i + 1], 0);
+      if (s.dist <= OFF_M && (!best || s.at < best.at)) best = s;
+    }
+    if (best) {
+      this.progress = best.at;
+      this.seg = best.seg;
+      this.snapped = best;
+      this.offRoute = false;
+      this.farCount = 0;
+      this.rejoined = true; // the jump is not distance run
+      this.turnarounds = (this.turnarounds || 0) + 1;
+      for (const c of this.cues) if (c.at < this.progress - 10) c.pre = c.now = true; // skipped turns are not announced
+      const left = Math.max(0, this.total - this.progress);
+      this.speak(msg(`Turned around? Following the route back from here. ${distText(left, this.units)} to go.`), { priority: 3 });
+      return true;
+    }
+    if (this.onTurnaround) return !!this.onTurnaround({ x, y, progress: this.progress, seg: this.seg });
+    return false;
   }
 
   snap(x, y, from, to, k = 0.06) {

@@ -189,16 +189,38 @@ export class RouteEngine {
   async plan({ lat, lon, distanceKm, prefs, terrain, onStatus = () => {}, turnWeight = 1 }) {
     const D = Math.min(MAX_DISTANCE_KM, distanceKm) * 1000;
     const area = await this.loadArea(lat, lon, radiusFor(D), onStatus);
-    applyPreferences(area.graph, { prefs, terrain });
-    area.graph.turnWeight = turnWeight;
-    onStatus('Designing routes…');
-    const routes = await planLoops(area.graph, {
-      startXY: area.proj.toXY(lat, lon),
-      distance: D,
-      prefs,
-      terrain,
-      onProgress: (p) => onStatus(`Designing routes… ${Math.round(p * 100)}%`),
-    });
+    const g = area.graph;
+    g.turnWeight = turnWeight;
+    const design = () => {
+      applyPreferences(g, { prefs, terrain });
+      onStatus('Designing routes…');
+      return planLoops(g, {
+        startXY: area.proj.toXY(lat, lon),
+        distance: D,
+        prefs,
+        terrain,
+        onProgress: (p) => onStatus(`Designing routes… ${Math.round(p * 100)}%`),
+      });
+    };
+    // Made surfaces first. In a village or open country the paved network may not reach the
+    // start or carry the distance: then the unpaved lanes and dirt tracks are switched on
+    // (country mode) and the run says so on its cards.
+    g.allowCountry = false;
+    let routes;
+    let country = false;
+    try {
+      routes = await design();
+    } catch (err) {
+      if (!g.countryWays) throw err;
+      g.allowCountry = true;
+      country = true;
+      try {
+        routes = await design();
+      } finally {
+        g.allowCountry = false;
+      }
+    }
+    routes.country = country;
     routes.partialMap = area.failedTiles > 0;
     routes.stopsUnknown = !area.stopsKnown;
     // Running spots nearby (tracks, big parks), with how far they are from the start.

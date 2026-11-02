@@ -1,7 +1,7 @@
 // UI: map, start point, preferences and route results.
 
 import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
-import { rejoinRoute } from './planner.js';
+import { rejoinRoute, backRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
@@ -413,6 +413,7 @@ $('goBtn').addEventListener('click', async () => {
     state.routes = routes;
     showRoutes(routes);
     if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
+    if (routes.country) toast('Country run: there is no paved network here, so unpaved lanes and tracks are included. Watch your footing.');
   } catch (err) {
     console.error(err);
     toast(err.message || 'Something went wrong. Please try again.');
@@ -808,7 +809,7 @@ let voiceShowAll = false;
 function voiceRows() {
   const all = voice.synth?.getVoices?.() || [];
   const house = houseVoices(all);
-  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not on this phone yet`, missing: !h.voice }));
+  const rows = house.map((h) => ({ uri: h.voice?.voiceURI || null, name: h.name, sub: h.voice ? `${h.gender === 'female' ? 'Female' : 'Male'} · ${h.quality}` : `${h.gender === 'female' ? 'Female' : 'Male'} · not offered by this browser`, missing: !h.voice }));
   const houseUris = new Set(rows.map((r) => r.uri).filter(Boolean));
   const others = voice.options(8).filter((o) => !houseUris.has(o.uri) && !/^(zoe|tom)\b/i.test(o.name)).map((o) => ({ uri: o.uri, name: o.name, sub: `${o.accent} English`, missing: false }));
   return { rows, others, houseMissing: house.filter((h) => !h.voice) };
@@ -821,7 +822,7 @@ function renderVoices() {
   const cur = currentVoiceUri();
   const list = $('voiceList');
   list.innerHTML = '';
-  const shown = voiceShowAll ? [...rows, ...others] : rows;
+  const shown = voiceShowAll || houseMissing.length === rows.length ? [...rows, ...others] : rows;
   for (const o of shown) {
     const row = document.createElement('div');
     const on = !!o.uri && o.uri === cur;
@@ -842,9 +843,12 @@ function renderVoices() {
   const hint = $('voiceHint');
   if (houseMissing.length) {
     hint.hidden = false;
-    hint.textContent = `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not installed. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}. Until then the best voice on the phone reads the directions.`;
+    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    hint.textContent = ios
+      ? `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not available here: on iPhone, Safari and home-screen apps only get the built-in voices, not the ones you download (Apple's rule). They will read your directions in the App Store version. Until then pick one of the voices below.`
+      : `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not on this device. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}.`;
   } else hint.hidden = true;
-  $('voiceMore').hidden = !others.length;
+  $('voiceMore').hidden = !others.length || houseMissing.length === rows.length;
   $('voiceMore').textContent = voiceShowAll ? 'Fewer voices' : 'More voices on this phone';
   $('voiceBtn').textContent = voiceLabelText();
 }
@@ -1047,6 +1051,7 @@ async function startRun({ demo }) {
     speak: (parts, opts) => voice.say(parts, opts),
     now: demo ? () => clock.t : () => Date.now(),
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
+    onTurnaround: (where) => turnedAroundOnLoop(where),
   });
   const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
   $('recenterBtn').hidden = settings.follow;
@@ -1141,6 +1146,27 @@ function maybeReroute(n, fix) {
   n.doneLine?.bringToFront?.();
   n.userMarker?.setZIndexOffset?.(1000);
   toast('New route from here: it joins your run a little further on.');
+}
+
+// The runner turned around on a loop (no return leg to switch to): the rest of the run is
+// the way back to the start along what they have already run.
+function turnedAroundOnLoop({ seg }) {
+  const n = nav.active;
+  const area = engine.area;
+  if (!n || !area || !n.lastFix) return false;
+  const fresh = backRoute(area.graph, area.proj, { lat: n.lastFix.lat, lon: n.lastFix.lon }, n.route, seg);
+  if (!fresh) return false;
+  n.route = fresh;
+  render(n.navigator.reroute(fresh, { say: false }));
+  n.lines?.forEach((l) => l.remove());
+  n.lines = [
+    L.polyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    L.polyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+  ];
+  n.doneLine?.setLatLngs([]);
+  voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  toast('Turned around: the route now leads back to the start the way you came.');
+  return true;
 }
 
 function showAlert(text) {

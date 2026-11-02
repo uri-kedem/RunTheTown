@@ -108,14 +108,16 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   const proj = makeProjection(r.latlngs[0][0], r.latlngs[0][1]);
   const here = sim.step(0);
   const [hx, hy] = proj.toXY(here.lat, here.lon);
-  const off = proj.toLatLon(hx + 150, hy + 20);
+  // 150 m straight off to the side of the road (not back along it, which would read as a turnaround).
+  const side = ((nav.segHeading(nav.seg) + 90) * Math.PI) / 180;
+  const off = proj.toLatLon(hx + 150 * Math.sin(side), hy + 150 * Math.cos(side));
   for (let k = 0; k < 12; k++) { t += 2; nav.update({ lat: off[0], lon: off[1], accuracy: 5 }); }
   check(nav.offRoute, 'runner 150 m off the line is off route');
   const joinIdx = nav.along.findIndex((a) => a >= nav.progress + 250);
   const fresh = rejoinRoute(area.graph, area.proj, { lat: off[0], lon: off[1] }, nav.route, joinIdx);
   check(!!fresh && fresh.latlngs.length > 2, 'a way back onto the route is found');
   if (fresh) {
-    const d0 = Math.hypot(...(() => { const [x, y] = proj.toXY(fresh.latlngs[0][0], fresh.latlngs[0][1]); return [x - hx - 150, y - hy - 20]; })());
+    const d0 = Math.hypot(...(() => { const [x, y] = proj.toXY(fresh.latlngs[0][0], fresh.latlngs[0][1]); const [ox, oy] = proj.toXY(off[0], off[1]); return [x - ox, y - oy]; })());
     check(d0 < 200, `the new line starts near the runner (${Math.round(d0)} m)`);
     check(fresh.cues[0].type === 'depart' && fresh.cues.every((c, i) => !i || c.at >= fresh.cues[i - 1].at - 1), 'cues start with a departure and stay in order');
     check(fresh.distance < r.distance && fresh.distance > r.distance - nav.progress - 500, `the new run is the rest of the old one plus the way back (${(fresh.distance / 1000).toFixed(2)} km)`);
@@ -175,6 +177,64 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   v.setVoice(null);
   check(v.voices.en.name === 'Samantha', 'clearing the choice goes back to the default');
   delete globalThis.SpeechSynthesisUtterance;
+}
+
+// Turning around on purpose. Out-and-back: the runner heads back before the turnaround point
+// and the guide switches to the return leg. Loop: the app is asked for the way back home.
+{
+  const { backRoute } = await import('../js/planner.js');
+  const posOn = (route) => {
+    const proj = makeProjection(route.latlngs[0][0], route.latlngs[0][1]);
+    const xy = route.latlngs.map(([a, b]) => proj.toXY(a, b));
+    const along = [0];
+    for (let i = 1; i < xy.length; i++) along.push(along[i - 1] + Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]));
+    return (d) => {
+      let i = 0; while (i < xy.length - 2 && along[i + 1] < d) i++;
+      const L = along[i + 1] - along[i] || 1; const t = Math.min(1, Math.max(0, (d - along[i]) / L));
+      const [la, lo] = proj.toLatLon(xy[i][0] + (xy[i + 1][0] - xy[i][0]) * t, xy[i][1] + (xy[i + 1][1] - xy[i][1]) * t);
+      return { lat: la, lon: lo, accuracy: 5 };
+    };
+  };
+  const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
+  const ob = routes.find((x) => x.type === 'outback');
+  const loop = routes.find((x) => x.type === 'loop') || (await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 8, prefs: { sights: true }, terrain: 'any' })).find((x) => x.type === 'loop');
+  check(!!ob && !!loop, 'an out-and-back and a loop to test turnarounds on');
+  if (ob) {
+    const said = []; let t = 0;
+    const nav = new Navigator(ob, { speak: (p) => said.push(p.map((x) => x.text).join('')), now: () => t * 1000 });
+    nav.start();
+    const at = posOn(ob);
+    let d = 0;
+    while (d < 1000) { d += 6; t += 2; nav.update(at(d)); }
+    const total = nav.total;
+    let v = null;
+    for (let k = 0; k < 60; k++) { d -= 6; t += 2; v = nav.update(at(d)); if (nav.turnarounds) break; }
+    const back = 1000 - d;
+    check(nav.turnarounds === 1 && back <= 120, `turning back on an out-and-back is noticed after ${Math.round(back)} m`);
+    check(Math.abs(nav.progress - (total - d)) < 60 && !v.offRoute, 'progress jumps to the return leg at the matching point');
+    check(said.some((x) => /^Turned around\? Following the route back/.test(x)) && !said.some((x) => /off the route/.test(x)), 'the switch is announced, no off-route warning');
+    let steps = 0; while (!nav.finished && d > 0 && steps++ < 2000) { d -= 6; t += 2; nav.update(at(d)); }
+    check(nav.finished, 'the run finishes back at the start on the return leg');
+  }
+  if (loop) {
+    const said = []; let t = 0; let asked = null;
+    const nav = new Navigator(loop, { speak: (p) => said.push(p.map((x) => x.text).join('')), now: () => t * 1000, onTurnaround: (w) => { asked = w; return true; } });
+    nav.start();
+    const at = posOn(loop);
+    let d = 0;
+    while (d < 1200) { d += 6; t += 2; nav.update(at(d)); }
+    for (let k = 0; k < 60 && !asked; k++) { d -= 6; t += 2; nav.update(at(d)); }
+    check(!!asked && asked.seg > 0, 'turning back on a loop asks the app for the way home');
+    const fix = at(d);
+    const way = backRoute(engine.area.graph, engine.area.proj, fix, loop, asked.seg);
+    check(!!way && way.type === 'back' && Math.abs(way.distance - d) < 300 && way.cues[0].type === 'depart', `the way back is the part already run (${way && (way.distance / 1000).toFixed(2)} km)`);
+    const end = way.latlngs[way.latlngs.length - 1];
+    check(Math.abs(end[0] - loop.latlngs[0][0]) < 1e-4 && Math.abs(end[1] - loop.latlngs[0][1]) < 1e-4, 'it ends at the start');
+    nav.reroute(way, { say: false });
+    const at2 = posOn(way); let d2 = 0, steps = 0;
+    while (!nav.finished && steps++ < 2000) { d2 += 6; t += 2; nav.update(at2(d2)); }
+    check(nav.finished, 'the run finishes at the start the way it came');
+  }
 }
 
 // Settings: miles, quiet mode, split toggles, warning distance.

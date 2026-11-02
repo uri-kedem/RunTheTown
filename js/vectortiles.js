@@ -274,11 +274,15 @@ export async function fetchVectorTiles(tiles, { cache = null, onProgress = () =>
 // Trunk roads are kept when they are city streets (not slip roads, expressways or
 // tunnels): in towns like Eilat the main boulevard is Route 90, and without it the
 // side streets fall apart into islands. The planner prices them above primaries.
+//
+// Country roads: in a village or the open countryside the only ways there are may be
+// unpaved lanes and farm tracks. Those are parsed too, marked `country` (and rough), and
+// the planner only switches them on when the made network around the start cannot carry
+// the run (see RouteEngine.plan); a city run never touches them.
 const isExpressway = (p) => p.ramp === 1 || p.ramp === '1' || p.expressway === 1 || p.expressway === '1' || p.brunnel === 'tunnel';
 function highwayFor(p, long) {
   if (p.foot === 'no' || p.foot === 'private' || ((p.access === 'no' || p.access === 'private') && p.foot !== 'yes')) return null; // private roads and paths are not for passing runners
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return null; // a mountain-bike trail
-  const unpaved = p.surface === 'unpaved';
   switch (p.class) {
     case 'primary':
     case 'secondary':
@@ -287,15 +291,16 @@ function highwayFor(p, long) {
     case 'trunk':
       return isExpressway(p) ? null : 'trunk';
     case 'minor':
-      return unpaved ? null : 'residential';
+      return 'residential'; // unpaved: a country lane (see countryFor)
     case 'service':
-      if (long || unpaved || /^(parking_aisle|driveway|drive-through)$/.test(p.service || '')) return null;
+      if (long || /^(parking_aisle|driveway|drive-through)$/.test(p.service || '')) return null;
       return 'service';
     case 'track':
-      return p.surface === 'paved' && !long ? 'service' : null; // a paved farm/park track is just a small road
+      if (long) return null;
+      return p.surface === 'paved' ? 'service' : 'track'; // a paved farm/park track is just a small road; a dirt one is a country track
     case 'path': {
       const s = p.subclass || 'path';
-      if (unpaved || s === 'bridleway') return null;
+      if (s === 'bridleway') return null;
       if (s === 'steps') return long ? null : 'steps';
       if (/^(footway|cycleway|pedestrian|path)$/.test(s)) return s;
       return 'path';
@@ -306,14 +311,15 @@ function highwayFor(p, long) {
 }
 // 1 for a way whose surface is unknown and whose kind is usually a trail (highway=path).
 const roughFor = (highway, p) => (highway === 'path' && p.surface !== 'paved' && !isBikeRoute(highway, p.bicycle, p.foot) ? 1 : 0);
+// 1 for a country way: an unpaved road or path, or a dirt track. Always rough as well.
+const countryFor = (highway, p) => (p.surface === 'unpaved' || highway === 'track' ? 1 : 0);
 // Why a way was left out (for the audit of a loaded area).
 function dropReason(p) {
   if (p.foot === 'no' || p.foot === 'private' || p.access === 'no') return 'no foot access';
   if (p.access === 'private' && p.foot !== 'yes') return 'private';
   if (p.mtb_scale !== undefined && p.mtb_scale !== null && p.mtb_scale !== '') return 'mountain-bike trail';
-  if (p.surface === 'unpaved') return `unpaved ${p.subclass || p.class}`;
-  if (p.class === 'track') return 'dirt track';
   if (p.subclass === 'bridleway') return 'bridleway';
+  if (p.class === 'track') return 'long dirt track';
   if (p.class === 'service') return 'parking aisle / driveway';
   if (p.class === 'trunk') return p.brunnel === 'tunnel' ? 'trunk tunnel' : p.ramp ? 'trunk slip road' : 'expressway';
   if (/^(primary|secondary|tertiary|minor|path|track)$/.test(p.class)) return `${p.class} (not for this run length)`;
@@ -399,12 +405,14 @@ export function osmFromVectorTiles(tiles, buffers, { long = false } = {}) {
         audit.dropped[why] = (audit.dropped[why] || 0) + 1;
         continue;
       }
-      const rough = roughFor(highway, f.props);
-      const bike = isBikeRoute(highway, f.props.bicycle, f.props.foot);
-      const kind = rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
+      const country = countryFor(highway, f.props);
+      const rough = country || roughFor(highway, f.props);
+      const bike = !country && isBikeRoute(highway, f.props.bicycle, f.props.foot);
+      const kind = country ? `${highway} (country)` : rough ? `${highway} (rough)` : bike ? `${highway} (bike route)` : highway;
       audit.kept[kind] = (audit.kept[kind] || 0) + 1;
-      const tags = { highway };
+      const tags = { highway: highway === 'track' ? 'path' : highway };
       if (rough) tags.rough = 1;
+      if (country) tags.country = 1;
       if (bike) tags.bike = 1;
       if (f.props.brunnel === 'bridge') tags.bridge = 'yes'; // a crossing worth keeping even with no sidewalk
       for (const line of f.geom) {
