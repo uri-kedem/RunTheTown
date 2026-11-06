@@ -7339,8 +7339,8 @@ $('photoInput').addEventListener('change', async (e) => {
   try {
     const photo = await cropPhoto(f); // move and zoom inside the circle, then a 160 px JPEG
     if (photo) { photoDraft = photo; previewPhoto(photoDraft, $('profileName').value); }
-  } catch {
-    $('profileMsg').textContent = 'That file is not a photo.';
+  } catch (err) {
+    $('profileMsg').textContent = `Could not open that photo (${err?.message || 'unknown error'}).`;
   }
 });
 $('profileName').addEventListener('input', () => { if (!photoDraft) previewPhoto(null, $('profileName').value); });
@@ -7351,6 +7351,10 @@ function cropPhoto(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
+    // The dialog opens at once (a big phone photo takes a moment to decode).
+    $('cropAsk').hidden = false;
+    $('cropCancel').onclick = () => { $('cropAsk').hidden = true; URL.revokeObjectURL(url); resolve(null); };
+    $('cropDone').onclick = null;
     img.onload = () => {
       const stage = $('cropStage');
       const canvas = $('cropCanvas');
@@ -7394,7 +7398,7 @@ function cropPhoto(file) {
       draw();
       $('cropAsk').hidden = false;
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
+    img.onerror = () => { $('cropAsk').hidden = true; URL.revokeObjectURL(url); reject(new Error('not an image')); };
     img.src = url;
   });
 }
