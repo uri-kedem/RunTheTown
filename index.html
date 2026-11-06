@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=494a33cd" />
+    <link rel="manifest" href="manifest.webmanifest?v=d1c205bd" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=494a33cd" />
+    <link rel="stylesheet" href="css/style.css?v=d1c205bd" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -33,7 +33,7 @@
         <span class="who"><b id="railName">Set up your profile</b><small id="railRuns">name, e-mail, photo</small></span>
       </button>
       <button type="button" class="rail-item" data-nav="runs">
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v14H4z" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="m8 15 2 2 4-4" /></svg><span>My runs</span>
+        <img class="ic mark" src="img/runs-outline.76314b7d.png" alt="" /><span>My runs</span>
       </button>
       <button type="button" class="rail-item" data-nav="run">
         <img class="ic mark" src="img/mark-outline.ea7ffd72.png" alt="" /><span>Running mode</span>
@@ -45,12 +45,12 @@
         <img class="ic mark install" src="img/install-outline.2d915cdb.png" alt="" /><span>Install on your phone</span>
       </button>
       <button type="button" class="rail-item" data-nav="settings">
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg><span>Settings</span>
+        <img class="ic mark" src="img/settings-outline.efc50c0b.png" alt="" /><span>Settings</span>
       </button>
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="494a33cd">494a33cd</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="d1c205bd">d1c205bd</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -445,6 +445,20 @@
       </div>
     </div>
 
+    <!-- Photo: move and zoom inside the circle -->
+    <div class="ask" id="cropAsk" hidden>
+      <div class="ask-card">
+        <div class="ask-title">Your photo</div>
+        <div class="ask-sub">Drag to move, slide to zoom. Only the circle is kept.</div>
+        <div class="crop-stage" id="cropStage"><canvas id="cropCanvas" width="280" height="280"></canvas><div class="crop-ring"></div></div>
+        <input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom" />
+        <div class="ask-actions">
+          <button type="button" class="ghost" id="cropCancel">Cancel</button>
+          <button type="button" class="primary" id="cropDone">Use this photo</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Report a problem with a route: what went wrong, where, sent by e-mail -->
     <div class="ask" id="reportAsk" hidden>
       <div class="ask-card">
@@ -474,6 +488,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=494a33cd"></script>
+    <script src="js/bundle.js?v=d1c205bd"></script>
   </body>
 </html>

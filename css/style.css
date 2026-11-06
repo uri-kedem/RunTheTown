@@ -520,6 +520,13 @@ body[data-mode="tour"] #runStyleField { display: none; }
 .run-detail .finish-stats { margin-bottom: 14px; }
 .danger-link { color: #b91c1c; }
 
+/* Photo crop (above the profile page) */
+#cropAsk { z-index: 1500; }
+.crop-stage { position: relative; width: 280px; height: 280px; margin: 0 auto; border-radius: 16px; overflow: hidden; background: #0f172a; touch-action: none; cursor: grab; }
+.crop-stage canvas { display: block; width: 280px; height: 280px; }
+.crop-ring { position: absolute; inset: 0; border-radius: 16px; pointer-events: none; box-shadow: inset 0 0 0 20px rgba(15, 23, 42, 0.55); }
+.crop-ring::after { content: ''; position: absolute; left: 20px; top: 20px; width: 240px; height: 240px; border-radius: 50%; box-shadow: 0 0 0 400px rgba(15, 23, 42, 0.55); border: 2px solid rgba(255, 255, 255, 0.9); }
+
 /* Settings */
 .settings h2 { margin-top: 26px; }
 .settings h2:first-child { margin-top: 4px; }

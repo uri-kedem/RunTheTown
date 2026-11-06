@@ -5,7 +5,7 @@ import { rejoinRoute, backRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
-import { loadProfile, saveProfile, validEmail, shrinkPhoto, makeRun, drawRunPicture, journal } from './journal.js';
+import { loadProfile, saveProfile, validEmail, makeRun, drawRunPicture, journal } from './journal.js';
 import { fallbackLinks } from './details.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
@@ -1557,6 +1557,13 @@ async function refreshRailUser() {
   }
 }
 let photoDraft = null;
+// The profile page's big avatar: the label (background) and the initials span inside it.
+function previewPhoto(photo, name) {
+  const label = $('photoPick');
+  const span = $('photoPreview');
+  label.style.backgroundImage = photo ? `url(${photo})` : '';
+  span.textContent = photo ? '' : initials(name);
+}
 function openProfile({ first = false } = {}) {
   openDrawer(false);
   for (const id of ['terms', 'install', 'settings', 'runs', 'runPage']) $(id).hidden = true;
@@ -1565,7 +1572,7 @@ function openProfile({ first = false } = {}) {
   $('profileName').value = profile?.name || '';
   $('profileEmail').value = profile?.email || '';
   photoDraft = profile?.photo || null;
-  avatarInto($('photoPreview'), { name: profile?.name, photo: photoDraft });
+  previewPhoto(photoDraft, profile?.name);
   $('profileMsg').textContent = '';
   $('profileSkip').hidden = !first;
   $('profileBack').hidden = first;
@@ -1583,15 +1590,69 @@ function openProfile({ first = false } = {}) {
 $('photoInput').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
+  e.target.value = '';
   try {
-    photoDraft = await shrinkPhoto(f);
-    avatarInto($('photoPreview'), { name: $('profileName').value, photo: photoDraft });
+    const photo = await cropPhoto(f); // move and zoom inside the circle, then a 160 px JPEG
+    if (photo) { photoDraft = photo; previewPhoto(photoDraft, $('profileName').value); }
   } catch {
     $('profileMsg').textContent = 'That file is not a photo.';
   }
-  e.target.value = '';
 });
-$('profileName').addEventListener('input', () => { if (!photoDraft) avatarInto($('photoPreview'), { name: $('profileName').value }); });
+$('profileName').addEventListener('input', () => { if (!photoDraft) previewPhoto(null, $('profileName').value); });
+
+// Circle crop: the photo in a 280 px stage, dragged and zoomed; the 240 px circle in the
+// middle becomes the avatar.
+function cropPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const stage = $('cropStage');
+      const canvas = $('cropCanvas');
+      const ctx = canvas.getContext('2d');
+      const SZ = 280, CIRCLE = 240;
+      const base = Math.max(CIRCLE / img.width, CIRCLE / img.height); // the photo covers the circle at zoom 1
+      let zoom = 1, ox = 0, oy = 0; // offsets of the photo centre from the stage centre (stage px)
+      const scale = () => base * zoom;
+      const clamp = () => {
+        const w = img.width * scale(), h = img.height * scale();
+        const mx = Math.max(0, (w - CIRCLE) / 2), my = Math.max(0, (h - CIRCLE) / 2);
+        ox = Math.max(-mx, Math.min(mx, ox));
+        oy = Math.max(-my, Math.min(my, oy));
+      };
+      const draw = () => {
+        clamp();
+        const w = img.width * scale(), h = img.height * scale();
+        ctx.clearRect(0, 0, SZ, SZ);
+        ctx.drawImage(img, SZ / 2 + ox - w / 2, SZ / 2 + oy - h / 2, w, h);
+      };
+      const zoomEl = $('cropZoom');
+      zoomEl.value = '1';
+      zoomEl.oninput = () => { zoom = Number(zoomEl.value); draw(); };
+      let drag = null;
+      stage.onpointerdown = (ev) => { drag = { x: ev.clientX, y: ev.clientY, ox, oy }; stage.setPointerCapture(ev.pointerId); };
+      stage.onpointermove = (ev) => { if (!drag) return; ox = drag.ox + (ev.clientX - drag.x); oy = drag.oy + (ev.clientY - drag.y); draw(); };
+      stage.onpointerup = stage.onpointercancel = () => { drag = null; };
+      const close = (result) => { $('cropAsk').hidden = true; URL.revokeObjectURL(url); stage.onpointerdown = stage.onpointermove = stage.onpointerup = null; resolve(result); };
+      $('cropCancel').onclick = () => close(null);
+      $('cropDone').onclick = () => {
+        const out = document.createElement('canvas');
+        out.width = out.height = 160;
+        const o = out.getContext('2d');
+        const k = 160 / CIRCLE;
+        const w = img.width * scale() * k, h = img.height * scale() * k;
+        o.fillStyle = '#fff'; o.fillRect(0, 0, 160, 160); // the corners outside the circle are hidden by the round avatar
+        o.beginPath(); o.arc(80, 80, 80, 0, Math.PI * 2); o.clip();
+        o.drawImage(img, 80 + ox * k - w / 2, 80 + oy * k - h / 2, w, h);
+        close(out.toDataURL('image/jpeg', 0.85));
+      };
+      draw();
+      $('cropAsk').hidden = false;
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
+    img.src = url;
+  });
+}
 $('profileSave').addEventListener('click', () => {
   const name = $('profileName').value.trim();
   const email = $('profileEmail').value.trim();
