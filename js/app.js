@@ -1556,13 +1556,13 @@ async function refreshRailUser() {
     $('railRuns').textContent = 'name, e-mail, photo';
   }
 }
-let photoDraft = null;
+let photoDraft = null; // { photo, photoFull } or null
 // The profile page's big avatar: the label (background) and the initials span inside it.
-function previewPhoto(photo, name) {
+function previewPhoto(draft, name) {
   const label = $('photoPick');
   const span = $('photoPreview');
-  label.style.backgroundImage = photo ? `url(${photo})` : '';
-  span.textContent = photo ? '' : initials(name);
+  label.style.backgroundImage = draft?.photo ? `url(${draft.photo})` : '';
+  span.textContent = draft?.photo ? '' : initials(name);
 }
 function openProfile({ first = false } = {}) {
   openDrawer(false);
@@ -1571,7 +1571,7 @@ function openProfile({ first = false } = {}) {
   $('profileIntro').hidden = !first && !!profile?.name;
   $('profileName').value = profile?.name || '';
   $('profileEmail').value = profile?.email || '';
-  photoDraft = profile?.photo || null;
+  photoDraft = profile?.photo ? { photo: profile.photo, photoFull: profile.photoFull || profile.photo } : null;
   previewPhoto(photoDraft, profile?.name);
   $('profileMsg').textContent = '';
   $('profileSkip').hidden = !first;
@@ -1598,7 +1598,7 @@ async function onPhotoPicked(e) {
   photoBusy = true;
   note(`Opening ${f.type || 'photo'} (${Math.round(f.size / 1024)} KB)…`);
   try {
-    const photo = await cropPhoto(f); // move and zoom inside the circle, then a 160 px JPEG
+    const photo = await cropPhoto(f); // move and zoom inside the circle: a 320 px avatar and an 800 px copy
     if (photo) { photoDraft = photo; previewPhoto(photoDraft, $('profileName').value); }
     note('');
   } catch (err) {
@@ -1610,6 +1610,17 @@ async function onPhotoPicked(e) {
 }
 $('photoInput').addEventListener('change', onPhotoPicked);
 $('photoInput').addEventListener('input', onPhotoPicked);
+// Tapping the avatar: with a photo, a small menu (view / change / remove); without, the picker.
+$('photoPick').addEventListener('click', () => {
+  if (!photoDraft?.photo) { $('photoInput').click(); return; }
+  $('photoAsk').hidden = false;
+});
+$('photoMenuCancel').addEventListener('click', () => { $('photoAsk').hidden = true; });
+$('photoAsk').addEventListener('click', (e) => { if (e.target === $('photoAsk')) $('photoAsk').hidden = true; });
+$('photoChange').addEventListener('click', () => { $('photoAsk').hidden = true; $('photoInput').click(); });
+$('photoRemove').addEventListener('click', () => { $('photoAsk').hidden = true; photoDraft = null; previewPhoto(null, $('profileName').value); });
+$('photoView').addEventListener('click', () => { $('photoAsk').hidden = true; $('photoViewerImg').src = photoDraft?.photoFull || photoDraft?.photo || ''; $('photoViewer').hidden = false; });
+$('photoViewer').addEventListener('click', () => { $('photoViewer').hidden = true; });
 $('profileName').addEventListener('input', () => { if (!photoDraft) previewPhoto(null, $('profileName').value); });
 
 // Circle crop: the photo in a 280 px stage, dragged and zoomed; the 240 px circle in the
@@ -1627,6 +1638,11 @@ function cropPhoto(file) {
       const canvas = $('cropCanvas');
       const ctx = canvas.getContext('2d');
       const SZ = 280, CIRCLE = 240;
+      // Draw at the screen's real pixel density, so the preview is as sharp as the phone.
+      const dpr = Math.min(3, window.devicePixelRatio || 1);
+      canvas.width = canvas.height = Math.round(SZ * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingQuality = 'high';
       const base = Math.max(CIRCLE / img.width, CIRCLE / img.height); // the photo covers the circle at zoom 1
       let zoom = 1, ox = 0, oy = 0; // offsets of the photo centre from the stage centre (stage px)
       const scale = () => base * zoom;
@@ -1652,15 +1668,21 @@ function cropPhoto(file) {
       const close = (result) => { $('cropAsk').hidden = true; URL.revokeObjectURL(url); stage.onpointerdown = stage.onpointermove = stage.onpointerup = null; resolve(result); };
       $('cropCancel').onclick = () => close(null);
       $('cropDone').onclick = () => {
-        const out = document.createElement('canvas');
-        out.width = out.height = 160;
-        const o = out.getContext('2d');
-        const k = 160 / CIRCLE;
-        const w = img.width * scale() * k, h = img.height * scale() * k;
-        o.fillStyle = '#fff'; o.fillRect(0, 0, 160, 160); // the corners outside the circle are hidden by the round avatar
-        o.beginPath(); o.arc(80, 80, 80, 0, Math.PI * 2); o.clip();
-        o.drawImage(img, 80 + ox * k - w / 2, 80 + oy * k - h / 2, w, h);
-        close(out.toDataURL('image/jpeg', 0.85));
+        // The circle at two sizes: 320 px for the avatar, 800 px for viewing. Drawn straight
+        // from the original photo (never from the preview), so nothing is lost on the way.
+        const render = (size, quality) => {
+          const out = document.createElement('canvas');
+          out.width = out.height = size;
+          const o = out.getContext('2d');
+          o.imageSmoothingQuality = 'high';
+          const k = size / CIRCLE;
+          const w = img.width * scale() * k, h = img.height * scale() * k;
+          o.fillStyle = '#fff'; o.fillRect(0, 0, size, size); // the corners outside the circle are hidden by the round avatar
+          o.beginPath(); o.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); o.clip();
+          o.drawImage(img, size / 2 + ox * k - w / 2, size / 2 + oy * k - h / 2, w, h);
+          return out.toDataURL('image/jpeg', quality);
+        };
+        close({ photo: render(320, 0.86), photoFull: render(800, 0.84) });
       };
       draw();
       $('cropAsk').hidden = false;
@@ -1674,7 +1696,7 @@ $('profileSave').addEventListener('click', () => {
   const email = $('profileEmail').value.trim();
   if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
   if (!validEmail(email)) { $('profileMsg').textContent = 'That e-mail address does not look right.'; return; }
-  profile = saveProfile({ ...(profile || {}), name, email, photo: photoDraft, skipped: false });
+  profile = saveProfile({ ...(profile || {}), name, email, photo: photoDraft?.photo || null, photoFull: photoDraft?.photoFull || null, skipped: false });
   refreshRailUser();
   $('profile').hidden = true;
   highlightNav(document.body.dataset.view === 'app' ? state.mode : null);

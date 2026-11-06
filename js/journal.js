@@ -15,7 +15,7 @@ const PROFILE_KEY = 'rtt-profile';
 export function loadProfile(storage = globalThis.localStorage) {
   try {
     const p = JSON.parse(storage?.getItem(PROFILE_KEY) || 'null');
-    if (p && typeof p === 'object') return { name: String(p.name || ''), email: String(p.email || ''), photo: typeof p.photo === 'string' ? p.photo : null, since: p.since || null, skipped: !!p.skipped };
+    if (p && typeof p === 'object') return { name: String(p.name || ''), email: String(p.email || ''), photo: typeof p.photo === 'string' ? p.photo : null, photoFull: typeof p.photoFull === 'string' ? p.photoFull : null, since: p.since || null, skipped: !!p.skipped };
   } catch {
     /* defaults */
   }
@@ -23,12 +23,13 @@ export function loadProfile(storage = globalThis.localStorage) {
 }
 
 export function saveProfile(profile, storage = globalThis.localStorage) {
-  const slim = { name: String(profile.name || '').trim().slice(0, 80), email: String(profile.email || '').trim().slice(0, 120), photo: profile.photo || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
+  // photo: the avatar (a 320 px circle); photoFull: the same crop at 800 px for viewing.
+  const slim = { name: String(profile.name || '').trim().slice(0, 80), email: String(profile.email || '').trim().slice(0, 120), photo: profile.photo || null, photoFull: profile.photoFull || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
   try {
     storage?.setItem(PROFILE_KEY, JSON.stringify(slim));
   } catch {
-    /* storage full (a big photo): keep it without the photo */
-    try { storage?.setItem(PROFILE_KEY, JSON.stringify({ ...slim, photo: null })); } catch {}
+    /* storage full (a big photo): keep it without the big copy, then without any photo */
+    try { storage?.setItem(PROFILE_KEY, JSON.stringify({ ...slim, photoFull: null })); } catch { try { storage?.setItem(PROFILE_KEY, JSON.stringify({ ...slim, photo: null, photoFull: null })); } catch {} }
   }
   return slim;
 }
