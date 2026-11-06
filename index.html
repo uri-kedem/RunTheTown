@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=ad24c399" />
+    <link rel="manifest" href="manifest.webmanifest?v=a888287d" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=ad24c399" />
+    <link rel="stylesheet" href="css/style.css?v=a888287d" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="ad24c399">ad24c399</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="a888287d">a888287d</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -171,7 +171,7 @@
       <div class="page-body profile">
         <p class="page-note" id="profileIntro">Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.</p>
         <div class="photo-row">
-          <label class="avatar big" id="photoPick"><span id="photoPreview"></span><input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden /></label>
+          <label class="avatar big" id="photoPick"><span id="photoPreview"></span><input type="file" id="photoInput" class="photo-input" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Pick a photo" /></label>
           <div><b>Photo</b><small>Tap to pick one from your photos (optional)</small></div>
         </div>
         <label class="field-label">Name<input type="text" id="profileName" autocomplete="name" maxlength="80" placeholder="Your name" /></label>
@@ -488,6 +488,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=ad24c399"></script>
+    <script src="js/bundle.js?v=a888287d"></script>
   </body>
 </html>

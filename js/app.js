@@ -1587,17 +1587,29 @@ function openProfile({ first = false } = {}) {
   $('profile').scrollTop = 0;
   highlightNav('profile');
 }
-$('photoInput').addEventListener('change', async (e) => {
+// iOS fires 'change' (and sometimes 'input') once the photo is handed over, which for a
+// HEIC can take a moment after the picker closes. Either event is accepted once per file.
+let photoBusy = false;
+async function onPhotoPicked(e) {
   const f = e.target.files?.[0];
-  if (!f) return;
-  e.target.value = '';
+  const note = (t) => { $('profileMsg').textContent = t; };
+  if (!f) { note('No photo came through. Please try again.'); return; }
+  if (photoBusy) return;
+  photoBusy = true;
+  note(`Opening ${f.type || 'photo'} (${Math.round(f.size / 1024)} KB)…`);
   try {
     const photo = await cropPhoto(f); // move and zoom inside the circle, then a 160 px JPEG
     if (photo) { photoDraft = photo; previewPhoto(photoDraft, $('profileName').value); }
+    note('');
   } catch (err) {
-    $('profileMsg').textContent = `Could not open that photo (${err?.message || 'unknown error'}).`;
+    note(`Could not open that photo (${err?.message || 'unknown error'}). Try a JPEG from your camera roll.`);
+  } finally {
+    photoBusy = false;
+    try { e.target.value = ''; } catch {}
   }
-});
+}
+$('photoInput').addEventListener('change', onPhotoPicked);
+$('photoInput').addEventListener('input', onPhotoPicked);
 $('profileName').addEventListener('input', () => { if (!photoDraft) previewPhoto(null, $('profileName').value); });
 
 // Circle crop: the photo in a 280 px stage, dragged and zoomed; the 240 px circle in the
