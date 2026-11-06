@@ -9,18 +9,20 @@ import { haversine } from './geo.js';
 const DB_NAME = 'runthetown';
 const STORE = 'areas';
 const TILES = 'tiles';
+const RUNS = 'runs'; // the run journal (see journal.js)
 const INDEX_KEY = 'rtt-elev-areas-v2'; // elevation grids only; map data lives in tiles
 const MAX_AGE_MS = 14 * 24 * 3600 * 1000;
 const MAX_AREAS = 6;
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       else if (e.oldVersion < 2) req.transaction.objectStore(STORE).clear(); // v1 kept whole map areas: drop them
       if (!db.objectStoreNames.contains(TILES)) db.createObjectStore(TILES);
+      if (!db.objectStoreNames.contains(RUNS)) db.createObjectStore(RUNS, { keyPath: 'id' }).createIndex('time', 'time');
     };
     req.onblocked = () => reject(new Error('database blocked by another tab'));
     req.onsuccess = () => {
@@ -149,5 +151,36 @@ export const tileCache = {
     } catch {
       /* storage full or blocked: ignore */
     }
+  },
+};
+
+// The run journal: whole runs by id, newest first. Never purged.
+export const runStore = {
+  async put(run) {
+    await tx(await db(), 'readwrite', (s) => s.put(run), RUNS);
+  },
+  async get(id) {
+    return tx(await db(), 'readonly', (s) => s.get(id), RUNS);
+  },
+  async remove(id) {
+    await tx(await db(), 'readwrite', (s) => s.delete(id), RUNS);
+  },
+  // All runs, newest first, without the pictures (light), unless `full`.
+  async list({ full = false } = {}) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const out = [];
+      const t = d.transaction(RUNS, 'readonly');
+      const req = t.objectStore(RUNS).index('time').openCursor(null, 'prev');
+      req.onsuccess = (e) => {
+        const c = e.target.result;
+        if (!c) return;
+        const r = c.value;
+        out.push(full ? r : { ...r, picture: undefined, track: undefined, latlngs: undefined, hasPicture: !!r.picture });
+        c.continue();
+      };
+      t.oncomplete = () => resolve(out);
+      t.onerror = () => reject(t.error);
+    });
   },
 };

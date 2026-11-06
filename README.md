@@ -313,6 +313,41 @@ Live runs on real OpenStreetMap data:
   loop 63% along the water. From the Yarkon area: the park loop and the Hadar Yosef track are found and
   turned into lap routes with correct cues. Planning takes 2.5–6 s including the download.
 
+## The runner and the run journal (`js/journal.js`)
+First open of the app: a profile page (name, e-mail, a photo from the camera roll shrunk to a 160 px
+JPEG; "Skip for now" is remembered). Everything stays on the phone (`localStorage` `rtt-profile`): there
+is no server. The menu shows the runner (photo or initials, runs and distance so far) and **My runs**:
+every finished run, and every run stopped after 500 m, is saved to IndexedDB (`runs` store, cache.js
+`runStore`) with when, distance, time, pace, route name and type, planned distance, the planned line,
+the GPS track actually run (thinned to ≤ 600 points) and a **picture of the route over the map**:
+`drawRunPicture` fetches the map's own tiles (Esri / OSM, both CORS-enabled) into a 640×400 canvas at
+the zoom that fits the run, draws the planned line (grey, dashed when there is a track), the track
+(orange), start and finish, and stores a JPEG data URL (~40 KB). Offline, or if a tile taints the
+canvas, the same picture on a plain background. The journal lists the runs newest first with their
+pictures, opens one with the big picture, facts and "Show on the map" (planned line + track on the
+real map), can delete a run (two taps) and export the whole journal as JSON. Demo runs are not logged.
+
+## Starting away from the start point
+A runner who sets off 60 m past the route's first point, or from the hotel door onto the loop, did it
+on purpose. The guide no longer says "Head to the start": within 300 m of any part of the route it
+stays quiet (the screen shows "To the route · 120 m"), counts the movement, and the run begins
+wherever the runner meets the line (`Navigator.begun`, `JOIN_START_M`), with the turns before that
+point skipped. Further than 300 m away it says once where the route is.
+
+## The route-selection sheet
+The bottom sheet has three heights, dragged by the handle (or tapped: peek ⇄ half): **peek** shows a
+strip of the three routes as coloured chips so the map can be read, **half** the cards, **full** the
+whole list. Picking a route from the strip fits the map to it. The search bar leaves once a start
+point is set (typed, located or tapped); the "Start point" button under the brand brings it back.
+
+## Villages: the least significant ways
+With under 40 km of paved network in the loaded area (`Graph.village`, `VILLAGE_MADE_M`) the place is
+a village: its few through-roads carry the traffic and the run keeps to the lanes. Costs switch to
+`VILLAGE_COST` (paths 0.8, lanes 0.95, tertiary 2.6, secondary 3.4, primary 4.5, no sidewalk 8),
+unpaved lanes and tracks are on from the start (cost 1.1, country mode without the fallback) and the
+score penalises busy roads hard. The synthetic hamlet in `tests/test-country.mjs` has a paved tertiary
+with sidewalks crossing it: the runs never touch it.
+
 ## Country mode (villages and open country)
 Made surfaces first, always. But in a village or the countryside the paved network may be a few
 hundred metres of main street, with everything else unpaved lanes and farm tracks (Achi and
@@ -346,6 +381,10 @@ wherever the browser does expose them (Chrome/Edge on desktop, and the native ap
 - GPS and voice need `https://` on a phone (see "On your phone" above).
 - Rerouting joins the old line further on; it never replans the rest of the run around a blocked path.
 - Downloaded iPhone voices (Zoe, Tom) are not available to web apps; the native app will have them.
+- The journal lives on the phone only (export it as JSON before changing phones); an account comes with the backend.
+- A road with no sidewalk is capped at a crossing's worth: 10% of the run and at most 300 m + 2% of the
+  distance (a 24 km run can no longer carry 2.2 km of it); names and the card's first line agree
+  ("Waterfront loop" needs a quarter of the run on real paths; otherwise "City loop" / "City streets near the water").
 - Whether a track is free to use isn't in the map tiles. Tracks are shown when they're mapped; check
   opening hours on site.
 - Promenades are recognised by name and by being car-free paths along water or parks; an unnamed

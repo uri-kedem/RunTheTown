@@ -205,22 +205,21 @@ export class RouteEngine {
     // Made surfaces first. In a village or open country the paved network may not reach the
     // start or carry the distance: then the unpaved lanes and dirt tracks are switched on
     // (country mode) and the run says so on its cards.
-    g.allowCountry = false;
+    // In a village the lanes and tracks are the streets: on from the start, so the one paved
+    // through-road does not become the run.
+    g.allowCountry = g.village && g.countryWays > 0;
     let routes;
-    let country = false;
     try {
       routes = await design();
     } catch (err) {
-      if (!g.countryWays) throw err;
+      if (!g.countryWays || g.allowCountry) throw err;
       g.allowCountry = true;
-      country = true;
-      try {
-        routes = await design();
-      } finally {
-        g.allowCountry = false;
-      }
+      routes = await design();
+    } finally {
+      g.allowCountry = false;
     }
-    routes.country = country;
+    routes.country = routes.some((r) => r.stats?.countryFrac > 0.2);
+    routes.village = !!g.village;
     routes.partialMap = area.failedTiles > 0;
     routes.stopsUnknown = !area.stopsKnown;
     // Running spots nearby (tracks, big parks), with how far they are from the start.

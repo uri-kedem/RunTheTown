@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=4a098295" />
+    <link rel="manifest" href="manifest.webmanifest?v=494a33cd" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=4a098295" />
+    <link rel="stylesheet" href="css/style.css?v=494a33cd" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -27,6 +27,13 @@
     <nav class="rail" id="rail" aria-label="Main menu">
       <button type="button" class="rail-logo" data-nav="home" aria-label="RunTheTown home">
         <img class="logo" src="img/logo-white.0ef39459.png" alt="RunTheTown" />
+      </button>
+      <button type="button" class="rail-user" id="railUser" data-nav="profile">
+        <span class="avatar" id="railAvatar"></span>
+        <span class="who"><b id="railName">Set up your profile</b><small id="railRuns">name, e-mail, photo</small></span>
+      </button>
+      <button type="button" class="rail-item" data-nav="runs">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v14H4z" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="m8 15 2 2 4-4" /></svg><span>My runs</span>
       </button>
       <button type="button" class="rail-item" data-nav="run">
         <img class="ic mark" src="img/mark-outline.ea7ffd72.png" alt="" /><span>Running mode</span>
@@ -43,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="4a098295">4a098295</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="494a33cd">494a33cd</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -155,6 +162,55 @@
       </div>
     </section>
 
+    <!-- Profile: who runs (kept on the phone) -->
+    <section class="page" id="profile" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="profileBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title" id="profileTitle">Your profile</div>
+      </div>
+      <div class="page-body profile">
+        <p class="page-note" id="profileIntro">Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.</p>
+        <div class="photo-row">
+          <label class="avatar big" id="photoPick"><span id="photoPreview"></span><input type="file" id="photoInput" accept="image/*" hidden /></label>
+          <div><b>Photo</b><small>Tap to pick one from your photos (optional)</small></div>
+        </div>
+        <label class="field-label">Name<input type="text" id="profileName" autocomplete="name" maxlength="80" placeholder="Your name" /></label>
+        <label class="field-label">E-mail<input type="email" id="profileEmail" autocomplete="email" inputmode="email" maxlength="120" placeholder="you@example.com" /></label>
+        <div class="distance-msg error" id="profileMsg" aria-live="polite"></div>
+        <button type="button" class="primary" id="profileSave">Save</button>
+        <div class="route-pop-foot"><button type="button" class="link" id="profileSkip">Skip for now</button></div>
+        <div class="profile-totals" id="profileTotals" hidden></div>
+      </div>
+    </section>
+
+    <!-- My runs: the journal -->
+    <section class="page" id="runs" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="runsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title">My runs</div>
+        <button type="button" class="ghost page-action" id="runsExport">Export</button>
+      </div>
+      <div class="page-body runs">
+        <div class="runs-summary" id="runsSummary"></div>
+        <div class="runs-list" id="runsList"></div>
+        <p class="page-note" id="runsEmpty" hidden>No runs yet. Every run you finish (or stop after 500 m) is saved here with its route.</p>
+      </div>
+    </section>
+
+    <!-- One run -->
+    <section class="page" id="runPage" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="runBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title" id="runTitle">Run</div>
+      </div>
+      <div class="page-body run-detail">
+        <img class="run-pic" id="runPic" alt="" hidden />
+        <div class="finish-stats" id="runStats"></div>
+        <ul class="route-pop-facts" id="runFacts"></ul>
+        <div class="route-pop-foot"><button type="button" class="link" id="runShowMap">Show on the map</button><button type="button" class="link danger-link" id="runDelete">Delete this run</button></div>
+      </div>
+    </section>
+
     <!-- Settings -->
     <section class="page" id="settings" hidden>
       <div class="page-bar">
@@ -223,9 +279,11 @@
       </form>
       <ul class="search-results" id="searchResults" role="listbox" hidden></ul>
     </header>
+    <button type="button" class="map-back" id="mapBack" aria-label="Change the start point"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>Start point</button>
 
-    <section class="sheet" id="sheet">
-      <div class="handle"></div>
+    <section class="sheet" id="sheet" data-pos="half">
+      <div class="grab" id="sheetGrab"><div class="handle"></div></div>
+      <div class="route-strip" id="routeStrip" hidden></div>
 
       <!-- Preferences -->
       <div id="prefsView">
@@ -416,6 +474,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=4a098295"></script>
+    <script src="js/bundle.js?v=494a33cd"></script>
   </body>
 </html>

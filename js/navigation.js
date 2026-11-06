@@ -18,6 +18,7 @@ const OFF_FIXES = 2; // consecutive far fixes before warning
 const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
 const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
+const JOIN_START_M = 300; // starting this close to any part of the route: the run begins from there, not from the route's first point
 const ARRIVE_M = 30;
 const MAX_ACCURACY = 60; // ignore GPS fixes worse than this (m)
 const WINDOW_BACK = 60; // search the route this far behind current progress...
@@ -163,6 +164,8 @@ export class Navigator {
     this.snapped = null;
     this.rejoined = false;
     this.backTravel = 0;
+    this.begun = false; // true once the runner is on the line (from the first point or anywhere else)
+    this.startHintSaid = false;
   }
 
   /**
@@ -233,6 +236,32 @@ export class Navigator {
       if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
       if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
       this.anchor = { x, y };
+    }
+
+    // Not on the line yet: the run begins wherever the runner meets the route, within
+    // JOIN_START_M of any part of it (a runner who sets off 60 m past the start point, or
+    // from their hotel door onto the loop, did that on purpose). Further away, one hint.
+    if (!this.begun) {
+      const s0 = this.snap(x, y, 0, this.total, 0);
+      if (s0.dist <= OFF_M) {
+        this.begun = true;
+        this.progress = s0.at;
+        this.seg = s0.seg;
+        this.snapped = s0;
+        this.rejoined = true; // joining is not distance run
+        for (const c of this.cues) if (c.at < this.progress - 10) c.pre = c.now = true;
+        if (s0.at > 50) this.joinedAt = s0.at;
+      } else if (s0.dist <= JOIN_START_M) {
+        // On the way to the line: count the movement, say nothing. The line is close.
+        if (hop) this.odometer += hop;
+        this.toLine = s0.dist;
+        return this.view(fix);
+      } else {
+        if (hop) this.odometer += hop;
+        this.toLine = s0.dist;
+        if (!this.startHintSaid && this.moving != null) { this.startHintSaid = true; this.speak(this.offRouteSpeech(x, y, s0), { priority: 3 }); }
+        return this.view(fix);
+      }
     }
 
     // Snap to the route near where we were; if lost, anywhere ahead.
@@ -484,8 +513,10 @@ export class Navigator {
     }
     return {
       fix,
-      onRoute: pos && !this.offRoute ? [pos[0], pos[1]] : null,
+      onRoute: pos && !this.offRoute && this.begun ? [pos[0], pos[1]] : null,
       offRoute: this.offRoute,
+      joining: this.started && !this.begun && !this.finished, // on the way to the line (nothing said, nothing urged)
+      toLine: this.begun ? 0 : this.toLine ?? null,
       offBy: this.snapped?.dist ?? null,
       progress: this.progress,
       remaining: Math.max(0, this.total - this.progress),

@@ -1825,6 +1825,10 @@ const TURN_COST = { slight: 16, turn: 50, sharp: 120, uturn: 600 };
 // Road classes, from most to least runner-friendly. TRUNK is an urban arterial
 // (OSM highway=trunk with sidewalks, e.g. Route 90 through Eilat): kept so the
 // network stays connected, but priced so routes only touch it when they must.
+// Below this much paved network in the loaded area the place is a village: the few roads that
+// cross it are its through-roads (traffic, no sidewalk) and the run keeps to the lanes.
+const VILLAGE_MADE_M = 40000;
+
 const HW = { PATH: 0, STEPS: 1, LOCAL: 2, TERTIARY: 3, SECONDARY: 4, PRIMARY: 5, TRUNK: 6 };
 
 // Promenades, esplanades, boardwalks, quays and boulevards, in a few languages.
@@ -2027,6 +2031,11 @@ class Graph {
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
     this.noSidewalk = noSidewalk; // country roads priced as a last resort (no sidewalk)
+    // How much made (paved) network there is: a village has a few kilometres of it, a town hundreds.
+    let madeLength = 0;
+    for (let e = 0; e < m; e++) if (!ecountry[e]) madeLength += haversine(lat[ea[e]], lon[ea[e]], lat[eb[e]], lon[eb[e]]);
+    this.madeLength = madeLength;
+    this.village = madeLength < VILLAGE_MADE_M;
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);
@@ -2589,17 +2598,23 @@ function buildCues(g, route) {
 
 const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 6.0]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk / no sidewalk)
 const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 8.0];
+// A village (see Graph.village): the least significant ways first. Lanes, paths and service
+// roads are cheap; the through-roads that cross the village (tertiary and up) cost like
+// busy city arterials, so a loop uses one only for a necessary link or crossing.
+const VILLAGE_COST = [0.8, 2.5, 0.95, 2.6, 3.4, 4.5, 8.0];
+const COUNTRY_LANE_COST = 1.1; // an unpaved lane or track in country mode: a small road, not a trail
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 const ROUGH_COST = 3;
 
 function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
-  const table = prefs.quiet ? QUIET_COST : BASE_COST;
+  const table = g.village ? VILLAGE_COST : prefs.quiet ? QUIET_COST : BASE_COST;
   g.stopWeight = prefs.avoidStops === false ? 0 : 1; // avoid lights & crosswalks (on by default)
   for (let e = 0; e < g.m; e++) {
     let c = table[g.hw[e]];
     if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
-    if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
+    if (g.country?.[e]) c = COUNTRY_LANE_COST; // country mode: the lanes are the village's streets
+    else if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
       // promenades, boardwalks and park paths most of all: they are the point of the app.
@@ -2749,9 +2764,13 @@ async function planLoops(g, opts) {
     c.score = scoreRoute(c.stats, prefs, terrain);
   }
   // A road with no sidewalk (an arterial, a country road) is for crossing a river, not for
-  // running: loops with more than 10% of it are dropped whenever anything else exists.
-  const safe = candidates.filter((c) => c.stats.trunkFrac <= 0.1);
+  // running: loops with more of it than a crossing's worth (10%, and never more than 300 m
+  // plus 2% of the distance, so a long run cannot hide 2 km of it) are dropped whenever
+  // anything else exists; among the rest, the ones with the least of it come first.
+  const trunkCap = (c) => Math.min(0.1 * c.stats.distance, 300 + 0.02 * D);
+  const safe = candidates.filter((c) => c.stats.trunkFrac * c.stats.distance <= trunkCap(c));
   if (safe.length) candidates.splice(0, candidates.length, ...safe);
+  else { const least = Math.min(...candidates.map((c) => c.stats.trunkFrac)); candidates.splice(0, candidates.length, ...candidates.filter((c) => c.stats.trunkFrac <= least + 0.03)); }
   candidates.sort((a, b) => b.score - a.score);
 
   // Option 1 is the promenade run: of every loop and there-and-back, the one with the
@@ -3234,6 +3253,7 @@ function routeStats(g, route, D, prefs = {}) {
     promFrac: prom / total,
     roughFrac: rough / total,
     countryFrac: country / total,
+    village: !!g.village,
     signals,
     crossings,
     stopsKnown: g.stopsKnown !== false, // false when the traffic-light query failed (busy servers)
@@ -3251,6 +3271,7 @@ function scoreRoute(s, prefs, terrain) {
   if (prefs.quiet) score += 0.8 * s.quietFrac;
   if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.5 * (s.greenFrac + s.waterFrac) + 0.3 * s.quietFrac;
   score -= 0.6 * s.busyFrac;
+  if (s.village) score -= 2.0 * s.busyFrac - 0.8 * s.quietFrac; // a village run lives on the lanes
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
   score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
   score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
@@ -3290,10 +3311,13 @@ function describe(g, route, start, prefs = {}) {
   const headingDeg = (Math.atan2(cx, cy) * 180) / Math.PI;
   const heading = bearingName(headingDeg);
 
+  // The name agrees with the card's first line (whereText): a seaside, waterfront or park
+  // name needs real paths under the feet (a quarter of the run), not streets near the water.
   let theme = 'City loop';
-  if (s.seaFrac >= 0.2 && g.openSea) theme = 'Seaside loop';
-  else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
-  else if (s.greenFrac >= 0.25) theme = 'Park loop';
+  const onPaths = s.promFrac >= 0.25;
+  if (onPaths && s.seaFrac >= 0.2 && g.openSea) theme = 'Seaside loop';
+  else if (onPaths && s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
+  else if (onPaths && s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
   if (s.countryFrac >= 0.5) theme = 'Country loop';
@@ -3302,8 +3326,8 @@ function describe(g, route, start, prefs = {}) {
   if (outback) {
     theme = 'Out & back';
     if (s.seaFrac >= 0.15 && g.openSea) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
-    else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
-    else if (s.greenFrac >= 0.25) theme += ' through the green';
+    else if (onPaths && s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
+    else if (onPaths && s.greenFrac >= 0.25) theme += ' through the green';
   }
 
   if (prefs.sights && s.sights.length >= 2) theme = outback ? 'Sightseeing out & back' : 'Sightseeing loop';
@@ -3379,7 +3403,8 @@ function whereText(s, g) {
   if (pct >= 95) return `All of it on ${ground}`;
   if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
   if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;
-  return restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets';
+  const near = s.waterFrac >= 0.25 ? ' near the water' : s.greenFrac >= 0.25 ? ' near the green' : '';
+  return (restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets') + near;
 }
 
 function stopsText(s) {
@@ -4160,18 +4185,20 @@ function mergeSpots(scanned, tilePlaces) {
 const DB_NAME = 'runthetown';
 const STORE = 'areas';
 const TILES = 'tiles';
+const RUNS = 'runs'; // the run journal (see journal.js)
 const INDEX_KEY = 'rtt-elev-areas-v2'; // elevation grids only; map data lives in tiles
 const MAX_AGE_MS = 14 * 24 * 3600 * 1000;
 const MAX_AREAS = 6;
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       else if (e.oldVersion < 2) req.transaction.objectStore(STORE).clear(); // v1 kept whole map areas: drop them
       if (!db.objectStoreNames.contains(TILES)) db.createObjectStore(TILES);
+      if (!db.objectStoreNames.contains(RUNS)) db.createObjectStore(RUNS, { keyPath: 'id' }).createIndex('time', 'time');
     };
     req.onblocked = () => reject(new Error('database blocked by another tab'));
     req.onsuccess = () => {
@@ -4300,6 +4327,37 @@ const tileCache = {
     } catch {
       /* storage full or blocked: ignore */
     }
+  },
+};
+
+// The run journal: whole runs by id, newest first. Never purged.
+const runStore = {
+  async put(run) {
+    await tx(await db(), 'readwrite', (s) => s.put(run), RUNS);
+  },
+  async get(id) {
+    return tx(await db(), 'readonly', (s) => s.get(id), RUNS);
+  },
+  async remove(id) {
+    await tx(await db(), 'readwrite', (s) => s.delete(id), RUNS);
+  },
+  // All runs, newest first, without the pictures (light), unless `full`.
+  async list({ full = false } = {}) {
+    const d = await db();
+    return new Promise((resolve, reject) => {
+      const out = [];
+      const t = d.transaction(RUNS, 'readonly');
+      const req = t.objectStore(RUNS).index('time').openCursor(null, 'prev');
+      req.onsuccess = (e) => {
+        const c = e.target.result;
+        if (!c) return;
+        const r = c.value;
+        out.push(full ? r : { ...r, picture: undefined, track: undefined, latlngs: undefined, hasPicture: !!r.picture });
+        c.continue();
+      };
+      t.oncomplete = () => resolve(out);
+      t.onerror = () => reject(t.error);
+    });
   },
 };
 
@@ -4511,22 +4569,21 @@ class RouteEngine {
     // Made surfaces first. In a village or open country the paved network may not reach the
     // start or carry the distance: then the unpaved lanes and dirt tracks are switched on
     // (country mode) and the run says so on its cards.
-    g.allowCountry = false;
+    // In a village the lanes and tracks are the streets: on from the start, so the one paved
+    // through-road does not become the run.
+    g.allowCountry = g.village && g.countryWays > 0;
     let routes;
-    let country = false;
     try {
       routes = await design();
     } catch (err) {
-      if (!g.countryWays) throw err;
+      if (!g.countryWays || g.allowCountry) throw err;
       g.allowCountry = true;
-      country = true;
-      try {
-        routes = await design();
-      } finally {
-        g.allowCountry = false;
-      }
+      routes = await design();
+    } finally {
+      g.allowCountry = false;
     }
-    routes.country = country;
+    routes.country = routes.some((r) => r.stats?.countryFrac > 0.2);
+    routes.village = !!g.village;
     routes.partialMap = area.failedTiles > 0;
     routes.stopsUnknown = !area.stopsKnown;
     // Running spots nearby (tracks, big parks), with how far they are from the start.
@@ -4629,6 +4686,7 @@ const OFF_FIXES = 2; // consecutive far fixes before warning
 const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
 const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
+const JOIN_START_M = 300; // starting this close to any part of the route: the run begins from there, not from the route's first point
 const ARRIVE_M = 30;
 const MAX_ACCURACY = 60; // ignore GPS fixes worse than this (m)
 const WINDOW_BACK = 60; // search the route this far behind current progress...
@@ -4774,6 +4832,8 @@ class Navigator {
     this.snapped = null;
     this.rejoined = false;
     this.backTravel = 0;
+    this.begun = false; // true once the runner is on the line (from the first point or anywhere else)
+    this.startHintSaid = false;
   }
 
   /**
@@ -4844,6 +4904,32 @@ class Navigator {
       if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
       if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
       this.anchor = { x, y };
+    }
+
+    // Not on the line yet: the run begins wherever the runner meets the route, within
+    // JOIN_START_M of any part of it (a runner who sets off 60 m past the start point, or
+    // from their hotel door onto the loop, did that on purpose). Further away, one hint.
+    if (!this.begun) {
+      const s0 = this.snap(x, y, 0, this.total, 0);
+      if (s0.dist <= OFF_M) {
+        this.begun = true;
+        this.progress = s0.at;
+        this.seg = s0.seg;
+        this.snapped = s0;
+        this.rejoined = true; // joining is not distance run
+        for (const c of this.cues) if (c.at < this.progress - 10) c.pre = c.now = true;
+        if (s0.at > 50) this.joinedAt = s0.at;
+      } else if (s0.dist <= JOIN_START_M) {
+        // On the way to the line: count the movement, say nothing. The line is close.
+        if (hop) this.odometer += hop;
+        this.toLine = s0.dist;
+        return this.view(fix);
+      } else {
+        if (hop) this.odometer += hop;
+        this.toLine = s0.dist;
+        if (!this.startHintSaid && this.moving != null) { this.startHintSaid = true; this.speak(this.offRouteSpeech(x, y, s0), { priority: 3 }); }
+        return this.view(fix);
+      }
     }
 
     // Snap to the route near where we were; if lost, anywhere ahead.
@@ -5095,8 +5181,10 @@ class Navigator {
     }
     return {
       fix,
-      onRoute: pos && !this.offRoute ? [pos[0], pos[1]] : null,
+      onRoute: pos && !this.offRoute && this.begun ? [pos[0], pos[1]] : null,
       offRoute: this.offRoute,
+      joining: this.started && !this.begun && !this.finished, // on the way to the line (nothing said, nothing urged)
+      toLine: this.begun ? 0 : this.toLine ?? null,
       offBy: this.snapped?.dist ?? null,
       progress: this.progress,
       remaining: Math.max(0, this.total - this.progress),
@@ -5423,8 +5511,240 @@ function houseVoices(voices) {
   });
 }
 
+// ---- journal.js ----
+// The runner and their runs, kept on the phone.
+//
+// Profile: name, e-mail and a small photo in localStorage ('rtt-profile'). Runs: one record
+// per completed run in IndexedDB (cache.js `runStore`): when, how far, how long, the pace, the
+// route's name and type, the planned line, the GPS track actually run, and a picture of the
+// route over the map (drawn here from the map tiles, so the journal needs no network to show
+// it later). There is no server yet; the journal can be exported as a file.
+
+
+
+
+
+const PROFILE_KEY = 'rtt-profile';
+
+function loadProfile(storage = globalThis.localStorage) {
+  try {
+    const p = JSON.parse(storage?.getItem(PROFILE_KEY) || 'null');
+    if (p && typeof p === 'object') return { name: String(p.name || ''), email: String(p.email || ''), photo: typeof p.photo === 'string' ? p.photo : null, since: p.since || null, skipped: !!p.skipped };
+  } catch {
+    /* defaults */
+  }
+  return null;
+}
+
+function saveProfile(profile, storage = globalThis.localStorage) {
+  const slim = { name: String(profile.name || '').trim().slice(0, 80), email: String(profile.email || '').trim().slice(0, 120), photo: profile.photo || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
+  try {
+    storage?.setItem(PROFILE_KEY, JSON.stringify(slim));
+  } catch {
+    /* storage full (a big photo): keep it without the photo */
+    try { storage?.setItem(PROFILE_KEY, JSON.stringify({ ...slim, photo: null })); } catch {}
+  }
+  return slim;
+}
+
+const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
+
+// A photo from the camera roll, shrunk to a small square JPEG data URL (browser only).
+function shrinkPhoto(file, { size = 160, quality = 0.82 } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = size;
+        const ctx = c.getContext('2d');
+        const s = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+        resolve(c.toDataURL('image/jpeg', quality));
+      } catch (e) {
+        reject(e);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
+    img.src = url;
+  });
+}
+
+// Every n-th point plus the corners, so a track of thousands of fixes stays a few hundred points.
+function simplifyTrack(points, { maxPoints = 600, minStep = 8 } = {}) {
+  if (!points || points.length <= 2) return points || [];
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i];
+    const last = out[out.length - 1];
+    if (haversine(last[0], last[1], p[0], p[1]) >= minStep) out.push(p);
+  }
+  out.push(points[points.length - 1]);
+  if (out.length <= maxPoints) return out;
+  const step = out.length / maxPoints;
+  const thin = [];
+  for (let i = 0; i < out.length; i += step) thin.push(out[Math.floor(i)]);
+  if (thin[thin.length - 1] !== out[out.length - 1]) thin.push(out[out.length - 1]);
+  return thin;
+}
+
+/**
+ * A run record from the live run. `track` = [[lat, lon], …] fixes actually run (in order),
+ * `route` = the planned route (latlngs, name, type, distance, place), `stats` = the navigator's
+ * figures (odometer m, elapsed ms), `start` = { lat, lon, label }.
+ */
+function makeRun({ route, track, odometer, elapsed, startedAt, start, settings, country = false, rerouted = false, finished = true }) {
+  const paceSecPerKm = odometer > 50 ? elapsed / 1000 / (odometer / 1000) : null;
+  return {
+    id: `${startedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    time: startedAt, // ISO, when the run started
+    endedAt: new Date().toISOString(),
+    distance: Math.round(odometer),
+    elapsed: Math.round(elapsed),
+    pace: paceSecPerKm,
+    finished, // reached the end of the route (else stopped early)
+    name: route?.name || 'Run',
+    type: route?.type || 'loop',
+    planned: Math.round(route?.distance || 0),
+    place: route?.place ? { kind: route.place.kind, name: route.place.name } : null,
+    start: start ? { lat: start.lat, lon: start.lon, label: start.label } : null,
+    units: settings?.units || 'km',
+    country,
+    rerouted,
+    latlngs: route?.latlngs || [],
+    track: simplifyTrack(track),
+    picture: null, // a JPEG data URL, added by drawRunPicture
+  };
+}
+
+// ---- The picture: map tiles with the planned line, the track and the start ----
+
+const TILE = 256;
+
+function bounds(pts) {
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const [la, lo] of pts) { if (la < minLat) minLat = la; if (la > maxLat) maxLat = la; if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo; }
+  return { minLat, maxLat, minLon, maxLon };
+}
+
+/**
+ * Draws the run over map tiles into a canvas and returns a JPEG data URL. `tileUrl` is a
+ * {z}/{x}/{y} template (the map's own source). Tiles that fail to load (offline) leave a
+ * plain patch; if the canvas is tainted (no CORS), it is redrawn without tiles.
+ */
+async function drawRunPicture(run, { tileUrl, width = 640, height = 400, pad = 36, fetchTile = null, quality = 0.82 } = {}) {
+  const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
+  if (pts.length < 2 || typeof document === 'undefined') return null;
+  const all = run.latlngs?.length ? [...run.latlngs, ...(run.track || [])] : pts;
+  const b = bounds(all);
+  // The zoom at which the whole run fits inside the picture (minus the padding).
+  let z = 18;
+  let fx0, fy0, fx1, fy1;
+  for (; z > 2; z--) {
+    [fx0, fy0] = tileXY(b.maxLat, b.minLon, z);
+    [fx1, fy1] = tileXY(b.minLat, b.maxLon, z);
+    if ((fx1 - fx0) * TILE <= width - 2 * pad && (fy1 - fy0) * TILE <= height - 2 * pad) break;
+  }
+  const cx = (fx0 + fx1) / 2, cy = (fy0 + fy1) / 2; // picture centre in tile units
+  const toPx = (lat, lon) => { const [tx, ty] = tileXY(lat, lon, z); return [width / 2 + (tx - cx) * TILE, height / 2 + (ty - cy) * TILE]; };
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = height;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#eef1f5';
+  ctx.fillRect(0, 0, width, height);
+  // Tiles covering the picture.
+  const x0 = Math.floor(cx - width / 2 / TILE), x1 = Math.floor(cx + width / 2 / TILE);
+  const y0 = Math.floor(cy - height / 2 / TILE), y1 = Math.floor(cy + height / 2 / TILE);
+  const n = 1 << z;
+  const jobs = [];
+  if (tileUrl) {
+    for (let tx = x0; tx <= x1; tx++) {
+      for (let ty = y0; ty <= y1; ty++) {
+        if (ty < 0 || ty >= n) continue;
+        const url = tileUrl.replace('{z}', z).replace('{x}', ((tx % n) + n) % n).replace('{y}', ty);
+        jobs.push(loadTile(url, fetchTile).then((img) => { if (img) ctx.drawImage(img, width / 2 + (tx - cx) * TILE, height / 2 + (ty - cy) * TILE, TILE, TILE); }).catch(() => {}));
+      }
+    }
+    await Promise.all(jobs);
+  }
+  const drawn = draw(ctx, run, toPx);
+  try {
+    return c.toDataURL('image/jpeg', quality);
+  } catch {
+    // Tainted by a tile without CORS headers: the same picture on a plain background.
+    const c2 = document.createElement('canvas');
+    c2.width = width;
+    c2.height = height;
+    const ctx2 = c2.getContext('2d');
+    ctx2.fillStyle = '#eef1f5';
+    ctx2.fillRect(0, 0, width, height);
+    draw(ctx2, run, toPx);
+    return c2.toDataURL('image/jpeg', quality);
+  }
+  function draw(g, r, px) {
+    const line = (list, color, w, dash = null) => {
+      if (!list || list.length < 2) return;
+      g.beginPath();
+      list.forEach(([la, lo], i) => { const [x, y] = px(la, lo); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+      g.lineCap = g.lineJoin = 'round';
+      g.setLineDash(dash || []);
+      g.strokeStyle = color;
+      g.lineWidth = w;
+      g.stroke();
+      g.setLineDash([]);
+    };
+    // A soft white wash so the lines read on any map.
+    g.fillStyle = 'rgba(255,255,255,0.18)';
+    g.fillRect(0, 0, width, height);
+    if (r.latlngs?.length > 1) { line(r.latlngs, '#fff', 9); line(r.latlngs, '#94a3b8', 5, r.track?.length > 1 ? [8, 8] : null); }
+    if (r.track?.length > 1) { line(r.track, '#fff', 10); line(r.track, '#ff5a36', 6); }
+    const s = (r.track?.length ? r.track : r.latlngs)[0];
+    const e = (r.track?.length ? r.track : r.latlngs).slice(-1)[0];
+    for (const [p, fill] of [[e, '#0f172a'], [s, '#ff5a36']]) {
+      const [x, y] = px(p[0], p[1]);
+      g.beginPath(); g.arc(x, y, 8, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
+      g.beginPath(); g.arc(x, y, 5.5, 0, Math.PI * 2); g.fillStyle = fill; g.fill();
+    }
+    return true;
+  }
+}
+
+function loadTile(url, fetchTile) {
+  if (fetchTile) return fetchTile(url);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+// ---- The journal ----
+
+const journal = {
+  async save(run) { await runStore.put(run); return run; },
+  async list() { return runStore.list(); },
+  async get(id) { return runStore.get(id); },
+  async remove(id) { return runStore.remove(id); },
+  async exportJson() {
+    const runs = await runStore.list({ full: true });
+    return JSON.stringify({ app: 'RunTheTown', exported: new Date().toISOString(), profile: loadProfile(), runs }, null, 1);
+  },
+  // Totals for the profile card.
+  async totals() {
+    const runs = await runStore.list();
+    return { runs: runs.length, distance: runs.reduce((a, r) => a + (r.distance || 0), 0), elapsed: runs.reduce((a, r) => a + (r.elapsed || 0), 0) };
+  },
+};
+
 // ---- app.js ----
 // UI: map, start point, preferences and route results.
+
 
 
 
@@ -5511,8 +5831,72 @@ map.on('click', (e) => {
   setStart(e.latlng.lat, e.latlng.lng, 'Dropped pin');
 });
 
+// ---------- Bottom sheet (peek / half / full) and the search bar ----------
+// The search bar leaves once a start point is set; the "Start point" button brings it back.
+const POS = ['peek', 'half', 'full'];
+function setSheet(pos) {
+  if (isDesktop()) return;
+  const sheet = $('sheet');
+  sheet.dataset.pos = pos;
+  if (pos !== 'full') sheet.scrollTop = 0;
+  // The strip of routes stays visible in peek (sticky under the handle).
+  const strip = $('routeStrip');
+  strip.hidden = !(pos === 'peek' && state.routes.length);
+  sheet.style.setProperty('--peek', state.routes.length ? '118px' : '96px');
+}
+function sheetPos() { return $('sheet').dataset.pos || 'half'; }
+{
+  const grab = $('sheetGrab');
+  let drag = null;
+  grab.addEventListener('pointerdown', (e) => { drag = { y: e.clientY, h: $('sheet').offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); $('sheet').classList.add('dragging'); });
+  grab.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 6) drag.moved = true;
+    $('sheet').style.maxHeight = `${Math.max(80, Math.min(window.innerHeight * 0.88, drag.h - dy))}px`;
+  });
+  const end = (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    const h = Math.max(80, drag.h - dy);
+    $('sheet').classList.remove('dragging');
+    $('sheet').style.maxHeight = '';
+    if (!drag.moved) setSheet(sheetPos() === 'peek' ? 'half' : 'peek'); // a tap on the handle: peek <-> half
+    else {
+      const vh = window.innerHeight;
+      setSheet(h < vh * 0.3 ? 'peek' : h < vh * 0.68 ? 'half' : 'full');
+    }
+    drag = null;
+    setTimeout(() => { if (state.routes[state.selected]) map.fitBounds(L.latLngBounds(state.routes[state.selected].latlngs), mapPadding()); }, 280);
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+}
+function showSearch(show) {
+  document.querySelector('.topbar').classList.toggle('start-set', !show);
+}
+$('mapBack').addEventListener('click', () => {
+  showSearch(true);
+  setSheet('half');
+  setTimeout(() => $('searchInput').focus(), 50);
+});
+function renderRouteStrip() {
+  const strip = $('routeStrip');
+  strip.innerHTML = '';
+  state.routes.forEach((r, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.setProperty('--c', COLORS[i]);
+    b.className = i === state.selected ? 'on' : '';
+    b.innerHTML = `<i></i>${escapeHtml(r.name)}`;
+    b.addEventListener('click', () => { lastTapped = i; selectRoute(i, { fit: true }); [...strip.children].forEach((c, k) => c.classList.toggle('on', k === i)); });
+    strip.appendChild(b);
+  });
+}
+
 function setStart(lat, lon, label, { pan = true } = {}) {
   state.start = { lat, lon, label };
+  showSearch(false);
   if (!startMarker) {
     startMarker = L.marker([lat, lon], {
       draggable: true,
@@ -5888,6 +6272,8 @@ function showRoutes(routes, { keep = false } = {}) {
   });
   drawRoutes();
   drawPlaces(routes.places || []);
+  renderRouteStrip();
+  if (!keep) setSheet('half');
   selectRoute(keepIdx, { fit: !keep });
 }
 
@@ -6081,6 +6467,7 @@ function selectRoute(i, { fit = false } = {}) {
     }
   });
   [...$('cards').children].forEach((c, k) => c.classList.toggle('on', k === i));
+  [...$('routeStrip').children].forEach((c, k) => c.classList.toggle('on', k === i));
   const card = $('cards').children[i];
   if (card && !isDesktop()) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   drawKmMarkers(state.routes[i], COLORS[i]);
@@ -6141,6 +6528,8 @@ function showPrefs() {
   $('prefsView').hidden = false;
   $('resultsView').hidden = true;
   state.routes = [];
+  $('routeStrip').hidden = true;
+  setSheet('half');
   routeLayer.clearLayers();
   drawPlaces(state.spots || [], $('spotsPrefs'));
 }
@@ -6479,7 +6868,7 @@ async function startRun({ demo }) {
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
     onTurnaround: (where) => turnedAroundOnLoop(where),
   });
-  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
+  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6, track: [], startedAt: new Date().toISOString(), saved: false });
   $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
@@ -6515,6 +6904,7 @@ async function startRun({ demo }) {
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
+    if (!demo && (fix.accuracy == null || fix.accuracy <= 60)) n.track.push([fix.lat, fix.lon]);
     const v = n.navigator.update(fix);
     render(v);
     if (v.offRoute && !demo) maybeReroute(n, fix);
@@ -6610,10 +7000,15 @@ function render(v) {
     $('navDist').textContent = '';
     $('navText').textContent = 'You\u2019re back at the start';
     $('navStreet').textContent = '';
+  } else if (v.joining && v.toLine != null) {
+    $('navArrow').innerHTML = arrowSvg('depart');
+    $('navDist').textContent = fmtDist(v.toLine);
+    $('navText').textContent = 'To the route';
+    $('navStreet').textContent = 'Your run starts where you meet the line';
   } else if (v.offRoute) {
     $('navArrow').innerHTML = arrowSvg('uturn');
     $('navDist').textContent = v.offBy != null ? `${fmtDist(v.offBy)} away` : '';
-    $('navText').textContent = v.progress < 30 ? 'Head to the start' : 'Off route';
+    $('navText').textContent = 'Off route';
     $('navStreet').textContent = 'Head back to the colored line';
   } else if (v.next) {
     $('navArrow').innerHTML = arrowSvg(v.next.type, v.next.dir);
@@ -6651,12 +7046,40 @@ function showFinish(v) {
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
     <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
   $('navFinish').hidden = false;
+  saveRun(n, { finished: true });
+}
+
+// ---------- The run journal ----------
+// Every finished run, and every run stopped after 500 m, is kept on the phone with a
+// picture of the route over the map. Demo runs are not logged.
+async function saveRun(n, { finished }) {
+  if (!n || n.saved || n.demo) return;
+  const nv = n.navigator;
+  if (!finished && nv.odometer < 500) return;
+  n.saved = true;
+  const run = makeRun({
+    route: n.route, track: n.track, odometer: nv.odometer, elapsed: nv.elapsed, startedAt: n.startedAt, start: state.start, settings,
+    country: !!state.routes.country, rerouted: !!(nv.rerouted || nv.turnarounds), finished,
+  });
+  try {
+    run.picture = await drawRunPicture(run, { tileUrl: TILE_SOURCES[tileSource].url });
+  } catch {
+    run.picture = null;
+  }
+  try {
+    await journal.save(run);
+    refreshRailUser();
+    toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
+  } catch {
+    toast('Could not save this run on the phone.');
+  }
 }
 
 function endRun() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
+  saveRun(n, { finished: n.navigator.finished });
   clearInterval(n.timer);
   voice.stop();
   voice.onSay = null;
@@ -6825,12 +7248,16 @@ function navigate(target) {
     $('terms').hidden = true;
     $('install').hidden = true;
     $('settings').hidden = true;
+    for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
     setView('home');
     highlightNav(null);
     return;
   }
   if (target === 'settings') return openSettings();
+  if (target === 'profile') return openProfile();
+  if (target === 'runs') return openRuns();
   $('settings').hidden = true;
+  for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
   if (target === 'terms' || target === 'install') {
     for (const id of ['terms', 'install']) $(id).hidden = id !== target;
     $(target).scrollTop = 0;
@@ -6856,6 +7283,161 @@ installSetup();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); if (!$('lapsAsk').hidden) closeLapsAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
+
+// ---------- Profile (first run of the app) and the journal pages ----------
+let profile = loadProfile();
+const initials = (name) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('') || '?';
+function avatarInto(el, p) {
+  if (p?.photo) { el.style.backgroundImage = `url(${p.photo})`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = initials(p?.name); }
+}
+async function refreshRailUser() {
+  avatarInto($('railAvatar'), profile);
+  if (profile?.name) {
+    $('railName').textContent = profile.name;
+    try { const t = await journal.totals(); $('railRuns').textContent = t.runs ? `${t.runs} run${t.runs > 1 ? 's' : ''} · ${U.len(t.distance)}` : 'No runs yet'; } catch { $('railRuns').textContent = ''; }
+  } else {
+    $('railName').textContent = 'Set up your profile';
+    $('railRuns').textContent = 'name, e-mail, photo';
+  }
+}
+let photoDraft = null;
+function openProfile({ first = false } = {}) {
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage']) $(id).hidden = true;
+  $('profileTitle').textContent = first ? 'Welcome to RunTheTown' : 'Your profile';
+  $('profileIntro').hidden = !first && !!profile?.name;
+  $('profileName').value = profile?.name || '';
+  $('profileEmail').value = profile?.email || '';
+  photoDraft = profile?.photo || null;
+  avatarInto($('photoPreview'), { name: profile?.name, photo: photoDraft });
+  $('profileMsg').textContent = '';
+  $('profileSkip').hidden = !first;
+  $('profileBack').hidden = first;
+  $('profileSave').textContent = first ? 'Start running' : 'Save';
+  const totals = $('profileTotals');
+  totals.hidden = true;
+  if (profile?.name) journal.totals().then((t) => {
+    totals.hidden = false;
+    totals.innerHTML = `<div><b>${t.runs}</b><span>runs</span></div><div><b>${U.num(t.distance, 1)}</b><span>${U.unit}</span></div><div><b>${fmtTime(t.elapsed)}</b><span>time</span></div>`;
+  }).catch(() => {});
+  $('profile').hidden = false;
+  $('profile').scrollTop = 0;
+  highlightNav('profile');
+}
+$('photoInput').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  try {
+    photoDraft = await shrinkPhoto(f);
+    avatarInto($('photoPreview'), { name: $('profileName').value, photo: photoDraft });
+  } catch {
+    $('profileMsg').textContent = 'That file is not a photo.';
+  }
+  e.target.value = '';
+});
+$('profileName').addEventListener('input', () => { if (!photoDraft) avatarInto($('photoPreview'), { name: $('profileName').value }); });
+$('profileSave').addEventListener('click', () => {
+  const name = $('profileName').value.trim();
+  const email = $('profileEmail').value.trim();
+  if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
+  if (!validEmail(email)) { $('profileMsg').textContent = 'That e-mail address does not look right.'; return; }
+  profile = saveProfile({ ...(profile || {}), name, email, photo: photoDraft, skipped: false });
+  refreshRailUser();
+  $('profile').hidden = true;
+  highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
+  toast(`Welcome, ${name.split(' ')[0]}. Your runs will be saved to your journal.`);
+});
+$('profileSkip').addEventListener('click', () => {
+  profile = saveProfile({ name: '', email: '', photo: null, skipped: true });
+  $('profile').hidden = true;
+  highlightNav(null);
+});
+$('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+
+const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+async function openRuns() {
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'profile', 'runPage']) $(id).hidden = true;
+  const list = $('runsList');
+  list.innerHTML = '';
+  let runs = [];
+  try { runs = await journal.list(); } catch { runs = []; }
+  $('runsEmpty').hidden = runs.length > 0;
+  $('runsSummary').textContent = runs.length ? `${runs.length} run${runs.length > 1 ? 's' : ''} · ${U.len(runs.reduce((a, r) => a + r.distance, 0))} · ${fmtTime(runs.reduce((a, r) => a + r.elapsed, 0))}` : '';
+  for (const r of runs) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'run-card';
+    card.innerHTML = `<div class="thumb" data-id="${r.id}"></div><div><b>${escapeHtml(r.name)}</b><small>${U.num(r.distance, 2)} ${U.unit} · ${fmtTime(r.elapsed)} · ${r.pace ? U.pace(r.pace) + ' ' + U.paceLabel() : ''}${r.finished ? '' : ' · stopped early'}</small><small class="when">${fmtWhen(r.time)}${r.start?.label ? ' · ' + escapeHtml(r.start.label) : ''}</small></div>`;
+    card.addEventListener('click', () => openRun(r.id));
+    list.appendChild(card);
+    if (r.hasPicture) journal.get(r.id).then((full) => { if (full?.picture) card.querySelector('.thumb').style.backgroundImage = `url(${full.picture})`; }).catch(() => {});
+  }
+  $('runs').hidden = false;
+  $('runs').scrollTop = 0;
+  highlightNav('runs');
+}
+let openRunId = null;
+async function openRun(id) {
+  const r = await journal.get(id).catch(() => null);
+  if (!r) return;
+  openRunId = id;
+  $('runTitle').textContent = r.name;
+  const pic = $('runPic');
+  pic.hidden = !r.picture;
+  if (r.picture) pic.src = r.picture;
+  $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
+  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
+  $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
+  $('runShowMap').hidden = !(r.latlngs?.length > 1 || r.track?.length > 1);
+  $('runs').hidden = true;
+  $('runPage').hidden = false;
+  $('runPage').scrollTop = 0;
+}
+$('runBack').addEventListener('click', () => { $('runPage').hidden = true; openRuns(); });
+$('runsBack').addEventListener('click', () => { $('runs').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+$('runDelete').addEventListener('click', async () => {
+  if (!openRunId) return;
+  if (!$('runDelete').dataset.armed) { $('runDelete').dataset.armed = '1'; $('runDelete').textContent = 'Tap again to delete'; setTimeout(() => { delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run'; }, 3000); return; }
+  await journal.remove(openRunId).catch(() => {});
+  delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run';
+  refreshRailUser();
+  $('runPage').hidden = true;
+  openRuns();
+});
+$('runShowMap').addEventListener('click', async () => {
+  const r = await journal.get(openRunId).catch(() => null);
+  if (!r) return;
+  for (const id of ['runPage', 'runs']) $(id).hidden = true;
+  setView('app');
+  journalLayer.clearLayers().addTo(map);
+  const pts = r.track?.length > 1 ? r.track : r.latlngs;
+  if (r.latlngs?.length > 1) L.polyline(r.latlngs, { color: '#94a3b8', weight: 5, dashArray: r.track?.length > 1 ? '8 8' : null }).addTo(journalLayer);
+  if (r.track?.length > 1) L.polyline(r.track, { color: '#ff5a36', weight: 5 }).addTo(journalLayer);
+  map.fitBounds(L.latLngBounds(pts), mapPadding());
+  setSheet('peek');
+  toast(`${r.name}: ${U.num(r.distance, 2)} ${U.unit} on ${fmtWhen(r.time)}. Tap the map or change the start to clear it.`);
+});
+const journalLayer = L.layerGroup();
+map.on('click', () => { if (journalLayer.getLayers?.().length) { journalLayer.clearLayers(); map.removeLayer(journalLayer); } });
+$('runsExport').addEventListener('click', async () => {
+  try {
+    const json = await journal.exportJson();
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `runthetown-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch {
+    toast('Could not export the journal.');
+  }
+});
+refreshRailUser();
+// First open of the app: the profile page, once (Skip is remembered too).
+if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();

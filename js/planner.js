@@ -8,17 +8,23 @@ import { buildCues } from './cues.js';
 
 const BASE_COST = [0.85, 2.5, 1.0, 1.25, 1.6, 2.2, 6.0]; // by HW class (path, steps, local, tertiary, secondary, primary, trunk / no sidewalk)
 const QUIET_COST = [0.7, 2.5, 0.95, 1.6, 2.4, 3.5, 8.0];
+// A village (see Graph.village): the least significant ways first. Lanes, paths and service
+// roads are cheap; the through-roads that cross the village (tertiary and up) cost like
+// busy city arterials, so a loop uses one only for a necessary link or crossing.
+const VILLAGE_COST = [0.8, 2.5, 0.95, 2.6, 3.4, 4.5, 8.0];
+const COUNTRY_LANE_COST = 1.1; // an unpaved lane or track in country mode: a small road, not a trail
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 export const ROUGH_COST = 3;
 
 export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
-  const table = prefs.quiet ? QUIET_COST : BASE_COST;
+  const table = g.village ? VILLAGE_COST : prefs.quiet ? QUIET_COST : BASE_COST;
   g.stopWeight = prefs.avoidStops === false ? 0 : 1; // avoid lights & crosswalks (on by default)
   for (let e = 0; e < g.m; e++) {
     let c = table[g.hw[e]];
     if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
-    if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
+    if (g.country?.[e]) c = COUNTRY_LANE_COST; // country mode: the lanes are the village's streets
+    else if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
       // promenades, boardwalks and park paths most of all: they are the point of the app.
@@ -168,9 +174,13 @@ export async function planLoops(g, opts) {
     c.score = scoreRoute(c.stats, prefs, terrain);
   }
   // A road with no sidewalk (an arterial, a country road) is for crossing a river, not for
-  // running: loops with more than 10% of it are dropped whenever anything else exists.
-  const safe = candidates.filter((c) => c.stats.trunkFrac <= 0.1);
+  // running: loops with more of it than a crossing's worth (10%, and never more than 300 m
+  // plus 2% of the distance, so a long run cannot hide 2 km of it) are dropped whenever
+  // anything else exists; among the rest, the ones with the least of it come first.
+  const trunkCap = (c) => Math.min(0.1 * c.stats.distance, 300 + 0.02 * D);
+  const safe = candidates.filter((c) => c.stats.trunkFrac * c.stats.distance <= trunkCap(c));
   if (safe.length) candidates.splice(0, candidates.length, ...safe);
+  else { const least = Math.min(...candidates.map((c) => c.stats.trunkFrac)); candidates.splice(0, candidates.length, ...candidates.filter((c) => c.stats.trunkFrac <= least + 0.03)); }
   candidates.sort((a, b) => b.score - a.score);
 
   // Option 1 is the promenade run: of every loop and there-and-back, the one with the
@@ -653,6 +663,7 @@ export function routeStats(g, route, D, prefs = {}) {
     promFrac: prom / total,
     roughFrac: rough / total,
     countryFrac: country / total,
+    village: !!g.village,
     signals,
     crossings,
     stopsKnown: g.stopsKnown !== false, // false when the traffic-light query failed (busy servers)
@@ -670,6 +681,7 @@ export function scoreRoute(s, prefs, terrain) {
   if (prefs.quiet) score += 0.8 * s.quietFrac;
   if (!prefs.green && !prefs.water && !prefs.quiet) score += 0.5 * (s.greenFrac + s.waterFrac) + 0.3 * s.quietFrac;
   score -= 0.6 * s.busyFrac;
+  if (s.village) score -= 2.0 * s.busyFrac - 0.8 * s.quietFrac; // a village run lives on the lanes
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
   score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
   score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
@@ -709,10 +721,13 @@ function describe(g, route, start, prefs = {}) {
   const headingDeg = (Math.atan2(cx, cy) * 180) / Math.PI;
   const heading = bearingName(headingDeg);
 
+  // The name agrees with the card's first line (whereText): a seaside, waterfront or park
+  // name needs real paths under the feet (a quarter of the run), not streets near the water.
   let theme = 'City loop';
-  if (s.seaFrac >= 0.2 && g.openSea) theme = 'Seaside loop';
-  else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
-  else if (s.greenFrac >= 0.25) theme = 'Park loop';
+  const onPaths = s.promFrac >= 0.25;
+  if (onPaths && s.seaFrac >= 0.2 && g.openSea) theme = 'Seaside loop';
+  else if (onPaths && s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme = 'Waterfront loop';
+  else if (onPaths && s.greenFrac >= 0.25) theme = 'Park loop';
   else if (s.promFrac >= 0.4) theme = 'Promenade loop';
   else if (s.quietFrac >= 0.75) theme = 'Quiet streets loop';
   if (s.countryFrac >= 0.5) theme = 'Country loop';
@@ -721,8 +736,8 @@ function describe(g, route, start, prefs = {}) {
   if (outback) {
     theme = 'Out & back';
     if (s.seaFrac >= 0.15 && g.openSea) theme += ' along the sea'; // reaching the beach is the point, even with a plain way there
-    else if (s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
-    else if (s.greenFrac >= 0.25) theme += ' through the green';
+    else if (onPaths && s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) theme += ' along the water';
+    else if (onPaths && s.greenFrac >= 0.25) theme += ' through the green';
   }
 
   if (prefs.sights && s.sights.length >= 2) theme = outback ? 'Sightseeing out & back' : 'Sightseeing loop';
@@ -798,7 +813,8 @@ export function whereText(s, g) {
   if (pct >= 95) return `All of it on ${ground}`;
   if (pct >= 60) return `${pct}% on ${ground}, the rest on ${rest}`;
   if (pct >= 25) return `${pct}% on ${ground}, ${100 - pct}% on ${rest}`;
-  return restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets';
+  const near = s.waterFrac >= 0.25 ? ' near the water' : s.greenFrac >= 0.25 ? ' near the green' : '';
+  return (restQuiet >= 0.7 ? 'Mostly quiet streets' : 'City streets') + near;
 }
 
 export function stopsText(s) {

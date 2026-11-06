@@ -37,6 +37,9 @@ function hamlet() {
   for (const [a, b] of [[[0, -2 * S], [0, -R]], [[0, 2 * S], [0, R]], [[-2 * S, 0], [-R, 0]], [[2 * S, 0], [R, 0]]]) way([a, b], { highway: 'track' });
   // The one paved street: 600 m along Row 3 (y = 0), from x = -300 to 300.
   way([[-300, 0], [-100, 0], [100, 0], [300, 0]], { highway: 'residential', surface: 'asphalt', name: 'Main Street' });
+  // The through-road: a paved tertiary with sidewalks crossing the whole village north-south
+  // (x = 200), long enough for an out-and-back on its own. A village run keeps off it.
+  way([[200, -R], [200, -2 * S], [200, -S], [200, 0], [200, S], [200, 2 * S], [200, R]], { highway: 'tertiary', surface: 'asphalt', sidewalk: 'both', name: 'Through Road' });
   return { elements };
 }
 
@@ -52,6 +55,11 @@ const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(hamlet()), fetchE
   check(routes.every((r) => /^\d+% on unpaved lanes and tracks$/.test(r.highlights[0]) && /Country/.test(r.name)), 'the where-line and the name say country');
   const g = engine.area.graph;
   check(g.countryWays > 20 && g.allowCountry === false, `country ways parsed (${g.countryWays}) and switched off again after the plan`);
+  check(g.village && routes.village, `a village: ${(g.madeLength / 1000).toFixed(1)} km of paved network`);
+  check(routes.every((r) => r.stats.busyFrac === 0 && r.stats.trunkFrac === 0) && Math.max(...routes.map((r) => r.highlights.filter((h) => /Through Road/.test(h)).length)) === 0, 'the through-road is left out of a village run even though it is paved');
+  // The least significant ways: the share on the through-road, measured on the line itself.
+  const onThrough = (r) => r.latlngs.filter(([, lo]) => Math.abs((lo - CENTER[1]) * 111320 * Math.cos((CENTER[0] * Math.PI) / 180) - 200) < 3).length / r.latlngs.length;
+  check(routes.every((r) => onThrough(r) < 0.15), `at most a crossing of the through-road (${routes.map((r) => Math.round(onThrough(r) * 100) + '%').join(', ')} of the points on it)`);
 }
 
 // Start on the dirt track ring itself (a farm track): still a run.

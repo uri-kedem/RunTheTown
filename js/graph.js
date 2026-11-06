@@ -16,6 +16,10 @@ export const TURN_COST = { slight: 16, turn: 50, sharp: 120, uturn: 600 };
 // Road classes, from most to least runner-friendly. TRUNK is an urban arterial
 // (OSM highway=trunk with sidewalks, e.g. Route 90 through Eilat): kept so the
 // network stays connected, but priced so routes only touch it when they must.
+// Below this much paved network in the loaded area the place is a village: the few roads that
+// cross it are its through-roads (traffic, no sidewalk) and the run keeps to the lanes.
+export const VILLAGE_MADE_M = 40000;
+
 export const HW = { PATH: 0, STEPS: 1, LOCAL: 2, TERTIARY: 3, SECONDARY: 4, PRIMARY: 5, TRUNK: 6 };
 
 // Promenades, esplanades, boardwalks, quays and boulevards, in a few languages.
@@ -218,6 +222,11 @@ export class Graph {
     this.skippedClosed = skippedClosed; // ways left out for running through closed ground
     this.skippedAfloat = skippedAfloat; // pontoons, jetties and piers left out (over the water)
     this.noSidewalk = noSidewalk; // country roads priced as a last resort (no sidewalk)
+    // How much made (paved) network there is: a village has a few kilometres of it, a town hundreds.
+    let madeLength = 0;
+    for (let e = 0; e < m; e++) if (!ecountry[e]) madeLength += haversine(lat[ea[e]], lon[ea[e]], lat[eb[e]], lon[eb[e]]);
+    this.madeLength = madeLength;
+    this.village = madeLength < VILLAGE_MADE_M;
     this.lat = Float64Array.from(lat);
     this.lon = Float64Array.from(lon);
     this.x = new Float64Array(n);

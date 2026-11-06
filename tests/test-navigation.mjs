@@ -133,19 +133,32 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   }
 }
 
-// Starting away from the route start: guided to it.
+// Starting away from the route's first point. Close to the line (under 300 m): nothing is
+// said, the run begins where the runner meets the route. Far away: one hint, no nagging.
 {
   const said = [];
   const nav = new Navigator(r, { speak: (p) => said.push(p.map((x) => x.text).join('')), now: () => 0 });
   nav.start();
   const [la, lo] = r.latlngs[0];
-  // Stand ~150 m from the start in a direction that is not on the route.
-  const away = [[0.0014, 0], [0, 0.0016], [-0.0014, 0], [0, -0.0016]]
-    .map(([dla, dlo]) => ({ lat: la + dla, lon: lo + dlo }))
-    .find((p) => { const [x, y] = nav.proj.toXY(p.lat, p.lon); return nav.snap(x, y, -Infinity, Infinity, 0).dist > 80; });
-  nav.update({ ...away, accuracy: 5 });
-  nav.update({ ...away, accuracy: 5 });
-  check(said.some((t) => /Head to the start of the route\. It's \d+ meters (to the|ahead|behind|to your)/.test(t)), 'runner away from the start is told where it is'); check(!said.some((t) => /^In \d+ meters/.test(t)), 'no turn instructions while not on the route');
+  const offLine = (m) => [[m, 0], [0, m], [-m, 0], [0, -m]]
+    .map(([dx, dy]) => { const [a, b] = nav.proj.toLatLon(dx, dy); return { lat: a, lon: b }; })
+    .find((p) => { const [x, y] = nav.proj.toXY(p.lat, p.lon); return nav.snap(x, y, -Infinity, Infinity, 0).dist > m * 0.6; });
+  const near = offLine(150);
+  let v = nav.update({ ...near, accuracy: 5 }); v = nav.update({ ...near, accuracy: 5 });
+  check(v.joining && !v.offRoute && said.length === 1 && /^Starting your/.test(said[0]), '150 m from the line: no "head to the start", the screen shows the way to the line');
+  // Meet the route 400 m along it (not at its first point): the run begins there.
+  const [mx, my] = (() => { let i = 0; while (nav.along[i + 1] < 400) i++; return nav.xy[i]; })();
+  const [mla, mlo] = nav.proj.toLatLon(mx, my);
+  v = nav.update({ lat: mla, lon: mlo, accuracy: 5 });
+  check(nav.begun && !v.joining && Math.abs(nav.progress - nav.along.find((a) => a >= 400 - 1e-6 && a <= 400 + 400)) < 200, `the run begins where the runner met the route (${Math.round(nav.progress)} m along)`);
+  check(!said.some((t) => /Head to the start/.test(t)), 'the runner was never urged to the start point');
+  // Far from the route: one hint only.
+  const said2 = [];
+  const nav2 = new Navigator(r, { speak: (p) => said2.push(p.map((x) => x.text).join('')), now: () => 0 });
+  nav2.start();
+  const far = offLine(600);
+  for (let k = 0; k < 4; k++) nav2.update({ lat: far.lat + k * 0.00005, lon: far.lon, accuracy: 5 });
+  check(said2.filter((t) => /Head to the start of the route/.test(t)).length === 1 && !said2.some((t) => /^In \d+ meters/.test(t)), 'far from the route: told once where it is, no turn instructions');
 }
 
 // Voice picker: the phone's English voices, well-known ones first, enhanced over compact,

@@ -5,6 +5,7 @@ import { rejoinRoute, backRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
+import { loadProfile, saveProfile, validEmail, shrinkPhoto, makeRun, drawRunPicture, journal } from './journal.js';
 import { fallbackLinks } from './details.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
@@ -85,8 +86,72 @@ map.on('click', (e) => {
   setStart(e.latlng.lat, e.latlng.lng, 'Dropped pin');
 });
 
+// ---------- Bottom sheet (peek / half / full) and the search bar ----------
+// The search bar leaves once a start point is set; the "Start point" button brings it back.
+const POS = ['peek', 'half', 'full'];
+function setSheet(pos) {
+  if (isDesktop()) return;
+  const sheet = $('sheet');
+  sheet.dataset.pos = pos;
+  if (pos !== 'full') sheet.scrollTop = 0;
+  // The strip of routes stays visible in peek (sticky under the handle).
+  const strip = $('routeStrip');
+  strip.hidden = !(pos === 'peek' && state.routes.length);
+  sheet.style.setProperty('--peek', state.routes.length ? '118px' : '96px');
+}
+function sheetPos() { return $('sheet').dataset.pos || 'half'; }
+{
+  const grab = $('sheetGrab');
+  let drag = null;
+  grab.addEventListener('pointerdown', (e) => { drag = { y: e.clientY, h: $('sheet').offsetHeight, moved: false }; grab.setPointerCapture(e.pointerId); $('sheet').classList.add('dragging'); });
+  grab.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 6) drag.moved = true;
+    $('sheet').style.maxHeight = `${Math.max(80, Math.min(window.innerHeight * 0.88, drag.h - dy))}px`;
+  });
+  const end = (e) => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    const h = Math.max(80, drag.h - dy);
+    $('sheet').classList.remove('dragging');
+    $('sheet').style.maxHeight = '';
+    if (!drag.moved) setSheet(sheetPos() === 'peek' ? 'half' : 'peek'); // a tap on the handle: peek <-> half
+    else {
+      const vh = window.innerHeight;
+      setSheet(h < vh * 0.3 ? 'peek' : h < vh * 0.68 ? 'half' : 'full');
+    }
+    drag = null;
+    setTimeout(() => { if (state.routes[state.selected]) map.fitBounds(L.latLngBounds(state.routes[state.selected].latlngs), mapPadding()); }, 280);
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+}
+function showSearch(show) {
+  document.querySelector('.topbar').classList.toggle('start-set', !show);
+}
+$('mapBack').addEventListener('click', () => {
+  showSearch(true);
+  setSheet('half');
+  setTimeout(() => $('searchInput').focus(), 50);
+});
+function renderRouteStrip() {
+  const strip = $('routeStrip');
+  strip.innerHTML = '';
+  state.routes.forEach((r, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.setProperty('--c', COLORS[i]);
+    b.className = i === state.selected ? 'on' : '';
+    b.innerHTML = `<i></i>${escapeHtml(r.name)}`;
+    b.addEventListener('click', () => { lastTapped = i; selectRoute(i, { fit: true }); [...strip.children].forEach((c, k) => c.classList.toggle('on', k === i)); });
+    strip.appendChild(b);
+  });
+}
+
 function setStart(lat, lon, label, { pan = true } = {}) {
   state.start = { lat, lon, label };
+  showSearch(false);
   if (!startMarker) {
     startMarker = L.marker([lat, lon], {
       draggable: true,
@@ -462,6 +527,8 @@ function showRoutes(routes, { keep = false } = {}) {
   });
   drawRoutes();
   drawPlaces(routes.places || []);
+  renderRouteStrip();
+  if (!keep) setSheet('half');
   selectRoute(keepIdx, { fit: !keep });
 }
 
@@ -655,6 +722,7 @@ function selectRoute(i, { fit = false } = {}) {
     }
   });
   [...$('cards').children].forEach((c, k) => c.classList.toggle('on', k === i));
+  [...$('routeStrip').children].forEach((c, k) => c.classList.toggle('on', k === i));
   const card = $('cards').children[i];
   if (card && !isDesktop()) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   drawKmMarkers(state.routes[i], COLORS[i]);
@@ -715,6 +783,8 @@ function showPrefs() {
   $('prefsView').hidden = false;
   $('resultsView').hidden = true;
   state.routes = [];
+  $('routeStrip').hidden = true;
+  setSheet('half');
   routeLayer.clearLayers();
   drawPlaces(state.spots || [], $('spotsPrefs'));
 }
@@ -1053,7 +1123,7 @@ async function startRun({ demo }) {
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
     onTurnaround: (where) => turnedAroundOnLoop(where),
   });
-  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6 });
+  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6, track: [], startedAt: new Date().toISOString(), saved: false });
   $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
@@ -1089,6 +1159,7 @@ async function startRun({ demo }) {
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
+    if (!demo && (fix.accuracy == null || fix.accuracy <= 60)) n.track.push([fix.lat, fix.lon]);
     const v = n.navigator.update(fix);
     render(v);
     if (v.offRoute && !demo) maybeReroute(n, fix);
@@ -1184,10 +1255,15 @@ function render(v) {
     $('navDist').textContent = '';
     $('navText').textContent = 'You\u2019re back at the start';
     $('navStreet').textContent = '';
+  } else if (v.joining && v.toLine != null) {
+    $('navArrow').innerHTML = arrowSvg('depart');
+    $('navDist').textContent = fmtDist(v.toLine);
+    $('navText').textContent = 'To the route';
+    $('navStreet').textContent = 'Your run starts where you meet the line';
   } else if (v.offRoute) {
     $('navArrow').innerHTML = arrowSvg('uturn');
     $('navDist').textContent = v.offBy != null ? `${fmtDist(v.offBy)} away` : '';
-    $('navText').textContent = v.progress < 30 ? 'Head to the start' : 'Off route';
+    $('navText').textContent = 'Off route';
     $('navStreet').textContent = 'Head back to the colored line';
   } else if (v.next) {
     $('navArrow').innerHTML = arrowSvg(v.next.type, v.next.dir);
@@ -1225,12 +1301,40 @@ function showFinish(v) {
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
     <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
   $('navFinish').hidden = false;
+  saveRun(n, { finished: true });
+}
+
+// ---------- The run journal ----------
+// Every finished run, and every run stopped after 500 m, is kept on the phone with a
+// picture of the route over the map. Demo runs are not logged.
+async function saveRun(n, { finished }) {
+  if (!n || n.saved || n.demo) return;
+  const nv = n.navigator;
+  if (!finished && nv.odometer < 500) return;
+  n.saved = true;
+  const run = makeRun({
+    route: n.route, track: n.track, odometer: nv.odometer, elapsed: nv.elapsed, startedAt: n.startedAt, start: state.start, settings,
+    country: !!state.routes.country, rerouted: !!(nv.rerouted || nv.turnarounds), finished,
+  });
+  try {
+    run.picture = await drawRunPicture(run, { tileUrl: TILE_SOURCES[tileSource].url });
+  } catch {
+    run.picture = null;
+  }
+  try {
+    await journal.save(run);
+    refreshRailUser();
+    toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
+  } catch {
+    toast('Could not save this run on the phone.');
+  }
 }
 
 function endRun() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
+  saveRun(n, { finished: n.navigator.finished });
   clearInterval(n.timer);
   voice.stop();
   voice.onSay = null;
@@ -1399,12 +1503,16 @@ function navigate(target) {
     $('terms').hidden = true;
     $('install').hidden = true;
     $('settings').hidden = true;
+    for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
     setView('home');
     highlightNav(null);
     return;
   }
   if (target === 'settings') return openSettings();
+  if (target === 'profile') return openProfile();
+  if (target === 'runs') return openRuns();
   $('settings').hidden = true;
+  for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
   if (target === 'terms' || target === 'install') {
     for (const id of ['terms', 'install']) $(id).hidden = id !== target;
     $(target).scrollTop = 0;
@@ -1430,6 +1538,161 @@ installSetup();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { openDrawer(false); closeRouteAsk(); if (!$('lapsAsk').hidden) closeLapsAsk(); } });
 setMode('run');
 highlightNav(null); // the cover page is open: no menu item is "current" yet
+
+// ---------- Profile (first run of the app) and the journal pages ----------
+let profile = loadProfile();
+const initials = (name) => (name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('') || '?';
+function avatarInto(el, p) {
+  if (p?.photo) { el.style.backgroundImage = `url(${p.photo})`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = initials(p?.name); }
+}
+async function refreshRailUser() {
+  avatarInto($('railAvatar'), profile);
+  if (profile?.name) {
+    $('railName').textContent = profile.name;
+    try { const t = await journal.totals(); $('railRuns').textContent = t.runs ? `${t.runs} run${t.runs > 1 ? 's' : ''} · ${U.len(t.distance)}` : 'No runs yet'; } catch { $('railRuns').textContent = ''; }
+  } else {
+    $('railName').textContent = 'Set up your profile';
+    $('railRuns').textContent = 'name, e-mail, photo';
+  }
+}
+let photoDraft = null;
+function openProfile({ first = false } = {}) {
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage']) $(id).hidden = true;
+  $('profileTitle').textContent = first ? 'Welcome to RunTheTown' : 'Your profile';
+  $('profileIntro').hidden = !first && !!profile?.name;
+  $('profileName').value = profile?.name || '';
+  $('profileEmail').value = profile?.email || '';
+  photoDraft = profile?.photo || null;
+  avatarInto($('photoPreview'), { name: profile?.name, photo: photoDraft });
+  $('profileMsg').textContent = '';
+  $('profileSkip').hidden = !first;
+  $('profileBack').hidden = first;
+  $('profileSave').textContent = first ? 'Start running' : 'Save';
+  const totals = $('profileTotals');
+  totals.hidden = true;
+  if (profile?.name) journal.totals().then((t) => {
+    totals.hidden = false;
+    totals.innerHTML = `<div><b>${t.runs}</b><span>runs</span></div><div><b>${U.num(t.distance, 1)}</b><span>${U.unit}</span></div><div><b>${fmtTime(t.elapsed)}</b><span>time</span></div>`;
+  }).catch(() => {});
+  $('profile').hidden = false;
+  $('profile').scrollTop = 0;
+  highlightNav('profile');
+}
+$('photoInput').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  try {
+    photoDraft = await shrinkPhoto(f);
+    avatarInto($('photoPreview'), { name: $('profileName').value, photo: photoDraft });
+  } catch {
+    $('profileMsg').textContent = 'That file is not a photo.';
+  }
+  e.target.value = '';
+});
+$('profileName').addEventListener('input', () => { if (!photoDraft) avatarInto($('photoPreview'), { name: $('profileName').value }); });
+$('profileSave').addEventListener('click', () => {
+  const name = $('profileName').value.trim();
+  const email = $('profileEmail').value.trim();
+  if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
+  if (!validEmail(email)) { $('profileMsg').textContent = 'That e-mail address does not look right.'; return; }
+  profile = saveProfile({ ...(profile || {}), name, email, photo: photoDraft, skipped: false });
+  refreshRailUser();
+  $('profile').hidden = true;
+  highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
+  toast(`Welcome, ${name.split(' ')[0]}. Your runs will be saved to your journal.`);
+});
+$('profileSkip').addEventListener('click', () => {
+  profile = saveProfile({ name: '', email: '', photo: null, skipped: true });
+  $('profile').hidden = true;
+  highlightNav(null);
+});
+$('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+
+const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+async function openRuns() {
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'profile', 'runPage']) $(id).hidden = true;
+  const list = $('runsList');
+  list.innerHTML = '';
+  let runs = [];
+  try { runs = await journal.list(); } catch { runs = []; }
+  $('runsEmpty').hidden = runs.length > 0;
+  $('runsSummary').textContent = runs.length ? `${runs.length} run${runs.length > 1 ? 's' : ''} · ${U.len(runs.reduce((a, r) => a + r.distance, 0))} · ${fmtTime(runs.reduce((a, r) => a + r.elapsed, 0))}` : '';
+  for (const r of runs) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'run-card';
+    card.innerHTML = `<div class="thumb" data-id="${r.id}"></div><div><b>${escapeHtml(r.name)}</b><small>${U.num(r.distance, 2)} ${U.unit} · ${fmtTime(r.elapsed)} · ${r.pace ? U.pace(r.pace) + ' ' + U.paceLabel() : ''}${r.finished ? '' : ' · stopped early'}</small><small class="when">${fmtWhen(r.time)}${r.start?.label ? ' · ' + escapeHtml(r.start.label) : ''}</small></div>`;
+    card.addEventListener('click', () => openRun(r.id));
+    list.appendChild(card);
+    if (r.hasPicture) journal.get(r.id).then((full) => { if (full?.picture) card.querySelector('.thumb').style.backgroundImage = `url(${full.picture})`; }).catch(() => {});
+  }
+  $('runs').hidden = false;
+  $('runs').scrollTop = 0;
+  highlightNav('runs');
+}
+let openRunId = null;
+async function openRun(id) {
+  const r = await journal.get(id).catch(() => null);
+  if (!r) return;
+  openRunId = id;
+  $('runTitle').textContent = r.name;
+  const pic = $('runPic');
+  pic.hidden = !r.picture;
+  if (r.picture) pic.src = r.picture;
+  $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
+  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
+  $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
+  $('runShowMap').hidden = !(r.latlngs?.length > 1 || r.track?.length > 1);
+  $('runs').hidden = true;
+  $('runPage').hidden = false;
+  $('runPage').scrollTop = 0;
+}
+$('runBack').addEventListener('click', () => { $('runPage').hidden = true; openRuns(); });
+$('runsBack').addEventListener('click', () => { $('runs').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+$('runDelete').addEventListener('click', async () => {
+  if (!openRunId) return;
+  if (!$('runDelete').dataset.armed) { $('runDelete').dataset.armed = '1'; $('runDelete').textContent = 'Tap again to delete'; setTimeout(() => { delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run'; }, 3000); return; }
+  await journal.remove(openRunId).catch(() => {});
+  delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run';
+  refreshRailUser();
+  $('runPage').hidden = true;
+  openRuns();
+});
+$('runShowMap').addEventListener('click', async () => {
+  const r = await journal.get(openRunId).catch(() => null);
+  if (!r) return;
+  for (const id of ['runPage', 'runs']) $(id).hidden = true;
+  setView('app');
+  journalLayer.clearLayers().addTo(map);
+  const pts = r.track?.length > 1 ? r.track : r.latlngs;
+  if (r.latlngs?.length > 1) L.polyline(r.latlngs, { color: '#94a3b8', weight: 5, dashArray: r.track?.length > 1 ? '8 8' : null }).addTo(journalLayer);
+  if (r.track?.length > 1) L.polyline(r.track, { color: '#ff5a36', weight: 5 }).addTo(journalLayer);
+  map.fitBounds(L.latLngBounds(pts), mapPadding());
+  setSheet('peek');
+  toast(`${r.name}: ${U.num(r.distance, 2)} ${U.unit} on ${fmtWhen(r.time)}. Tap the map or change the start to clear it.`);
+});
+const journalLayer = L.layerGroup();
+map.on('click', () => { if (journalLayer.getLayers?.().length) { journalLayer.clearLayers(); map.removeLayer(journalLayer); } });
+$('runsExport').addEventListener('click', async () => {
+  try {
+    const json = await journal.exportJson();
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `runthetown-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch {
+    toast('Could not export the journal.');
+  }
+});
+refreshRailUser();
+// First open of the app: the profile page, once (Skip is remembered too).
+if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
