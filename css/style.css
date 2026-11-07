@@ -529,6 +529,10 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .run-card small { display: block; color: var(--ink-2); font-size: 12.5px; line-height: 1.4; }
 .run-card .when { color: var(--ink-3); }
 .run-pic { width: 100%; border-radius: 16px; display: block; margin-bottom: 14px; box-shadow: var(--shadow); }
+.run-actions { display: grid; grid-template-columns: 1.6fr 1fr; gap: 8px; margin: 4px 0 12px; }
+.run-actions .primary { margin: 0; }
+.run-actions .ghost { text-decoration: none; background: var(--bg-2); border-radius: 14px; padding: 13px; }
+.finish-card .link { display: block; margin: 10px auto 0; }
 .run-detail .finish-stats { margin-bottom: 14px; }
 .danger-link { color: #b91c1c; }
 

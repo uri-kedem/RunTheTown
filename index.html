@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=cd3e449d" />
+    <link rel="manifest" href="manifest.webmanifest?v=9dc2bc51" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=cd3e449d" />
+    <link rel="stylesheet" href="css/style.css?v=9dc2bc51" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="cd3e449d">cd3e449d</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="9dc2bc51">9dc2bc51</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -208,6 +208,10 @@
         <img class="run-pic" id="runPic" alt="" hidden />
         <div class="finish-stats" id="runStats"></div>
         <ul class="route-pop-facts" id="runFacts"></ul>
+        <div class="run-actions">
+          <button type="button" class="primary" id="runAgain">Run this route again</button>
+          <button type="button" class="ghost" id="runShare">Share</button>
+        </div>
         <div class="route-pop-foot"><button type="button" class="link" id="runShowMap">Show on the map</button><button type="button" class="link danger-link" id="runDelete">Delete this run</button></div>
       </div>
     </section>
@@ -419,6 +423,7 @@
           <div class="finish-title">Run complete</div>
           <div class="finish-stats" id="finishStats"></div>
           <button type="button" class="primary" id="finishDone">Done</button>
+          <button type="button" class="link" id="finishShare" hidden>Share this run</button>
         </div>
       </div>
     </div>
@@ -500,6 +505,6 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=cd3e449d"></script>
+    <script src="js/bundle.js?v=9dc2bc51"></script>
   </body>
 </html>

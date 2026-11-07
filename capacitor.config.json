@@ -1,0 +1,13 @@
+{
+  "appId": "com.runthetown.app",
+  "appName": "RunTheTown",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0f172a",
+    "scheme": "RunTheTown"
+  },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 0 }
+  }
+}

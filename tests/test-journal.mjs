@@ -1,6 +1,6 @@
 // The runner's profile and run records (pure parts; the picture and the store need a browser).
 // Run: node tests/test-journal.mjs
-import { loadProfile, saveProfile, validEmail, simplifyTrack, makeRun } from '../js/journal.js';
+import { loadProfile, saveProfile, validEmail, simplifyTrack, makeRun, matchShare } from '../js/journal.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
@@ -22,9 +22,14 @@ const thin = simplifyTrack(pts);
 check(thin.length <= 600 && thin[0] === pts[0] && thin[thin.length - 1] === pts[pts.length - 1] && thin.length > 50, `track thinned to ${thin.length} points, ends kept`);
 check(simplifyTrack([[1, 1]]).length === 1 && simplifyTrack(null).length === 0, 'tiny or missing tracks are fine');
 
-const run = makeRun({ route: { name: 'Park loop to the west', type: 'loop', distance: 5000, latlngs: pts.slice(0, 10) }, track: pts, odometer: 4980, elapsed: 1500000, startedAt: '2026-11-06T06:00:00.000Z', start: { lat: 32.08, lon: 34.78, label: 'Hotel' }, settings: { units: 'km' }, finished: true });
+const run = makeRun({ route: { name: 'Park loop to the west', type: 'loop', distance: 5000, latlngs: pts.filter((_, i) => i % 20 === 0) }, track: pts, odometer: 4980, elapsed: 1500000, startedAt: '2026-11-06T06:00:00.000Z', start: { lat: 32.08, lon: 34.78, label: 'Hotel' }, settings: { units: 'km' }, finished: true });
 check(run.id.startsWith('2026-11-06T06:00:00.000Z-') && run.distance === 4980 && run.elapsed === 1500000 && Math.abs(run.pace - 301.2) < 0.1 && run.name === 'Park loop to the west' && run.finished && run.start.label === 'Hotel' && run.track.length <= 600 && run.picture === null, 'run record from a live run');
 check(makeRun({ route: null, track: [], odometer: 20, elapsed: 10000, startedAt: 'x', start: null, settings: null }).pace === null, 'no pace for a few metres');
+// On the planned line: a track along the line, then 100 m off for the second half.
+const line = pts.filter((_, i) => i % 20 === 0);
+const half = pts.map(([la, lo], i) => (i < 500 ? [la, lo] : [la, lo + 100 / 111320]));
+check(matchShare(pts, line) > 0.95 && Math.abs(matchShare(half, line) - 0.5) < 0.05 && matchShare([], line) === null, 'share of the track on the planned line');
+check(run.onPlan > 0.95, 'the run record carries it');
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll journal tests passed');
 process.exit(failures ? 1 : 0);
