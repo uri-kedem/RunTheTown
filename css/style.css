@@ -543,6 +543,11 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .crop-ring { position: absolute; inset: 0; border-radius: 16px; pointer-events: none; box-shadow: inset 0 0 0 20px rgba(15, 23, 42, 0.55); }
 .crop-ring::after { content: ''; position: absolute; left: 20px; top: 20px; width: 240px; height: 240px; border-radius: 50%; box-shadow: 0 0 0 400px rgba(15, 23, 42, 0.55); border: 2px solid rgba(255, 255, 255, 0.9); }
 
+/* Inside the native app: no "install" page, no update checker, no home-screen hints. */
+body.native [data-nav='install'], body.native #railInstall, body.native #setUpdate, body.native .web-only { display: none !important; }
+.native-only { display: none; }
+body.native .native-only { display: list-item; }
+
 /* Settings */
 .settings h2 { margin-top: 26px; }
 .settings h2:first-child { margin-top: 4px; }
