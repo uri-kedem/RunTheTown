@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
-    <link rel="icon" type="image/png" href="img/favicon.1a6e36d1.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=9dc2bc51" />
+    <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
+    <link rel="manifest" href="manifest.webmanifest?v=9b1fefc1" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
-    <link rel="apple-touch-icon" href="img/icon-180.d266ebe8.png" />
+    <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=9dc2bc51" />
+    <link rel="stylesheet" href="css/style.css?v=9b1fefc1" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -33,24 +33,24 @@
         <span class="who"><b id="railName">Set up your profile</b><small id="railRuns">name, e-mail, photo</small></span>
       </button>
       <button type="button" class="rail-item" data-nav="runs">
-        <img class="ic mark" src="img/runs-outline.f82dfa40.png" alt="" /><span>My runs</span>
+        <img class="ic mark" src="img/runs-outline.29121f1c.png" alt="" /><span>My runs</span>
       </button>
       <button type="button" class="rail-item" data-nav="run">
-        <img class="ic mark" src="img/mark-outline.ea7ffd72.png" alt="" /><span>Running mode</span>
+        <img class="ic mark" src="img/mark-outline.570c9973.png" alt="" /><span>Running mode</span>
       </button>
       <button type="button" class="rail-item" data-nav="tour">
-        <img class="ic mark tour" src="img/tour-outline.5fa6603a.png" alt="" /><span>Sightseeing tour</span>
+        <img class="ic mark tour" src="img/tour-outline.da8b5f9d.png" alt="" /><span>Sightseeing tour</span>
       </button>
       <button type="button" class="rail-item" data-nav="install" id="railInstall">
-        <img class="ic mark install" src="img/install-outline.2d915cdb.png" alt="" /><span>Install on your phone</span>
+        <img class="ic mark install" src="img/install-outline.18f1e068.png" alt="" /><span>Install on your phone</span>
       </button>
       <button type="button" class="rail-item" data-nav="settings">
-        <img class="ic mark" src="img/settings-outline.e3e591b2.png" alt="" /><span>Settings</span>
+        <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
       <button type="button" class="rail-item" data-nav="terms">
-        <img class="ic mark terms" src="img/terms-outline.3b878224.png" alt="" /><span>Terms &amp; policy</span>
+        <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="9dc2bc51">9dc2bc51</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="9b1fefc1">9b1fefc1</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -80,13 +80,13 @@
         <p class="lede">Tell us your distance and what you like, and RunTheTown draws loops on promenades, parks and waterfronts, finds the athletics tracks nearby, and reads the turns into your earphones.</p>
         <div class="modes">
           <button type="button" class="mode-card" data-nav="run">
-            <span class="mode-ic run"><img src="img/mark-orange.ae309202.png" alt="" /></span>
+            <span class="mode-ic run"><img src="img/mark-orange.4d07c951.png" alt="" /></span>
             <span class="mode-title">Running mode</span>
             <span class="mode-text">Loops for your distance on smooth, car-free paths, with as few turns and traffic lights as possible, and voice guidance while you run.</span>
             <span class="mode-cta">Start a run</span>
           </button>
           <button type="button" class="mode-card" data-nav="tour">
-            <span class="mode-ic tour"><img src="img/tour-orange.a8aa45ff.png" alt="" /></span>
+            <span class="mode-ic tour"><img src="img/tour-orange.2f5ac823.png" alt="" /></span>
             <span class="mode-title">Sightseeing tour</span>
             <span class="mode-text">See the city while you run: museums, monuments, the old town and the viewpoints, with each landmark called out as you pass it.</span>
             <span class="mode-cta">Plan a tour</span>
@@ -505,6 +505,7 @@
     <div class="toast" id="toast" hidden></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="js/bundle.js?v=9dc2bc51"></script>
+    <script src="js/vendor/capacitor.js"></script>
+    <script src="js/bundle.js?v=9b1fefc1"></script>
   </body>
 </html>

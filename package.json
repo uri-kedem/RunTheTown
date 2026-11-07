@@ -6,8 +6,8 @@
   "scripts": {
     "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-landcover.mjs && node tests/test-country.mjs && node tests/test-journal.mjs && node tests/test-long-runs.mjs",
     "start": "python3 -m http.server 8080",
-    "build": "python3 build.py",
-    "ios": "python3 build.py && npx cap sync ios && npx cap open ios"
+    "build": "node build.mjs",
+    "ios": "node build.mjs && npx cap sync ios && npx cap open ios"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0"

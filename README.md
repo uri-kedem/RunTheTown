@@ -29,7 +29,7 @@ the city's landmarks, then run them with spoken turn-by-turn directions.
 **On your Mac:** double-click `index.html`, and it opens in your browser. No server or install needed.
 (`start.command` also works if you prefer serving it at http://localhost:8080.)
 
-**After changing code in `js/`:** run `python3 build.py` to regenerate `js/bundle.js`, which is the
+**After changing code in `js/`:** run `node build.mjs` to regenerate `js/bundle.js`, which is the
 single file `index.html` loads.
 
 **On your phone:** browsers only allow GPS on `https://` sites, so to test outdoors deploy
@@ -40,7 +40,7 @@ or GitHub Pages. No build step is needed. Without GPS you can still search for a
 The app installs from the browser, no store needed: `manifest.webmanifest` (name, icons,
 standalone display) and `sw.js` (a service worker that keeps the page, styles, script,
 artwork and Leaflet on the phone, so the installed app opens instantly and offline; map
-pieces are cached by the app itself in IndexedDB). `build.py` stamps every build's hash into
+pieces are cached by the app itself in IndexedDB). `build.mjs` stamps every build's hash into
 `index.html` (`bundle.js?v=…`) and into the service worker's cache name, so installed
 phones swap to the new build on their next online open. iPhone: Safari → Share → Add to
 Home Screen (the in-app "Install on your phone" page shows the steps for the device; Chrome
@@ -306,7 +306,7 @@ Live runs on real OpenStreetMap data:
 | `js/details.js` | Website / Wikipedia / hours of a running spot (Nominatim + Wikidata) |
 | `js/spots.js` | City-wide scan for stadiums and athletics tracks with lap outlines (Nominatim) |
 | `js/navigation.js` | Live guidance: GPS following, voice, splits, off-route, wake lock, demo run |
-| `js/bundle.js`, `build.py` | All modules bundled into one script so the page opens from Finder |
+| `js/bundle.js`, `build.mjs` | All modules bundled into one script so the page opens from Finder |
 | `tests/` | Offline tests (`npm test`): `test-vectortiles.mjs` (tile stitching, junction repair), `test-planner.mjs` (planner, preferences, stops, sightseeing filter, promenades, running spots, fewer turns), `test-cues.mjs` (turn instructions), `test-navigation.mjs` (simulated GPS runs: every turn announced on time, splits, sights, detours, out & back), `test-details.mjs` (website lookups, with the real response shapes seen for Hadar Yosef), `test-spots.mjs` (the stadium/track scan and lap outlines), `test-long-runs.mjs` (80 cases: 15–42.2 km × inland/coastal × healthy / flaky tiles / tiles down / no light data). `mock-vectortiles.mjs` serves real-format vector tiles generated from synthetic cities; `mock-overpass.mjs` fakes Overpass. |
 
 - **Oct 19 (v0.7) live checks:** from Rothschild, 8 km: 1.7–2.4 turns/km, 41–66% on promenades, best
@@ -371,7 +371,7 @@ wherever the browser does expose them (Chrome/Edge on desktop, and the native ap
 ## The native shell (iPhone)
 Capacitor 7 wraps the same web app: `capacitor.config.json`, the plugins in `package.json`, the
 adapters in `js/native.js` (speech with every installed voice, background GPS, keep-awake, native
-share) and `dist/` written by `build.py`. Setup, build steps and what to test: `native/README-ios.md`.
+share) and `dist/` written by `build.mjs`. Setup, build steps and what to test: `native/README-ios.md`.
 
 ## Known limits of the MVP
 
@@ -411,7 +411,7 @@ progress no longer drops the next gain from the odometer. Still open:
 - A sightseeing tour with a large distance error can slip into the candidates when a later iteration fails.
 - Border nodes 1–2 px apart on a tile edge don't merge; on wide screens the sheet can cover a route's left edge.
 - Accessibility: radio and chip groups are unnamed; the map has no role.
-- Fragile by design: 25 m cell constants, the manual `ORDER` in build.py, four tile errors switch the basemap
+- Fragile by design: 25 m cell constants, the manual `ORDER` in build.mjs, four tile errors switch the basemap
   for good, a path search per keystroke in the laps dialog, and the first plan in a city usually has no hills
   (elevation loses the 4 s grace).
 
