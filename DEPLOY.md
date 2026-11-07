@@ -25,7 +25,7 @@ a phone needs for GPS, voice and the installable app (PWA).
 ## Every update
 ```
 cd ~/RunTheTown
-python3 build.py        # rebuilds js/bundle.js and stamps the version into index.html and sw.js
+node build.mjs           # rebuilds js/bundle.js and stamps the version into index.html and sw.js
 git add . && git commit -m "update" && git push
 ```
 Installed phones pick up the new version the next time the app is opened with a

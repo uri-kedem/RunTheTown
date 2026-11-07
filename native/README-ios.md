@@ -6,12 +6,12 @@ things a web page cannot do: the phone's own speech engine with every installed 
 sheet with a picture. Everything else (planner, journal, settings) is unchanged.
 
 Files in the repo:
-- `capacitor.config.json` — app id `com.runthetown.app`, name RunTheTown, web files from `dist/`.
+- `capacitor.config.json` — app id `com.urikedem.runthetown`, name RunTheTown, web files from `dist/`.
 - `package.json` — Capacitor 7 and the plugins (background geolocation, text-to-speech,
   keep-awake, share, filesystem, app).
 - `js/native.js` — the adapters (`NativeVoice`, `NativeGps`, `NativeScreenLock`, `nativeShare`),
   switched on automatically when the page runs inside the app (`Capacitor.isNativePlatform()`).
-- `build.py` — also writes `dist/` (the page, bundle, styles, artwork), which `npx cap sync ios`
+- `build.mjs` — also writes `dist/` (the page, bundle, styles, artwork), which `npx cap sync ios`
   copies into the Xcode project.
 - `native/Info.plist.additions.xml` — the permission texts and background modes the app needs
   (`npx cap add ios` creates `ios/App/App/Info.plist`; these entries are merged into it).
@@ -21,7 +21,7 @@ Run in Terminal, one line at a time, from the project folder:
 
     cd ~/RunTheTown
     npm install
-    python3 build.py
+    node build.mjs
     npx cap add ios --packagemanager SPM
     npx cap sync ios
 
@@ -33,7 +33,7 @@ to trust the developer certificate on the phone (Settings → General → VPN & 
 Management).
 
 ## Every later build
-    cd ~/RunTheTown && python3 build.py && npx cap sync ios && npx cap open ios
+    cd ~/RunTheTown && node build.mjs && npx cap sync ios && npx cap open ios
 then Run in Xcode. The web app is copied fresh into the project each time.
 
 ## What to test first on the phone

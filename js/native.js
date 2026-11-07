@@ -8,9 +8,12 @@
 // Plugins are reached through the bridge (Capacitor.registerPlugin), so the bundle needs
 // no npm imports; the native side is added by `npx cap sync ios`.
 
+// window.Capacitor is the native bridge; registerPlugin comes from @capacitor/core, which
+// index.html loads as js/vendor/capacitor.js (it sets window.capacitorExports).
 const cap = () => globalThis.Capacitor;
 export const isNative = () => !!cap()?.isNativePlatform?.();
-const plugin = (name) => (isNative() ? cap().registerPlugin(name) : null);
+const registerPlugin = (name) => (globalThis.capacitorExports?.registerPlugin || cap()?.registerPlugin)?.(name) || null;
+const plugin = (name) => { if (!isNative()) return null; try { return registerPlugin(name); } catch { return null; } };
 
 const NATIVE_HEBREW = /[֐-׿]/;
 
