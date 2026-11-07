@@ -5617,8 +5617,77 @@ function makeRun({ route, track, odometer, elapsed, startedAt, start, settings, 
     rerouted,
     latlngs: route?.latlngs || [],
     track: simplifyTrack(track),
+    onPlan: matchShare(simplifyTrack(track), route?.latlngs || []), // share of the track on the planned line (null without a track)
     picture: null, // a JPEG data URL, added by drawRunPicture
   };
+}
+
+// How much of the track ran on the planned line: the share of track points within `tol` m of
+// it (brute force: the track is thinned to a few hundred points, the line to a few hundred vertices).
+function matchShare(track, latlngs, tol = 30) {
+  if (!track?.length || !latlngs?.length) return null;
+  const line = latlngs.length > 400 ? latlngs.filter((_, i) => i % Math.ceil(latlngs.length / 400) === 0) : latlngs;
+  let on = 0;
+  for (const [la, lo] of track) {
+    let best = Infinity;
+    for (const [a, b] of line) { const d = haversine(la, lo, a, b); if (d < best) { best = d; if (best <= tol) break; } }
+    if (best <= tol) on++;
+  }
+  return on / track.length;
+}
+
+// A picture to share: the route picture with the figures on it (1080 x 1350, JPEG data URL).
+function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' } = {}) {
+  if (typeof document === 'undefined') return null;
+  const W = 1080, H = 1350;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0f172a';
+  g.fillRect(0, 0, W, H);
+  return new Promise((resolve) => {
+    const finish = () => {
+      g.fillStyle = '#fff';
+      g.font = '800 64px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText(run.name, 60, 860, W - 120);
+      g.font = '500 34px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillStyle = '#94a3b8';
+      g.fillText([who, new Date(run.time).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '), 60, 915, W - 120);
+      stats.forEach(([value, label], i) => {
+        const x = 60 + i * ((W - 120) / stats.length);
+        g.fillStyle = '#fff';
+        g.font = '800 88px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.fillText(value, x, 1090);
+        g.fillStyle = '#94a3b8';
+        g.font = '500 32px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.fillText(label, x, 1140);
+      });
+      g.fillStyle = '#ff5a36';
+      g.font = '800 40px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText(title, 60, 1270);
+      g.fillStyle = '#64748b';
+      g.font = '500 26px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText('Routes for runners in a new city · Map © OpenStreetMap', 60, 1312);
+      resolve(c.toDataURL('image/jpeg', 0.88));
+    };
+    if (!run.picture) { g.fillStyle = '#1e293b'; g.fillRect(60, 60, W - 120, 700); finish(); return; }
+    const img = new Image();
+    img.onload = () => {
+      // The route picture, cover-fitted into a rounded frame.
+      const fw = W - 120, fh = 700;
+      g.save();
+      g.beginPath();
+      g.roundRect(60, 60, fw, fh, 36);
+      g.clip();
+      const k = Math.max(fw / img.width, fh / img.height);
+      g.drawImage(img, 60 + (fw - img.width * k) / 2, 60 + (fh - img.height * k) / 2, img.width * k, img.height * k);
+      g.restore();
+      finish();
+    };
+    img.onerror = finish;
+    img.src = run.picture;
+  });
 }
 
 // ---- The picture: map tiles with the planned line, the track and the start ----
@@ -5743,8 +5812,184 @@ const journal = {
   },
 };
 
+// ---- native.js ----
+// The native shell (Capacitor, iPhone first). The same web app runs inside the app; these
+// adapters replace the browser pieces that a web page cannot do well on a phone:
+//   - NativeVoice: the system speech engine with every installed voice (Zoe, Tom, Siri),
+//     speaking on while the screen is locked (UIBackgroundModes audio);
+//   - NativeGps: a background location watcher, so fixes keep coming with the screen off
+//     or the app behind another (UIBackgroundModes location);
+//   - NativeScreenLock: keep-awake while the run screen is on.
+// Plugins are reached through the bridge (Capacitor.registerPlugin), so the bundle needs
+// no npm imports; the native side is added by `npx cap sync ios`.
+
+const cap = () => globalThis.Capacitor;
+const isNative = () => !!cap()?.isNativePlatform?.();
+const plugin = (name) => (isNative() ? cap().registerPlugin(name) : null);
+
+const NATIVE_HEBREW = /[֐-׿]/;
+
+/** Same surface as navigation.js Voice, on the phone's own speech engine. */
+class NativeVoice {
+  constructor() {
+    this.tts = plugin('TextToSpeech');
+    this.muted = false;
+    this.queue = [];
+    this.speaking = false;
+    this.voices = { en: null, he: null };
+    this.list = []; // { voiceURI, name, lang, localService }
+    this.log = [];
+    this.onSay = null;
+    this.preferred = null;
+    this.gen = 0;
+    // The settings page reads voices through this shim (the web Voice exposes speechSynthesis).
+    this.synth = { getVoices: () => this.list, addEventListener: () => {}, cancel: () => this.cancelSpeech() };
+    this.ready = this.loadVoices();
+  }
+  get available() { return !!this.tts; }
+  async loadVoices() {
+    try {
+      const { voices } = await this.tts.getSupportedVoices();
+      this.list = (voices || []).map((v, i) => ({ voiceURI: v.voiceURI || `native-${i}`, name: v.name || v.voiceURI || `Voice ${i}`, lang: v.lang || '', localService: v.localService !== false, index: i }));
+    } catch {
+      this.list = [];
+    }
+    this.pick();
+  }
+  pick() {
+    const vs = this.list;
+    const chosen = this.preferred && vs.find((v) => v.voiceURI === this.preferred);
+    const ranked = chosen ? null : this.options(1)[0];
+    const by = (re) => vs.find((v) => re.test(v.lang));
+    this.voices.en = chosen || (ranked && vs.find((v) => v.voiceURI === ranked.uri)) || by(/^en[-_](US|GB)/i) || by(/^en/i) || null;
+    this.voices.he = by(/^(he|iw)/i) || null;
+  }
+  setVoice(uri) { this.preferred = uri || null; this.pick(); }
+  options(max = 5) {
+    const ACCENT = { US: 'American', GB: 'British', AU: 'Australian', IE: 'Irish', ZA: 'South African', IN: 'Indian', CA: 'Canadian', NZ: 'New Zealand' };
+    const FAVOURITES = ['zoe', 'tom', 'siri', 'samantha', 'daniel', 'karen', 'aaron', 'moira', 'arthur', 'tessa', 'rishi', 'nicky', 'ava', 'evan', 'allison', 'susan', 'joelle'];
+    const en = this.list.filter((v) => /^en[-_]/i.test(v.lang));
+    const grade = (v) => (/premium/i.test(v.voiceURI + v.name) ? 3 : /enhanced/i.test(v.voiceURI + v.name) ? 2 : 1);
+    const byName = new Map();
+    for (const v of en) {
+      const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase();
+      if (!byName.has(key) || grade(v) > grade(byName.get(key))) byName.set(key, v);
+    }
+    const rank = (v) => { const key = v.name.replace(/\s*\((enhanced|premium|compact)\)/i, '').trim().toLowerCase(); const i = FAVOURITES.findIndex((f) => key.startsWith(f)); return i < 0 ? 100 : i; };
+    const current = this.voices.en?.voiceURI;
+    return [...byName.values()].sort((a, b) => rank(a) - rank(b)).slice(0, max).map((v) => ({
+      uri: v.voiceURI,
+      name: v.name.replace(/\s*\((enhanced|premium|compact)\)/i, ''),
+      lang: v.lang,
+      accent: ACCENT[(v.lang.split(/[-_]/)[1] || '').toUpperCase()] || v.lang,
+      current: v.voiceURI === current,
+    }));
+  }
+  unlock() {}
+  say(parts, { priority = 1 } = {}) {
+    const text = parts.map((p) => p.text).join('');
+    this.log.push(text);
+    this.onSay?.(text);
+    if (this.muted || !this.tts) return;
+    if (priority >= 2) {
+      this.queue = this.queue.filter((q) => q.priority >= 2);
+      if (priority >= 3) this.cancelSpeech();
+    }
+    this.queue.push({ parts, priority });
+    if (this.queue.length > 4) this.queue.splice(0, this.queue.length - 4);
+    if (!this.speaking) this.next();
+  }
+  cancelSpeech() {
+    this.gen++;
+    this.queue = [];
+    this.speaking = false;
+    this.tts?.stop().catch(() => {});
+  }
+  async next() {
+    const item = this.queue.shift();
+    if (!item) { this.speaking = false; return; }
+    this.speaking = true;
+    const gen = ++this.gen;
+    const runs = [];
+    for (const p of item.parts) {
+      const he = (p.lang === 'he' || NATIVE_HEBREW.test(p.text)) && this.voices.he;
+      if ((p.lang === 'he' || NATIVE_HEBREW.test(p.text)) && !this.voices.he) continue;
+      const lang = he ? 'he' : 'en';
+      const last = runs[runs.length - 1];
+      if (last && last.lang === lang) last.text += p.text;
+      else runs.push({ lang, text: p.text });
+    }
+    for (const r of runs) {
+      if (gen !== this.gen) return;
+      const v = this.voices[r.lang];
+      try {
+        await this.tts.speak({ text: r.text, lang: v?.lang || (r.lang === 'he' ? 'he-IL' : 'en-US'), rate: 1.0, pitch: 1.0, volume: 1.0, voice: v?.index, category: 'playback' });
+      } catch {
+        /* a voice that cannot speak this text: skip it */
+      }
+    }
+    if (gen === this.gen) this.next();
+  }
+  preview(uri, text = 'In 200 meters, turn left onto Rothschild Boulevard. Then keep going along the promenade.') {
+    const v = this.list.find((x) => x.voiceURI === uri);
+    this.cancelSpeech();
+    this.tts?.speak({ text, lang: v?.lang || 'en-US', rate: 1.0, pitch: 1.0, volume: 1.0, voice: v?.index, category: 'playback' }).catch(() => {});
+  }
+  setMuted(m) { this.muted = m; if (m) this.cancelSpeech(); }
+  stop() { this.setMuted(true); this.muted = false; }
+}
+
+/** GPS that keeps running with the screen locked (background location). */
+class NativeGps {
+  constructor() { this.geo = plugin('BackgroundGeolocation'); this.id = null; }
+  async start(onFix, onError) {
+    if (!this.geo) { onError?.(new Error('No location plugin')); return; }
+    try {
+      this.id = await this.geo.addWatcher(
+        { backgroundMessage: 'RunTheTown is guiding your run.', backgroundTitle: 'Run in progress', requestPermissions: true, stale: false, distanceFilter: 3 },
+        (loc, err) => {
+          if (err) { onError?.(err.code === 'NOT_AUTHORIZED' ? { code: 1, message: err.message } : err); return; }
+          if (loc) onFix({ lat: loc.latitude, lon: loc.longitude, accuracy: loc.accuracy, heading: loc.bearing ?? null, speed: loc.speed ?? null });
+        }
+      );
+    } catch (e) {
+      onError?.(e);
+    }
+  }
+  stop() {
+    if (this.id != null) this.geo?.removeWatcher({ id: this.id }).catch(() => {});
+    this.id = null;
+  }
+}
+
+/** Keeps the screen on while the run screen is up (the guide itself goes on with the screen off). */
+class NativeScreenLock {
+  constructor() { this.ka = plugin('KeepAwake'); this.wanted = false; }
+  get supported() { return !!this.ka; }
+  async acquire() {
+    this.wanted = true;
+    try { await this.ka?.keepAwake(); return true; } catch { return false; }
+  }
+  release() {
+    this.wanted = false;
+    this.ka?.allowSleep().catch(() => {});
+  }
+}
+
+/** Share a JPEG data URL through the phone's share sheet (web share needs no file on disk; native does). */
+async function nativeShare({ dataUrl, fileName, text }) {
+  const fs = plugin('Filesystem');
+  const share = plugin('Share');
+  if (!fs || !share) return false;
+  const base64 = dataUrl.split(',')[1];
+  const { uri } = await fs.writeFile({ path: fileName, data: base64, directory: 'CACHE' });
+  await share.share({ text, files: [uri] });
+  return true;
+}
+
 // ---- app.js ----
 // UI: map, start point, preferences and route results.
+
 
 
 
@@ -6265,7 +6510,7 @@ function showRoutes(routes, { keep = false } = {}) {
     card.innerHTML = `
       <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
       <div class="card-dist">${U.num(r.distance, 2)}<small>${U.unit}</small></div>
-      <ul>${r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
+      <ul>${r.highlights.map((h) => `<li>${escapeHtml(inUnits(h))}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
     // First tap picks the route (map and card light up); a second tap on it opens the pop-up.
     card.addEventListener('click', () => { const again = lastTapped === i; lastTapped = i; selectRoute(i, { fit: true }); if (again) openRouteAsk(i); });
@@ -6280,6 +6525,8 @@ function showRoutes(routes, { keep = false } = {}) {
 
 // ---------- Running spots: athletics tracks and big parks ----------
 const fmtKmShort = (m) => U.lenShort(m);
+// Card lines are written in km by the planner; in miles they are read out in miles and feet.
+const inUnits = (text) => (U.mi ? String(text).replace(/(\d+(?:\.\d+)?) km\b/g, (_, v) => `${(Number(v) / (MILE / 1000)).toFixed(1)} mi`).replace(/(\d+) m\b/g, (_, v) => `${Math.round(Number(v) / 0.3048 / 10) * 10} ft`) : text);
 const PLACE_ICON = {
   track: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="6"/><rect x="7.5" y="9.5" width="9" height="5" rx="2.5"/></svg>',
   stadium: '<svg viewBox="0 0 24 24"><path d="M3 9c0-2 4-3.5 9-3.5s9 1.5 9 3.5v6c0 2-4 3.5-9 3.5S3 17 3 15z"/><path d="M3 9c0 2 4 3.5 9 3.5s9-1.5 9-3.5"/></svg>',
@@ -6387,7 +6634,7 @@ function readLapsKm() {
     // What that distance means here: the real plan (laps, plus the way there and back).
     const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: { ...state.prefs } });
     // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
-    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${r.highlights[0]} · ${r.highlights[1]} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
+    msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${inUnits(r.highlights[0])} · ${inUnits(r.highlights[1])} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
   }
   return ok ? Math.round(U.toKm(v) * 10) / 10 : null;
 }
@@ -6571,8 +6818,11 @@ function escapeHtml(s) {
 }
 
 // ---------- Live navigation ----------
-const voice = new Voice();
-const screenLock = new ScreenLock();
+// Inside the native app (Capacitor) the phone's own speech engine, background GPS and
+// keep-awake take over from the browser pieces.
+const voice = isNative() ? new NativeVoice() : new Voice();
+const screenLock = isNative() ? new NativeScreenLock() : new ScreenLock();
+document.body.classList.toggle('native', isNative());
 const navLayer = L.layerGroup();
 const nav = { active: null }; // { navigator, source, route, color, demo, ... }
 const DEMO_RATES = [1, 6, 15];
@@ -6585,7 +6835,7 @@ function openRouteAsk(i) {
   $('routeAskDist').textContent = U.num(r.distance, 2);
   $('routeAskUnit').textContent = U.unit;
   $('voiceBtn').textContent = voiceLabelText();
-  $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(h)}</li>`).join('');
+  $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(inUnits(h))}</li>`).join('');
   $('routeAsk').hidden = false;
 }
 function closeRouteAsk() {
@@ -6602,6 +6852,7 @@ $('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openRepor
 // language, the map during the run, about. Every change is saved at once and applies to
 // the next run; units apply to the screen right away.
 voice.setVoice(settings.voice);
+voice.ready?.then(() => { voice.setVoice(settings.voice); if (!$('settings').hidden) renderVoices(); }); // native: the voice list arrives a moment later
 
 function applyUnits() {
   const { min, max } = limits();
@@ -6659,7 +6910,7 @@ function renderVoices() {
   const hint = $('voiceHint');
   if (houseMissing.length) {
     hint.hidden = false;
-    const ios = /iPhone|iPad/.test(navigator.userAgent);
+    const ios = /iPhone|iPad/.test(navigator.userAgent) && !isNative();
     hint.textContent = ios
       ? `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not available here: on iPhone, Safari and home-screen apps only get the built-in voices, not the ones you download (Apple's rule). They will read your directions in the App Store version. Until then pick one of the voices below.`
       : `${houseMissing.map((h) => h.name).join(' and ')} ${houseMissing.length > 1 ? 'are' : 'is'} not on this device. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → ${houseMissing.map((h) => `${h.name} (${h.id === 'zoe' ? 'Premium' : 'Enhanced'})`).join(', ')}.`;
@@ -6915,7 +7166,7 @@ async function startRun({ demo }) {
     n.source.isPaused = () => n.navigator.paused;
     n.source.start(onFix);
   } else {
-    n.source = new GpsSource();
+    n.source = isNative() ? new NativeGps() : new GpsSource();
     n.source.start(onFix, (err) => {
       if (nav.active !== n) return;
       if (err.code === 1) {
@@ -7047,7 +7298,35 @@ function showFinish(v) {
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
     <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
   $('navFinish').hidden = false;
+  $('finishShare').hidden = n.demo;
   saveRun(n, { finished: true });
+}
+$('finishShare').addEventListener('click', async () => {
+  const n = nav.active;
+  if (!n) return;
+  const run = n.savedRun || (await new Promise((r) => setTimeout(() => r(n.savedRun), 1500)));
+  if (!run) { toast('One moment, the run is still being saved.'); return; }
+  shareRun(run);
+});
+// A picture of the run to send on: the Share sheet where the phone has one, else a download.
+async function shareRun(run) {
+  try {
+    const stats = [[U.num(run.distance, 2), U.unit], [fmtTime(run.elapsed), 'time'], [run.pace ? U.pace(run.pace) : '–:––', U.paceLabel()]];
+    const dataUrl = await drawShareCard(run, { stats, who: profile?.name || '' });
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], `runthetown-${run.time.slice(0, 10)}.jpg`, { type: 'image/jpeg' });
+    const text = `${run.name}: ${U.num(run.distance, 2)} ${U.unit} in ${fmtTime(run.elapsed)} with RunTheTown`;
+    if (isNative() && (await nativeShare({ dataUrl, fileName: file.name, text }).catch(() => false))) return;
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 500);
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('Could not share this run.');
+  }
 }
 
 // ---------- The run journal ----------
@@ -7069,6 +7348,7 @@ async function saveRun(n, { finished }) {
   }
   try {
     await journal.save(run);
+    n.savedRun = run;
     refreshRailUser();
     toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
   } catch {
@@ -7488,7 +7768,8 @@ async function openRun(id) {
   pic.hidden = !r.picture;
   if (r.picture) pic.src = r.picture;
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
-  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
+  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
+    r.onPlan != null ? `${Math.round(r.onPlan * 100)}% of the run on the planned line (grey); orange is where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
   $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   $('runShowMap').hidden = !(r.latlngs?.length > 1 || r.track?.length > 1);
   $('runs').hidden = true;
@@ -7496,6 +7777,25 @@ async function openRun(id) {
   $('runPage').scrollTop = 0;
 }
 $('runBack').addEventListener('click', () => { $('runPage').hidden = true; openRuns(); });
+// The same route again: the saved start and distance go into the planner (the routes are
+// planned afresh, so the map is current; the first option is the closest to the saved one).
+$('runAgain').addEventListener('click', async () => {
+  const r = await journal.get(openRunId).catch(() => null);
+  if (!r?.start) { toast('This run has no start point saved.'); return; }
+  for (const id of ['runPage', 'runs']) $(id).hidden = true;
+  setView('app');
+  setMode(r.type === 'sightseeing' ? 'tour' : 'run');
+  if (state.routes.length) showPrefs();
+  setStart(r.start.lat, r.start.lon, r.start.label || 'Saved start');
+  const km = Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, (r.planned || r.distance) / 1000));
+  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
+  readDistance();
+  highlightNav(state.mode);
+  if (r.type === 'laps' && r.place) { setRunStyle('laps'); toast(`Pick ${r.place.name} in the list to plan the laps again.`); return; }
+  setRunStyle('streets');
+  $('goBtn').click();
+});
+$('runShare').addEventListener('click', async () => { const r = await journal.get(openRunId).catch(() => null); if (r) shareRun(r); });
 $('runsBack').addEventListener('click', () => { $('runs').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('runDelete').addEventListener('click', async () => {
   if (!openRunId) return;

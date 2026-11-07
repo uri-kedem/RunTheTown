@@ -103,8 +103,77 @@ export function makeRun({ route, track, odometer, elapsed, startedAt, start, set
     rerouted,
     latlngs: route?.latlngs || [],
     track: simplifyTrack(track),
+    onPlan: matchShare(simplifyTrack(track), route?.latlngs || []), // share of the track on the planned line (null without a track)
     picture: null, // a JPEG data URL, added by drawRunPicture
   };
+}
+
+// How much of the track ran on the planned line: the share of track points within `tol` m of
+// it (brute force: the track is thinned to a few hundred points, the line to a few hundred vertices).
+export function matchShare(track, latlngs, tol = 30) {
+  if (!track?.length || !latlngs?.length) return null;
+  const line = latlngs.length > 400 ? latlngs.filter((_, i) => i % Math.ceil(latlngs.length / 400) === 0) : latlngs;
+  let on = 0;
+  for (const [la, lo] of track) {
+    let best = Infinity;
+    for (const [a, b] of line) { const d = haversine(la, lo, a, b); if (d < best) { best = d; if (best <= tol) break; } }
+    if (best <= tol) on++;
+  }
+  return on / track.length;
+}
+
+// A picture to share: the route picture with the figures on it (1080 x 1350, JPEG data URL).
+export function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' } = {}) {
+  if (typeof document === 'undefined') return null;
+  const W = 1080, H = 1350;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0f172a';
+  g.fillRect(0, 0, W, H);
+  return new Promise((resolve) => {
+    const finish = () => {
+      g.fillStyle = '#fff';
+      g.font = '800 64px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText(run.name, 60, 860, W - 120);
+      g.font = '500 34px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillStyle = '#94a3b8';
+      g.fillText([who, new Date(run.time).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '), 60, 915, W - 120);
+      stats.forEach(([value, label], i) => {
+        const x = 60 + i * ((W - 120) / stats.length);
+        g.fillStyle = '#fff';
+        g.font = '800 88px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.fillText(value, x, 1090);
+        g.fillStyle = '#94a3b8';
+        g.font = '500 32px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.fillText(label, x, 1140);
+      });
+      g.fillStyle = '#ff5a36';
+      g.font = '800 40px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText(title, 60, 1270);
+      g.fillStyle = '#64748b';
+      g.font = '500 26px Inter, -apple-system, Helvetica, Arial, sans-serif';
+      g.fillText('Routes for runners in a new city · Map © OpenStreetMap', 60, 1312);
+      resolve(c.toDataURL('image/jpeg', 0.88));
+    };
+    if (!run.picture) { g.fillStyle = '#1e293b'; g.fillRect(60, 60, W - 120, 700); finish(); return; }
+    const img = new Image();
+    img.onload = () => {
+      // The route picture, cover-fitted into a rounded frame.
+      const fw = W - 120, fh = 700;
+      g.save();
+      g.beginPath();
+      g.roundRect(60, 60, fw, fh, 36);
+      g.clip();
+      const k = Math.max(fw / img.width, fh / img.height);
+      g.drawImage(img, 60 + (fw - img.width * k) / 2, 60 + (fh - img.height * k) / 2, img.width * k, img.height * k);
+      g.restore();
+      finish();
+    };
+    img.onerror = finish;
+    img.src = run.picture;
+  });
 }
 
 // ---- The picture: map tiles with the planned line, the track and the start ----

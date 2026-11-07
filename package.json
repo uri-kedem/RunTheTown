@@ -5,6 +5,21 @@
   "type": "module",
   "scripts": {
     "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-landcover.mjs && node tests/test-country.mjs && node tests/test-journal.mjs && node tests/test-long-runs.mjs",
-    "start": "python3 -m http.server 8080"
+    "start": "python3 -m http.server 8080",
+    "build": "python3 build.py",
+    "ios": "python3 build.py && npx cap sync ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/ios": "^7.4.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor-community/background-geolocation": "^1.2.0",
+    "@capacitor-community/text-to-speech": "^6.0.0",
+    "@capacitor-community/keep-awake": "^7.0.0"
   }
 }

@@ -368,6 +368,11 @@ offered to the Web Speech API (Apple: "optionally downloadable voices are not av
 Settings page says so on iPhone and lists the available voices; Zoe and Tom are taken automatically
 wherever the browser does expose them (Chrome/Edge on desktop, and the native app later).
 
+## The native shell (iPhone)
+Capacitor 7 wraps the same web app: `capacitor.config.json`, the plugins in `package.json`, the
+adapters in `js/native.js` (speech with every installed voice, background GPS, keep-awake, native
+share) and `dist/` written by `build.py`. Setup, build steps and what to test: `native/README-ios.md`.
+
 ## Known limits of the MVP
 
 - Traffic-light data depends on the public Overpass servers, which are often overloaded. Routes still

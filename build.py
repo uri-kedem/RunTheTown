@@ -1,9 +1,18 @@
 # Bundles the ES modules into one classic script so index.html works when opened
 # directly from Finder (file://), with no local server. Run: python3 build.py
 import re, pathlib
-ORDER = ['geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'landcover', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'settings', 'journal', 'app']
+ORDER = ['geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'landcover', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'settings', 'journal', 'native', 'app']
 root = pathlib.Path(__file__).parent
 parts = []
+# Every module shares one scope in the bundle, so a top-level name declared twice (two
+# modules each with `const HEBREW`) breaks the whole app at load. Fail here instead.
+seen = {}
+for name in ORDER:
+    src = pathlib.Path('js') / f'{name}.js'
+    for m in re.finditer(r'^(?:export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)', src.read_text(encoding='utf-8'), re.M):
+        ident = m.group(1)
+        if ident in seen: raise SystemExit(f'build: top-level name {ident!r} is declared in both js/{seen[ident]}.js and js/{name}.js (the bundle shares one scope)')
+        seen[ident] = name
 for name in ORDER:
     src = (root / 'js' / f'{name}.js').read_text(encoding='utf-8')
     src = re.sub(r'^import [^;]*? from \'[^\']*\';[ \t]*$', '', src, flags=re.M | re.S)
@@ -58,3 +67,20 @@ stamped = re.sub(r'<span id="buildTag" data-build="[^"]*">[^<]*</span>', f'<span
 idx.write_text(stamped, encoding='utf-8')
 sw.write_text(plain_sw.replace("const CACHE_VERSION = '';", f"const CACHE_VERSION = '{h}';"), encoding='utf-8')
 print('build', h, '| artwork:', ', '.join(sorted(fingerprint.values())))
+
+# The native shell (Capacitor) takes the published web app from dist/: the page, the bundle,
+# the styles, the artwork and the manifest, nothing else (no tests, no node_modules).
+import shutil
+Path = pathlib.Path
+dist = Path('dist')
+if dist.exists(): shutil.rmtree(dist)
+(dist / 'js').mkdir(parents=True)
+(dist / 'css').mkdir()
+(dist / 'img').mkdir()
+shutil.copy('index.html', dist / 'index.html')
+shutil.copy('manifest.webmanifest', dist / 'manifest.webmanifest')
+shutil.copy('sw.js', dist / 'sw.js')
+shutil.copy('js/bundle.js', dist / 'js' / 'bundle.js')
+shutil.copy('css/style.css', dist / 'css' / 'style.css')
+for name in fingerprint.values(): shutil.copy(Path('img') / name, dist / 'img' / name)
+print('dist/ ready for the native shell')

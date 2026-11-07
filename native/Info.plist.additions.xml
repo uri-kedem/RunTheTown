@@ -1,0 +1,20 @@
+<!-- Merge into ios/App/App/Info.plist (inside the top-level <dict>). -->
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>RunTheTown follows your position along the route to read the turns and count your distance.</string>
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>RunTheTown keeps guiding your run while the phone is locked or in your pocket.</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>RunTheTown keeps guiding your run while the phone is locked or in your pocket.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>To pick a profile photo.</string>
+<key>NSMotionUsageDescription</key>
+<string>To tell running from standing still.</string>
+<key>UIBackgroundModes</key>
+<array>
+  <string>location</string>
+  <string>audio</string>
+</array>
+<key>UIStatusBarStyle</key>
+<string>UIStatusBarStyleLightContent</string>
+<key>ITSAppUsesNonExemptEncryption</key>
+<false/>
