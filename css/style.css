@@ -451,7 +451,7 @@ body[data-view='app'] .home { display: none; }
   .home-map::before { content: ''; position: absolute; inset: 0; background: linear-gradient(104deg, var(--brand) 0, var(--brand) 100%); clip-path: polygon(14% 0, calc(14% + 14px) 0, 14px 100%, 0 100%); z-index: 1; }
   .home-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .topbar { left: 236px; }
-  .sheet { left: 236px; }
+  .sheet, .sheet[data-pos] { left: 236px; } /* the panel rule above also matches .sheet[data-pos], so this must too */
   .leaflet-left { left: 624px; }
   .leaflet-control-attribution { margin-left: 220px; }
   /* The run screen, its finish card, dialogs and messages also start right of the rail, never under it. */
