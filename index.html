@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=3f7053a2" />
+    <link rel="manifest" href="manifest.webmanifest?v=cc7bb546" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=3f7053a2" />
+    <link rel="stylesheet" href="css/style.css?v=cc7bb546" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3f7053a2">3f7053a2</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="cc7bb546">cc7bb546</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -212,15 +212,25 @@
         <div class="page-title" id="runTitle">Run</div>
       </div>
       <div class="page-body run-detail">
-        <img class="run-pic" id="runPic" alt="" hidden />
+        <button type="button" class="run-pic-btn" id="runPicBtn" hidden aria-label="See the route on the map"><img class="run-pic" id="runPic" alt="" /><span class="run-pic-hint">Tap to explore the route</span></button>
         <div class="finish-stats" id="runStats"></div>
         <ul class="route-pop-facts" id="runFacts"></ul>
         <div class="run-actions">
           <button type="button" class="primary" id="runAgain">Run this route again</button>
           <button type="button" class="ghost" id="runShare">Share</button>
         </div>
-        <div class="route-pop-foot"><button type="button" class="link" id="runShowMap">Show on the map</button><button type="button" class="link danger-link" id="runDelete">Delete this run</button></div>
+        <div class="route-pop-foot"><button type="button" class="link danger-link" id="runDelete">Delete this run</button></div>
       </div>
+    </section>
+
+    <!-- The route of a past run, on its own map (looked at, never planned or run from here) -->
+    <section class="page run-map-page" id="runMapPage" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="runMapBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title" id="runMapTitle">Route</div>
+      </div>
+      <div class="run-map" id="runMap"></div>
+      <div class="run-map-foot" id="runMapFoot"></div>
     </section>
 
     <!-- Settings -->
@@ -516,6 +526,6 @@
 
     <script src="js/vendor/leaflet.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=3f7053a2"></script>
+    <script src="js/bundle.js?v=cc7bb546"></script>
   </body>
 </html>

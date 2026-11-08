@@ -541,7 +541,16 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .run-card b { display: block; font-size: 15px; color: var(--ink); }
 .run-card small { display: block; color: var(--ink-2); font-size: 12.5px; line-height: 1.4; }
 .run-card .when { color: var(--ink-3); }
-.run-pic { width: 100%; border-radius: 16px; display: block; margin-bottom: 14px; box-shadow: var(--shadow); }
+.run-pic-btn { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; margin-bottom: 14px; cursor: pointer; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+.run-pic { width: 100%; display: block; }
+.run-pic-hint { position: absolute; right: 10px; bottom: 10px; background: rgba(15, 23, 42, 0.78); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; }
+.run-map-page { display: flex; flex-direction: column; }
+.run-map-page[hidden] { display: none; }
+.run-map { flex: 1; min-height: 0; background: #e5e7eb; }
+.run-map .leaflet-left { left: 0 !important; }
+.run-map .leaflet-control-attribution { margin-left: 0 !important; }
+body[data-view='home'] .run-map .leaflet-control-zoom, body.navigating .run-map .leaflet-control-zoom { display: block; }
+.run-map-foot { padding: 10px 16px calc(10px + var(--safe-b)); font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--line); background: var(--bg); }
 .run-actions { display: grid; grid-template-columns: 1.6fr 1fr; gap: 8px; margin: 4px 0 12px; }
 .run-actions .primary { margin: 0; }
 .run-actions .ghost { text-decoration: none; background: var(--bg-2); border-radius: 14px; padding: 13px; }

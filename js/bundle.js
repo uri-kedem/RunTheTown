@@ -7925,13 +7925,12 @@ async function openRun(id) {
   openRunId = id;
   $('runTitle').textContent = r.name;
   const pic = $('runPic');
-  pic.hidden = !r.picture;
+  $('runPicBtn').hidden = !r.picture;
   if (r.picture) pic.src = r.picture;
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
   const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
     r.onPlan != null && r.onPlan < 0.9 ? `${Math.round(r.onPlan * 100)}% of the run on the planned line; the picture shows where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
   $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
-  $('runShowMap').hidden = !(r.latlngs?.length > 1 || r.track?.length > 1);
   $('runs').hidden = true;
   $('runPage').hidden = false;
   $('runPage').scrollTop = 0;
@@ -7966,21 +7965,31 @@ $('runDelete').addEventListener('click', async () => {
   $('runPage').hidden = true;
   openRuns();
 });
-$('runShowMap').addEventListener('click', async () => {
+// Tapping the picture opens the route on a map of its own: look, zoom, pan; nothing is planned
+// or started from here, and the main map is left alone.
+let runMap = null, runMapLayer = null;
+$('runPicBtn').addEventListener('click', async () => {
   const r = await journal.get(openRunId).catch(() => null);
-  if (!r) return;
-  for (const id of ['runPage', 'runs']) $(id).hidden = true;
-  setView('app');
-  journalLayer.clearLayers().addTo(map);
-  const pts = r.track?.length > 1 ? r.track : r.latlngs;
-  if (r.track?.length > 1) L.polyline(r.track, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(journalLayer);
-  L.polyline(pts, { color: r.track?.length > 1 ? '#ff5a36' : '#94a3b8', weight: 5 }).addTo(journalLayer);
-  map.fitBounds(L.latLngBounds(pts), mapPadding());
-  setSheet('peek');
-  toast(`${r.name}: ${U.num(r.distance, 2)} ${U.unit} on ${fmtWhen(r.time)}. Tap the map or change the start to clear it.`);
+  const pts = r && (r.track?.length > 1 ? r.track : r.latlngs);
+  if (!pts || pts.length < 2) return;
+  $('runMapTitle').textContent = r.name;
+  $('runMapFoot').textContent = `${U.num(r.distance, 2)} ${U.unit} · ${fmtTime(r.elapsed)} · ${fmtWhen(r.time)}${r.track?.length > 1 ? ' · orange: where you ran' : ' · grey: the planned route (no GPS track)'}`;
+  $('runMapPage').hidden = false;
+  if (!runMap) {
+    runMap = L.map('runMap', { zoomControl: true, attributionControl: true });
+    L.tileLayer(TILE_SOURCES[tileSource].url, TILE_SOURCES[tileSource].opts).addTo(runMap);
+    runMapLayer = L.layerGroup().addTo(runMap);
+  }
+  runMapLayer.clearLayers();
+  if (r.track?.length > 1) L.polyline(r.track, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(runMapLayer);
+  L.polyline(pts, { color: r.track?.length > 1 ? '#ff5a36' : '#94a3b8', weight: 5 }).addTo(runMapLayer);
+  L.circleMarker(pts[0], { radius: 7, color: '#fff', weight: 3, fillColor: '#ff5a36', fillOpacity: 1 }).addTo(runMapLayer);
+  L.circleMarker(pts[pts.length - 1], { radius: 7, color: '#fff', weight: 3, fillColor: '#0f172a', fillOpacity: 1 }).addTo(runMapLayer);
+  runMap.invalidateSize();
+  runMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30] });
+  setTimeout(() => { runMap.invalidateSize(); runMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30] }); }, 150);
 });
-const journalLayer = L.layerGroup();
-map.on('click', () => { if (journalLayer.getLayers?.().length) { journalLayer.clearLayers(); map.removeLayer(journalLayer); } });
+$('runMapBack').addEventListener('click', () => { $('runMapPage').hidden = true; });
 $('runsExport').addEventListener('click', async () => {
   try {
     const json = await journal.exportJson();
@@ -8001,7 +8010,7 @@ if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings };
+window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal };
 
 // Arriving somewhere new: try to find the runner right away.
 locate({ quiet: true });

@@ -71,6 +71,8 @@
   });
   window.L = {
     map(id) {
+      // A second map (the route viewer) is a plain stand-in; the main map keeps the stub's drawing.
+      if (window.__stubMap) { const d = { _children: new Set(), fitBounds() { return d; }, invalidateSize() { return d; }, on() { return d; }, setView() { return d; }, getZoom: () => 15, removeLayer() { return d; } }; return d; }
       el = document.getElementById(id);
       el.style.overflow = 'hidden';
       svg = document.createElementNS(svgNS, 'svg');
@@ -117,6 +119,7 @@
     control: { zoom: () => ({ addTo() { return this; } }) },
     divIcon: (o) => o,
     marker: (p, o = {}) => layerBase('marker', [toLL(p)], o),
+    circleMarker: (p, o = {}) => layerBase('marker', [toLL(p)], o),
     polyline: (pts, o) => layerBase('polyline', pts.map(toLL), o),
     layerGroup() {
       const g = {
