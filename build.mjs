@@ -43,11 +43,11 @@ console.log('wrote js/bundle.js', Buffer.byteLength(out), 'bytes');
 // old cached copy, by a browser or by GitHub's CDN. Sources stay as img/<name>.png; older
 // fingerprinted copies of the same name are removed.
 const fingerprint = new Map();
-const pics = readdirSync(at('img')).filter((f) => /\.(png|jpg)$/.test(f)).sort();
+const pics = readdirSync(at('img')).filter((f) => /\.(png|jpg|mp4|webm)$/.test(f)).sort();
 for (const file of pics) {
-  if (/\.[0-9a-f]{8}\.(png|jpg)$/.test(file)) continue; // a published copy, handled below
-  const ext = file.slice(-3);
-  const stem = file.slice(0, -4);
+  if (/\.[0-9a-f]{8}\.(png|jpg|mp4|webm)$/.test(file)) continue; // a published copy, handled below
+  const ext = file.match(/\.(\w+)$/)[1];
+  const stem = file.slice(0, -(ext.length + 1));
   const bytes = readFileSync(at('img', file));
   const pub = `${stem}.${sha1(bytes)}.${ext}`;
   for (const old of pics) if (old !== pub && new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{8}\\.${ext}$`).test(old)) unlinkSync(at('img', old));
@@ -55,7 +55,7 @@ for (const file of pics) {
   fingerprint.set(file, pub);
 }
 // img/name.png or img/name.<oldhash>.png (with or without ?v=) -> img/name.<hash>.png; same for .jpg
-const publishRefs = (text) => text.replace(/img\/([\w-]+?)(?:\.[0-9a-f]{8})?\.(png|jpg)(?:\?v=[0-9a-f]+)?/g, (_, stem, ext) => 'img/' + (fingerprint.get(`${stem}.${ext}`) || `${stem}.${ext}`));
+const publishRefs = (text) => text.replace(/img\/([\w-]+?)(?:\.[0-9a-f]{8})?\.(png|jpg|mp4|webm)(?:\?v=[0-9a-f]+)?/g, (_, stem, ext) => 'img/' + (fingerprint.get(`${stem}.${ext}`) || `${stem}.${ext}`));
 
 // Stamp the build into index.html (cache-busting query on the bundle and stylesheet) and
 // sw.js (the service worker's cache name), so phones that installed the app pick up a new
