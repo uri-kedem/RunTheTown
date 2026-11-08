@@ -16,12 +16,13 @@ check(paceShort(332) === '5:32', 'pace format');
 function simulate(route, { detour = null, speed = 3.0, dt = 2, noise = 4 } = {}) {
   let t = 0;
   const said = [];
-  const nav = new Navigator(route, { speak: (parts, o) => said.push({ t, at: nav.progress, text: parts.map((p) => p.text).join(''), langs: parts.map((p) => p.lang), ...o }), now: () => t * 1000 });
+  const sounds = [];
+  const nav = new Navigator(route, { speak: (parts, o) => said.push({ t, at: nav.progress, text: parts.map((p) => p.text).join(''), langs: parts.map((p) => p.lang), ...o }), sound: (name) => sounds.push({ name, t }), now: () => t * 1000 });
   const sim = new SimulatedRun(route, { speed, noise });
   nav.start();
   let prev = 0, backJumps = 0, steps = 0;
   const proj = makeProjection(route.latlngs[0][0], route.latlngs[0][1]);
-  while (!nav.finished && steps++ < 20000) {
+  while (!nav.routeDone && steps++ < 20000) {
     t += dt;
     let fix = sim.step(dt);
     if (detour && sim.d > detour.from && sim.d < detour.to) {
@@ -33,7 +34,7 @@ function simulate(route, { detour = null, speed = 3.0, dt = 2, noise = 4 } = {})
     if (v.progress < prev - 1) backJumps++;
     prev = v.progress;
   }
-  return { nav, said, backJumps, t };
+  return { nav, said, sounds, backJumps, t };
 }
 
 for (const [km, prefs] of [[5, {}], [8, { sights: true }], [10, { water: true }]]) {
@@ -44,7 +45,9 @@ for (const [km, prefs] of [[5, {}], [8, { sights: true }], [10, { water: true }]
     said.slice(0, 7).forEach((s) => console.log(`    ${Math.round(s.at)}m  ${s.text}`));
     console.log(`    … ${said[said.length - 1].text}`);
     const turns = nav.cues.filter((c) => c.type !== 'arrive');
-    check(nav.finished, 'run finishes at the start');
+    check(nav.routeDone, 'route completed at the start');
+    check(said.some((s) => /^Route complete/.test(s.text)) && !nav.finished, 'route completion is announced; the run itself goes on');
+    check(!said.some((s) => / to go\./.test(s.text)), 'splits say distance and pace only, never what is left');
     check(backJumps === 0, 'progress never jumps backwards');
     check(turns.every((c) => c.now), `every turn announced (${turns.length})`);
     const nowMsgs = said.filter((s) => s.priority === 2 && !/Starting|paused|Resuming/.test(s.text));
@@ -63,13 +66,12 @@ for (const [km, prefs] of [[5, {}], [8, { sights: true }], [10, { water: true }]
 const [r] = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
 const off = simulate(r, { detour: { from: 1500, to: 1800, off: 90 } });
 if (process.env.DBG) off.said.forEach((s) => console.log("   dbg", Math.round(s.at), s.text));
-console.log("   route", r.name, Math.round(r.distance), "finished", off.nav.finished, "progress", Math.round(off.nav.progress), "backJumps", off.backJumps);
-const warn = off.said.filter((s) => /off the route/.test(s.text));
+console.log("   route", r.name, Math.round(r.distance), "finished", off.nav.routeDone, "progress", Math.round(off.nav.progress), "backJumps", off.backJumps);
 console.log('\nDetour: ' + off.said.filter((s) => /route/.test(s.text)).map((s) => s.text).join(' | '));
-check(warn.length >= 1 && warn.length <= 3, 'off-route warning given (not spammed)');
-check(/to your (left|right)|behind you|ahead of you/.test(warn[0]?.text), 'warning says which way the route is');
+check(!off.said.some((s) => /off the route/.test(s.text)), 'no words about being off route');
+check(off.sounds.filter((x) => x.name === 'offroute').length === 1, 'one recalculating chime when leaving the line');
 check(off.said.some((s) => s.text === 'Back on route.'), 'back-on-route confirmation');
-check(off.nav.finished && off.backJumps === 0, 'still finishes after a detour');
+check(off.nav.routeDone && off.backJumps === 0, 'still finishes after a detour');
 
 // Bad GPS: wild fixes are ignored.
 const bad = new Navigator(r, { speak: () => {} });
@@ -85,7 +87,7 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   const r = engine.routeAtPlace(track, { lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {} }); // 6 km: several laps
   const { nav, said, backJumps } = simulate(r, { noise: 3 });
   console.log(`\n${r.name} (${(r.distance / 1000).toFixed(2)} km, ${r.place.laps} laps): ` + said.filter((s) => /Lap|arrived|Turn/.test(s.text)).map((s) => s.text).join(' | '));
-  check(nav.finished && backJumps === 0, 'lap route finishes without progress jumps');
+  check(nav.routeDone && backJumps === 0, 'lap route finishes without progress jumps');
   check(said.filter((s) => /^Lap \d+ of \d+\.$/.test(s.text)).length === r.place.laps, 'every lap announced once');
   check(said.some((s) => /^Lap 1 of/.test(s.text)) && said.findIndex((s) => /^Lap 1 of/.test(s.text)) < said.findIndex((s) => /^Lap 2 of/.test(s.text)), 'laps in order');
   check(said.some((s) => /onto the track/i.test(s.text)) && said.some((s) => /Laps done\. Head back the same way/.test(s.text)) && !said.some((s) => /Turn around/.test(s.text)), 'the track is announced in words: onto the track, laps done, head back');
@@ -125,11 +127,11 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
     const odoBefore = nav.odometer, elapsedBefore = nav.elapsed;
     const v = nav.reroute(fresh);
     check(!v.offRoute && nav.progress === 0 && nav.odometer === odoBefore && nav.elapsed === elapsedBefore, 'after rerouting: back on the line, progress restarts, distance and time carry on');
-    check(said.some((x) => /^New route from here/.test(x)), 'the new route is announced');
+    check(said.some((x) => /^Head (north|south|east|west)/.test(x)) && !said.some((x) => /New route/.test(x)), 'the new route is announced as a plain instruction');
     // Follow the new line to the end.
     const sim2 = new SimulatedRun(fresh, { speed: 3, noise: 0 });
-    let steps = 0; while (!nav.finished && steps++ < 5000) { t += 2; nav.update(sim2.step(2)); }
-    check(nav.finished, 'the run finishes on the new line');
+    let steps = 0; while (!nav.routeDone && steps++ < 5000) { t += 2; nav.update(sim2.step(2)); }
+    check(nav.routeDone, 'the run finishes on the new line');
   }
 }
 
@@ -226,8 +228,8 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
     check(nav.turnarounds === 1 && back <= 120, `turning back on an out-and-back is noticed after ${Math.round(back)} m`);
     check(Math.abs(nav.progress - (total - d)) < 60 && !v.offRoute, 'progress jumps to the return leg at the matching point');
     check(said.some((x) => /^Turned around\? Following the route back/.test(x)) && !said.some((x) => /off the route/.test(x)), 'the switch is announced, no off-route warning');
-    let steps = 0; while (!nav.finished && d > 0 && steps++ < 2000) { d -= 6; t += 2; nav.update(at(d)); }
-    check(nav.finished, 'the run finishes back at the start on the return leg');
+    let steps = 0; while (!nav.routeDone && d > 0 && steps++ < 2000) { d -= 6; t += 2; nav.update(at(d)); }
+    check(nav.routeDone, 'the run finishes back at the start on the return leg');
   }
   if (loop) {
     const said = []; let t = 0; let asked = null;
@@ -245,8 +247,8 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
     check(Math.abs(end[0] - loop.latlngs[0][0]) < 1e-4 && Math.abs(end[1] - loop.latlngs[0][1]) < 1e-4, 'it ends at the start');
     nav.reroute(way, { say: false });
     const at2 = posOn(way); let d2 = 0, steps = 0;
-    while (!nav.finished && steps++ < 2000) { d2 += 6; t += 2; nav.update(at2(d2)); }
-    check(nav.finished, 'the run finishes at the start the way it came');
+    while (!nav.routeDone && steps++ < 2000) { d2 += 6; t += 2; nav.update(at2(d2)); }
+    check(nav.routeDone, 'the run finishes at the start the way it came');
   }
 }
 
@@ -258,18 +260,19 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   const nav = new Navigator(r, { speak: (p) => said.push(p.map((x) => x.text).join('')), now: () => t * 1000, units: 'mi', warnM: 300 });
   nav.start();
   const sim = new SimulatedRun(r, { speed: 3, noise: 0 });
-  let steps = 0; while (!nav.finished && steps++ < 5000) { t += 2; nav.update(sim.step(2)); }
+  let steps = 0; while (!nav.routeDone && steps++ < 5000) { t += 2; nav.update(sim.step(2)); }
   check(/Starting your \d\.\d mile run/.test(said[0]), 'run summary in miles');
   check(said.some((x) => /^1 mile\. Last mile \d+ minutes/.test(x)) && said.some((x) => /^2 miles\./.test(x)) && !said.some((x) => /kilometer/.test(x)), 'splits every mile, nothing in kilometres');
   check(said.some((x) => /^In (\d+ feet|a quarter mile), turn/.test(x)), 'turns announced in feet');
-  check(said.some((x) => /Great run! \d\.\d miles in/.test(x)), 'finish in miles');
+  nav.finish();
+  check(said.some((x) => /Run finished\. \d\.\d miles in/.test(x)) && nav.finished, 'finish in miles, on End run');
   const quiet = []; t = 0;
   const nq = new Navigator(r, { speak: (p) => quiet.push(p.map((x) => x.text).join('')), now: () => t * 1000, quiet: true });
-  nq.start(); const s2 = new SimulatedRun(r, { speed: 3, noise: 0 }); steps = 0; while (!nq.finished && steps++ < 5000) { t += 2; nq.update(s2.step(2)); }
+  nq.start(); const s2 = new SimulatedRun(r, { speed: 3, noise: 0 }); steps = 0; while (!nq.routeDone && steps++ < 5000) { t += 2; nq.update(s2.step(2)); }
   check(!quiet.some((x) => /^\d kilometers?\./.test(x)) && quiet.some((x) => /^Turn /.test(x)), 'quiet mode: no splits, turns still spoken');
   const noSplit = []; t = 0;
   const ns = new Navigator(r, { speak: (p) => noSplit.push(p.map((x) => x.text).join('')), now: () => t * 1000, splits: false });
-  ns.start(); const s3 = new SimulatedRun(r, { speed: 3, noise: 0 }); steps = 0; while (!ns.finished && steps++ < 5000) { t += 2; ns.update(s3.step(2)); }
+  ns.start(); const s3 = new SimulatedRun(r, { speed: 3, noise: 0 }); steps = 0; while (!ns.routeDone && steps++ < 5000) { t += 2; ns.update(s3.step(2)); }
   check(!noSplit.some((x) => /^\d kilometers?\./.test(x)) && noSplit.length < quiet.length + 5, 'splits can be turned off on their own');
   // settings storage
   const store = new Map(); const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
@@ -285,6 +288,87 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   const h = houseVoices(vs);
   check(h[0].voice.voiceURI.includes('premium') && h[0].quality === 'premium' && h[1].voice.voiceURI === 'c.tom' && h[1].quality === 'standard', 'house voices: Zoe Premium over compact, Tom found, Tomas not');
   check(houseVoices([])[0].voice === null, 'house voices missing are reported');
+}
+
+// Past the end of the route: the run goes on, distance and splits keep counting, nothing
+// about being off route; standing still afterwards adds nothing.
+{
+  const [r] = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' });
+  const said = []; const sounds = []; let t = 0;
+  const nav = new Navigator(r, { speak: (p) => said.push(p.map((x) => x.text).join('')), sound: (n) => sounds.push(n), now: () => t * 1000 });
+  nav.start();
+  const sim = new SimulatedRun(r, { speed: 3, noise: 0 });
+  let steps = 0; while (!nav.routeDone && steps++ < 5000) { t += 2; nav.update(sim.step(2)); }
+  const odoDone = nav.odometer;
+  // Keep running 1.5 km straight on past the start, with GPS noise.
+  const proj = makeProjection(r.latlngs[0][0], r.latlngs[0][1]);
+  const end = sim.step(0);
+  let [ex, ey] = proj.toXY(end.lat, end.lon);
+  for (let i = 0; i < 250; i++) { t += 2; ex += 6; const [la, lo] = proj.toLatLon(ex + (Math.random() - 0.5) * 6, ey + (Math.random() - 0.5) * 6); nav.update({ lat: la, lon: lo, accuracy: 5 }); }
+  const extra = nav.odometer - odoDone;
+  check(extra > 1300 && extra < 1700, `distance keeps counting past the end (${Math.round(extra)} m for 1500 m run)`);
+  check(!nav.finished && !nav.offRoute && sounds.length === 0, 'past the end: no off-route chime, the run is not over');
+  check(said.filter((x) => /^\d+ kilometers?\./.test(x)).length >= Math.floor((nav.odometer) / 1000), 'splits keep coming past the end');
+  // Then stand still for 5 minutes with 4 m jitter.
+  const odoStop = nav.odometer;
+  for (let i = 0; i < 150; i++) { t += 2; const [la, lo] = proj.toLatLon(ex + (Math.random() - 0.5) * 12, ey + (Math.random() - 0.5) * 12); nav.update({ lat: la, lon: lo, accuracy: 8 }); }
+  check(nav.odometer - odoStop < 60, `standing still adds nothing (${Math.round(nav.odometer - odoStop)} m in 5 min)`);
+  const elapsedBefore = nav.elapsed;
+  nav.finish();
+  t += 60;
+  nav.tick();
+  check(nav.finished && nav.elapsed === elapsedBefore && said.some((x) => /^Run finished/.test(x)), 'End run stops the clock and sums up');
+}
+
+// A detour on the way out of an out-and-back: the way home follows what was actually run.
+{
+  const { outbackReroute, rejoinRoute } = await import('../js/planner.js');
+  const area = engine.area;
+  const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 8, prefs: {}, terrain: 'any' });
+  const ob = routes.find((x) => x.type === 'outback') || (await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' })).find((x) => x.type === 'outback');
+  check(!!ob, 'an out-and-back to detour on');
+  if (ob) {
+    let t = 0;
+    const nav = new Navigator(ob, { speak: () => {}, now: () => t * 1000 });
+    nav.start();
+    const sim = new SimulatedRun(ob, { speed: 3, noise: 0 });
+    const track = [];
+    while (sim.d < 900) { t += 2; const f = sim.step(2); track.push([f.lat, f.lon]); nav.update(f); }
+    const proj = makeProjection(ob.latlngs[0][0], ob.latlngs[0][1]);
+    const here = sim.step(0);
+    const [hx, hy] = proj.toXY(here.lat, here.lon);
+    const side = ((nav.segHeading(nav.seg) + 90) * Math.PI) / 180;
+    const off = proj.toLatLon(hx + 150 * Math.sin(side), hy + 150 * Math.cos(side));
+    for (let k = 0; k < 12; k++) { t += 2; track.push(off); nav.update({ lat: off[0], lon: off[1], accuracy: 5 }); }
+    const joinIdx = nav.along.findIndex((a) => a >= nav.progress + 250);
+    const fresh = outbackReroute(area.graph, area.proj, { lat: off[0], lon: off[1] }, nav.route, joinIdx, track);
+    check(!!fresh, 'a matched out-and-back reroute is found');
+    if (fresh) {
+      const plain = rejoinRoute(area.graph, area.proj, { lat: off[0], lon: off[1] }, nav.route, joinIdx);
+      const d = (a, b) => { const [x1, y1] = proj.toXY(a[0], a[1]); const [x2, y2] = proj.toXY(b[0], b[1]); return Math.hypot(x1 - x2, y1 - y2); };
+      check(fresh.type === 'outback' && fresh.backMatched && d(fresh.latlngs[fresh.latlngs.length - 1], ob.latlngs[0]) < 30, 'it is still an out-and-back ending at the start');
+      check(d(fresh.latlngs[0], off) < 200, 'it starts near the runner');
+      // The last part of the new route is the first part of the run, backwards: every one of
+      // the first 900 m of track points lies near the tail of the new line.
+      const tail = fresh.latlngs.slice(-Math.ceil(fresh.latlngs.length / 2));
+      const near = track.slice(0, 20).every((pt) => tail.some((q) => d(pt, q) < 60) || tail.some((q, i) => i && segDist(pt, tail[i - 1], q) < 40));
+      check(near, 'the way home follows the way actually run out');
+      // The planned stretch the runner skipped (between leaving and joining) is not run home.
+      const skipped = ob.latlngs.slice(nav.seg + 2, joinIdx - 1);
+      const homeOnSkipped = skipped.length ? skipped.filter((pt) => tail.some((q, i) => i && segDist(pt, tail[i - 1], q) < 15)).length / skipped.length : 0;
+      check(homeOnSkipped < 0.5, `the skipped stretch is not on the way home (${Math.round(homeOnSkipped * 100)}% of it)`);
+      check(Math.abs(fresh.distance - (plain?.distance ?? fresh.distance)) < 1500, `the matched route is about as long as a plain rejoin (${(fresh.distance / 1000).toFixed(2)} vs ${((plain?.distance ?? 0) / 1000).toFixed(2)} km)`);
+      check(fresh.cues.some((c) => c.type === 'uturn' || /turn around/i.test(c.text || '')), 'the turnaround is still called');
+      const v = nav.reroute(fresh, { say: false });
+      check(!v.offRoute && nav.progress === 0, 'the navigator takes the new line');
+      function segDist(p, a, b) {
+        const [px, py] = proj.toXY(p[0], p[1]); const [ax, ay] = proj.toXY(a[0], a[1]); const [bx, by] = proj.toXY(b[0], b[1]);
+        const dx = bx - ax, dy = by - ay; const L2 = dx * dx + dy * dy || 1;
+        const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2));
+        return Math.hypot(px - ax - u * dx, py - ay - u * dy);
+      }
+    }
+  }
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll navigation tests passed');

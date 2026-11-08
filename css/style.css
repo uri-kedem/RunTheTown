@@ -533,6 +533,8 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .run-actions .primary { margin: 0; }
 .run-actions .ghost { text-decoration: none; background: var(--bg-2); border-radius: 14px; padding: 13px; }
 .finish-card .link { display: block; margin: 10px auto 0; }
+.finish-card .link.danger { color: #b91c1c; margin-top: 14px; }
+.finish-sub { font-size: 14px; color: var(--ink-2); margin: -6px 0 14px; }
 .run-detail .finish-stats { margin-bottom: 14px; }
 .danger-link { color: #b91c1c; }
 

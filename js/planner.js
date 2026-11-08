@@ -434,16 +434,34 @@ export function backRoute(g, proj, from, route, seg) {
   const here = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
   if (here < 0) return null;
   const pts = route.latlngs.slice(0, Math.min(seg, route.latlngs.length - 1) + 1).reverse();
-  const nodes = [here];
+  const path = threadPath(g, [here, ...nearNodes(g, proj, pts, 6)]);
+  if (!path?.edges.length) return null;
+  let distance = 0;
+  for (const e of path.edges) distance += g.len[e];
+  const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const cues = buildCues(g, path);
+  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+}
+
+// Graph nodes within maxDist m of the points, in order, without repeats.
+function nearNodes(g, proj, pts, maxDist) {
+  const nodes = [];
   for (const [la, lo] of pts) {
     const [x, y] = proj.toXY(la, lo);
-    const v = g.nearest(x, y, { maxDist: 6 });
+    const v = g.nearest(x, y, { maxDist });
     if (v >= 0 && v !== nodes[nodes.length - 1]) nodes.push(v);
   }
+  return nodes;
+}
+
+// A graph path through the nodes in order: a direct edge where there is one, the shortest
+// path where there is not. Null when two of them cannot be connected.
+function threadPath(g, nodes) {
   const path = { nodes: [nodes[0]], edges: [] };
   for (let i = 1; i < nodes.length; i++) {
     const a = path.nodes[path.nodes.length - 1];
     const b = nodes[i];
+    if (a === b) continue;
     let e = -1;
     for (let k = g.adjStart[a]; k < g.adjStart[a + 1]; k++) if (g.adjNode[k] === b) { e = g.adjEdge[k]; break; }
     if (e >= 0) { path.nodes.push(b); path.edges.push(e); continue; }
@@ -452,12 +470,56 @@ export function backRoute(g, proj, from, route, seg) {
     path.nodes.push(...p.nodes.slice(1));
     path.edges.push(...p.edges);
   }
-  if (!path.edges.length) return null;
+  return path;
+}
+
+/**
+ * Rerouting on the way out of an out-and-back, for a runner who left the line (a closed
+ * road, or a way they like better): the way back is changed to match. The new route is the
+ * way from the runner to the line further on (`joinIdx`), the rest of the outward leg to the
+ * turnaround, and then the whole way home along what was actually run: the outward rest
+ * backwards, the detour backwards, and the GPS `track` of the run so far backwards (threaded
+ * through the street graph, so the turns are called by name). Null when the runner is past
+ * the turnaround (the usual rejoin applies), not near a street, or the track cannot be
+ * followed on the graph.
+ */
+export function outbackReroute(g, proj, from, route, joinIdx, track) {
+  if (!route?.latlngs || route.type !== 'outback' || !route.turnaround) return null;
+  if (joinIdx <= 0 || joinIdx >= route.latlngs.length) return null;
+  const [tx, ty] = proj.toXY(route.turnaround[0], route.turnaround[1]);
+  let tIdx = -1, tBest = Infinity;
+  route.latlngs.forEach(([la, lo], i) => { const [x, y] = proj.toXY(la, lo); const d = Math.hypot(x - tx, y - ty); if (d < tBest) { tBest = d; tIdx = i; } });
+  if (tIdx < 0 || tBest > 30 || joinIdx > tIdx) return null; // joining past the turnaround: not the outward leg
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const [jx, jy] = proj.toXY(route.latlngs[joinIdx][0], route.latlngs[joinIdx][1]);
+  const a = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  const b = g.nearest(jx, jy, { maxDist: 60 });
+  if (a < 0 || b < 0) return null;
+  const piece = a === b ? { nodes: [a], edges: [] } : g.shortestPath(a, b);
+  if (!piece) return null;
+  let pieceLen = 0;
+  for (const e of piece.edges) pieceLen += g.len[e];
+  if (pieceLen > 4 * Math.hypot(jx - fx, jy - fy) + 400) return null;
+  const outRest = nearNodes(g, proj, route.latlngs.slice(joinIdx, tIdx + 1), 6);
+  // The run so far, on the graph: GPS points are loose, so a wider net, and a sanity check
+  // that the threaded path is about as long as the track (a wrong node would add a loop).
+  const pts = (track || []).filter((_, i, arr) => i % 2 === 0 || i === arr.length - 1);
+  const pre = nearNodes(g, proj, pts, 20);
+  let trackLen = 0;
+  for (let i = 1; i < pts.length; i++) trackLen += haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+  const home = threadPath(g, [...pre, a]);
+  if (!home) return null;
+  let homeLen = 0;
+  for (const e of home.edges) homeLen += g.len[e];
+  if (trackLen > 300 && (homeLen > 1.4 * trackLen + 200 || homeLen < 0.5 * trackLen)) return null;
+  const order = [...piece.nodes, ...outRest, ...[...outRest].reverse(), ...[...piece.nodes].reverse(), ...[...home.nodes].reverse()];
+  const path = threadPath(g, order);
+  if (!path?.edges.length) return null;
   let distance = 0;
   for (const e of path.edges) distance += g.len[e];
   const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
   const cues = buildCues(g, path);
-  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+  return { ...route, latlngs, cues, sights: [], distance, joined: joinIdx, rerouted: true, type: 'outback', backMatched: true };
 }
 
 // Attractive nodes (water or green, per preferences) that a loop of length D can

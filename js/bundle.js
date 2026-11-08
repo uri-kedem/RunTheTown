@@ -3024,16 +3024,34 @@ function backRoute(g, proj, from, route, seg) {
   const here = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
   if (here < 0) return null;
   const pts = route.latlngs.slice(0, Math.min(seg, route.latlngs.length - 1) + 1).reverse();
-  const nodes = [here];
+  const path = threadPath(g, [here, ...nearNodes(g, proj, pts, 6)]);
+  if (!path?.edges.length) return null;
+  let distance = 0;
+  for (const e of path.edges) distance += g.len[e];
+  const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const cues = buildCues(g, path);
+  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+}
+
+// Graph nodes within maxDist m of the points, in order, without repeats.
+function nearNodes(g, proj, pts, maxDist) {
+  const nodes = [];
   for (const [la, lo] of pts) {
     const [x, y] = proj.toXY(la, lo);
-    const v = g.nearest(x, y, { maxDist: 6 });
+    const v = g.nearest(x, y, { maxDist });
     if (v >= 0 && v !== nodes[nodes.length - 1]) nodes.push(v);
   }
+  return nodes;
+}
+
+// A graph path through the nodes in order: a direct edge where there is one, the shortest
+// path where there is not. Null when two of them cannot be connected.
+function threadPath(g, nodes) {
   const path = { nodes: [nodes[0]], edges: [] };
   for (let i = 1; i < nodes.length; i++) {
     const a = path.nodes[path.nodes.length - 1];
     const b = nodes[i];
+    if (a === b) continue;
     let e = -1;
     for (let k = g.adjStart[a]; k < g.adjStart[a + 1]; k++) if (g.adjNode[k] === b) { e = g.adjEdge[k]; break; }
     if (e >= 0) { path.nodes.push(b); path.edges.push(e); continue; }
@@ -3042,12 +3060,56 @@ function backRoute(g, proj, from, route, seg) {
     path.nodes.push(...p.nodes.slice(1));
     path.edges.push(...p.edges);
   }
-  if (!path.edges.length) return null;
+  return path;
+}
+
+/**
+ * Rerouting on the way out of an out-and-back, for a runner who left the line (a closed
+ * road, or a way they like better): the way back is changed to match. The new route is the
+ * way from the runner to the line further on (`joinIdx`), the rest of the outward leg to the
+ * turnaround, and then the whole way home along what was actually run: the outward rest
+ * backwards, the detour backwards, and the GPS `track` of the run so far backwards (threaded
+ * through the street graph, so the turns are called by name). Null when the runner is past
+ * the turnaround (the usual rejoin applies), not near a street, or the track cannot be
+ * followed on the graph.
+ */
+function outbackReroute(g, proj, from, route, joinIdx, track) {
+  if (!route?.latlngs || route.type !== 'outback' || !route.turnaround) return null;
+  if (joinIdx <= 0 || joinIdx >= route.latlngs.length) return null;
+  const [tx, ty] = proj.toXY(route.turnaround[0], route.turnaround[1]);
+  let tIdx = -1, tBest = Infinity;
+  route.latlngs.forEach(([la, lo], i) => { const [x, y] = proj.toXY(la, lo); const d = Math.hypot(x - tx, y - ty); if (d < tBest) { tBest = d; tIdx = i; } });
+  if (tIdx < 0 || tBest > 30 || joinIdx > tIdx) return null; // joining past the turnaround: not the outward leg
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const [jx, jy] = proj.toXY(route.latlngs[joinIdx][0], route.latlngs[joinIdx][1]);
+  const a = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  const b = g.nearest(jx, jy, { maxDist: 60 });
+  if (a < 0 || b < 0) return null;
+  const piece = a === b ? { nodes: [a], edges: [] } : g.shortestPath(a, b);
+  if (!piece) return null;
+  let pieceLen = 0;
+  for (const e of piece.edges) pieceLen += g.len[e];
+  if (pieceLen > 4 * Math.hypot(jx - fx, jy - fy) + 400) return null;
+  const outRest = nearNodes(g, proj, route.latlngs.slice(joinIdx, tIdx + 1), 6);
+  // The run so far, on the graph: GPS points are loose, so a wider net, and a sanity check
+  // that the threaded path is about as long as the track (a wrong node would add a loop).
+  const pts = (track || []).filter((_, i, arr) => i % 2 === 0 || i === arr.length - 1);
+  const pre = nearNodes(g, proj, pts, 20);
+  let trackLen = 0;
+  for (let i = 1; i < pts.length; i++) trackLen += haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+  const home = threadPath(g, [...pre, a]);
+  if (!home) return null;
+  let homeLen = 0;
+  for (const e of home.edges) homeLen += g.len[e];
+  if (trackLen > 300 && (homeLen > 1.4 * trackLen + 200 || homeLen < 0.5 * trackLen)) return null;
+  const order = [...piece.nodes, ...outRest, ...[...outRest].reverse(), ...[...piece.nodes].reverse(), ...[...home.nodes].reverse()];
+  const path = threadPath(g, order);
+  if (!path?.edges.length) return null;
   let distance = 0;
   for (const e of path.edges) distance += g.len[e];
   const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
   const cues = buildCues(g, path);
-  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
+  return { ...route, latlngs, cues, sights: [], distance, joined: joinIdx, rerouted: true, type: 'outback', backMatched: true };
 }
 
 // Attractive nodes (water or green, per preferences) that a loop of length D can
@@ -4681,9 +4743,10 @@ const PRE_MIN = 60; // ...unless it's already this close, then wait for "now"
 const NOW_M = 30; // "turn left" when this close
 const THEN_M = 70; // a second turn this soon after the first is chained: ", then …"
 const OFF_M = 40; // further than this from the route = off route
+const STILL_M = 20; // off the line, movement counts only while the runner gets this far ...
+const STILL_MS = 20000; // ... within this time (GPS jitter while standing adds nothing)
 const BACK_M = 25; // back within this = on route again
 const OFF_FIXES = 2; // consecutive far fixes before warning
-const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
 const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
 const JOIN_START_M = 300; // starting this close to any part of the route: the run begins from there, not from the route's first point
@@ -4784,8 +4847,9 @@ class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
+  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
     this.speak = speak;
+    this.sound = sound; // short sounds: 'offroute' (the recalculating chime)
     this.now = now;
     this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
     this.backTravel = 0; // metres run against the route's direction, near the line
@@ -4803,6 +4867,7 @@ class Navigator {
     this.elapsed = 0; // ms, excluding pauses
     this.paused = false;
     this.started = false;
+    this.routeDone = false; // the planned line has been run to its end; the run itself goes on until the runner ends it
     this.finished = false;
   }
 
@@ -4828,7 +4893,6 @@ class Navigator {
     });
     this.offRoute = false;
     this.farCount = 0;
-    this.lastOffSaid = -Infinity;
     this.snapped = null;
     this.rejoined = false;
     this.backTravel = 0;
@@ -4849,7 +4913,7 @@ class Navigator {
     this.rerouted = (this.rerouted || 0) + 1;
     if (say) {
       const d = route.cues?.[0];
-      this.speak(msg('New route from here. ', d?.compass ? `Head ${d.compass}` : null, d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
+      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
     }
     return this.view();
   }
@@ -4881,6 +4945,7 @@ class Navigator {
     this.paused = false;
     this.lastTick = this.now();
     this.anchor = null; // don't count the distance moved while paused
+    this.still = null;
     this.speak(msg('Resuming.'), { priority: 2 });
   }
   tick() {
@@ -4899,11 +4964,25 @@ class Navigator {
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
     if (!this.anchor) this.anchor = { x, y };
     const moved = Math.hypot(x - this.anchor.x, y - this.anchor.y);
+    // Standing still: GPS jitter wanders a few metres each fix and must not add up to
+    // distance. The runner counts as moving while they get 20 m away from where they last
+    // were within 20 s; a runner stopped at a light, or done and chatting, adds nothing.
+    const t = this.now();
+    if (!this.still || Math.hypot(x - this.still.x, y - this.still.y) >= STILL_M) this.still = { x, y, t };
+    const running = t - this.still.t < STILL_MS;
     let hop = 0;
     if (moved >= 8) {
       if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
-      if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
+      if ((this.offRoute || this.routeDone) && moved < 300 && running) this.odometer += moved; // off the route (or past its end): count raw movement
       this.anchor = { x, y };
+    }
+
+    // The route has been run to its end: the runner may well keep going (a 12 km plan that
+    // came out at 11.9, or just a good day). Distance, time and splits carry on from the raw
+    // movement; no more turns, no off-route chime. The run ends when the runner ends it.
+    if (this.routeDone) {
+      this.announceSplit();
+      return this.view(fix);
     }
 
     // Not on the line yet: the run begins wherever the runner meets the route, within
@@ -4960,11 +5039,14 @@ class Navigator {
 
     if (snap.dist > OFF_M) {
       this.farCount++;
-      if (this.farCount >= OFF_FIXES && (!this.offRoute || this.now() - this.lastOffSaid > OFF_REPEAT_MS)) {
-        if (!this.offRoute) { this.offOdo = this.odometer; this.offSince = this.now(); }
+      // Off the line: a chime, like a car navigator recalculating, and the screen shows the
+      // way back. No words (the runner usually knows why they left the line); the new route,
+      // when the app finds one, is announced as a plain instruction.
+      if (this.farCount >= OFF_FIXES && !this.offRoute) {
+        this.offOdo = this.odometer;
+        this.offSince = this.now();
         this.offRoute = true;
-        this.lastOffSaid = this.now();
-        this.speak(this.offRouteSpeech(x, y, snap), { priority: 3 });
+        this.sound('offroute');
       }
     } else {
       this.farCount = 0;
@@ -4990,7 +5072,7 @@ class Navigator {
       this.announceSights();
     }
     this.announceSplit();
-    if (!this.finished && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.finish();
+    if (!this.routeDone && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.routeComplete();
     return this.view(fix);
   }
 
@@ -5150,27 +5232,36 @@ class Navigator {
     this.lastSplit = { t: this.elapsed, odo: this.odometer };
     this.nextSplit += this.splitM;
     if (!this.saying.splits) return;
-    const left = Math.max(0, this.total - this.progress);
     const unit = this.units === 'mi' ? 'mile' : 'kilometer';
     const parts = [`${n} ${unit}${n > 1 ? 's' : ''}.`];
     if (dd > 0.5 * (this.splitM / 1000)) parts.push(`Last ${unit} ${paceText(dt / dd, this.units)}.`);
-    if (left > 300) parts.push(`${distText(left, this.units)} to go.`);
     this.speak(msg(parts.join(' ')), { priority: 1 });
   }
 
-  finish() {
-    this.finished = true;
+  /** The planned line is done. Said once; the run goes on until finish(). */
+  routeComplete() {
+    this.routeDone = true;
     this.progress = this.total;
     this.seg = this.xy.length - 2;
+    this.offRoute = false;
+    this.anchor = null; // raw movement counts from here
+    this.speak(msg(`Route complete, you're back at the start. Keep going if you like; press End run when you're done.`), { priority: 3 });
+  }
+
+  /** The runner ended the run: the clock stops and the summary is said. */
+  finish() {
+    if (this.finished) return;
+    this.tick();
+    this.finished = true;
     const mins = Math.round(this.elapsed / 60000);
     const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
     const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
-    this.speak(msg(`You have arrived back at the start. Great run! ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
+    this.speak(msg(`Run finished. ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 
   /** Everything the screen needs. */
   view(fix = null) {
-    const next = this.finished ? null : this.nextCue();
+    const next = this.finished || this.routeDone ? null : this.nextCue();
     // Point on the route at the accepted progress (not the raw snap, which may be rejected).
     let pos = null;
     if (this.snapped) {
@@ -5192,6 +5283,7 @@ class Navigator {
       elapsed: this.elapsed,
       pace: this.odometer > 50 ? this.elapsed / 1000 / (this.odometer / 1000) : NaN,
       next: next && { type: next.type, dir: next.dir, street: next.street, action: cueAction(next), in: next.at - this.progress },
+      routeDone: this.routeDone,
       finished: this.finished,
       paused: this.paused,
     };
@@ -5690,7 +5782,7 @@ function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' } = {})
   });
 }
 
-// ---- The picture: map tiles with the planned line, the track and the start ----
+// ---- The picture: map tiles with the run as it was actually run (the planned line only when there is no track) ----
 
 const TILE = 256;
 
@@ -5708,8 +5800,7 @@ function bounds(pts) {
 async function drawRunPicture(run, { tileUrl, width = 640, height = 400, pad = 36, fetchTile = null, quality = 0.82 } = {}) {
   const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
   if (pts.length < 2 || typeof document === 'undefined') return null;
-  const all = run.latlngs?.length ? [...run.latlngs, ...(run.track || [])] : pts;
-  const b = bounds(all);
+  const b = bounds(pts);
   // The zoom at which the whole run fits inside the picture (minus the padding).
   let z = 18;
   let fx0, fy0, fx1, fy1;
@@ -5770,8 +5861,9 @@ async function drawRunPicture(run, { tileUrl, width = 640, height = 400, pad = 3
     // A soft white wash so the lines read on any map.
     g.fillStyle = 'rgba(255,255,255,0.18)';
     g.fillRect(0, 0, width, height);
-    if (r.latlngs?.length > 1) { line(r.latlngs, '#fff', 9); line(r.latlngs, '#94a3b8', 5, r.track?.length > 1 ? [8, 8] : null); }
-    if (r.track?.length > 1) { line(r.track, '#fff', 10); line(r.track, '#ff5a36', 6); }
+    // What was run, in orange; the planned line stands in only for a run with no GPS track.
+    const ran = r.track?.length > 1 ? r.track : r.latlngs;
+    line(ran, '#fff', 10); line(ran, '#ff5a36', 6);
     const s = (r.track?.length ? r.track : r.latlngs)[0];
     const e = (r.track?.length ? r.track : r.latlngs).slice(-1)[0];
     for (const [p, fill] of [[e, '#0f172a'], [s, '#ff5a36']]) {
@@ -6824,6 +6916,40 @@ function escapeHtml(s) {
 // Inside the native app (Capacitor) the phone's own speech engine, background GPS and
 // keep-awake take over from the browser pieces.
 const voice = isNative() ? new NativeVoice() : new Voice();
+
+// Short sounds (Web Audio, made on the spot, no files). The context is created inside the
+// Start tap, which browsers require before a page may make a sound.
+let audioCtx = null;
+function primeAudio() {
+  try {
+    audioCtx = audioCtx || new (globalThis.AudioContext || globalThis.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  } catch {
+    audioCtx = null;
+  }
+}
+function chime(name) {
+  if (!audioCtx) return;
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    const notes = name === 'offroute' ? [[740, 0], [988, 0.14]] : [[880, 0]]; // two rising notes: "recalculating"
+    const t0 = audioCtx.currentTime + 0.02;
+    for (const [hz, dt] of notes) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = hz;
+      gain.gain.setValueAtTime(0.0001, t0 + dt);
+      gain.gain.exponentialRampToValueAtTime(0.5, t0 + dt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.22);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0 + dt);
+      osc.stop(t0 + dt + 0.25);
+    }
+  } catch {
+    /* no sound then */
+  }
+}
 const screenLock = isNative() ? new NativeScreenLock() : new ScreenLock();
 document.body.classList.toggle('native', isNative());
 const navLayer = L.layerGroup();
@@ -7116,9 +7242,11 @@ async function startRun({ demo }) {
   const route = state.routes[state.selected];
   if (!route || nav.active) return;
   voice.unlock(); // must happen inside the tap
+  primeAudio();
   const clock = { t: Date.now(), advance(ms) { this.t += ms; } };
   const navigator_ = new Navigator(route, {
     speak: (parts, opts) => voice.say(parts, opts),
+    sound: (name) => { if (!voice.muted) chime(name); },
     now: demo ? () => clock.t : () => Date.now(),
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
     onTurnaround: (where) => turnedAroundOnLoop(where),
@@ -7150,9 +7278,11 @@ async function startRun({ demo }) {
   voice.onSay = (text) => ($('navCaption').textContent = text);
   const locked = settings.awake ? await screenLock.acquire() : false;
   if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
-  $('navNote').textContent = locked
-    ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
-    : 'Keep the screen on and this page open, or directions stop. Turn off auto-lock for the run if you can.';
+  $('navNote').textContent = isNative()
+    ? 'Directions keep coming with the screen locked or the phone in your pocket.'
+    : locked
+      ? 'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.'
+      : 'Keep the screen on and this page open, or directions stop. Turn off auto-lock for the run if you can.';
   if (!voice.available) $('navNote').textContent = 'This browser can\u2019t speak, so directions are shown on screen only.';
 
   render(navigator_.start());
@@ -7173,7 +7303,7 @@ async function startRun({ demo }) {
     n.source.start(onFix, (err) => {
       if (nav.active !== n) return;
       if (err.code === 1) {
-        endRun();
+        closeRun();
         toast('Location access is needed for live directions. Allow it in your browser settings, or try the demo run.');
       } else {
         showAlert('Waiting for GPS\u2026 Go outside with a clear view of the sky.');
@@ -7204,7 +7334,9 @@ function maybeReroute(n, fix) {
   const target = nv.progress + 250;
   let joinIdx = nv.along.findIndex((a) => a >= target);
   if (joinIdx < 0) joinIdx = nv.along.length - 1;
-  const fresh = rejoinRoute(area.graph, area.proj, { lat: fix.lat, lon: fix.lon }, nv.route, joinIdx);
+  // On the way out of an out-and-back the runner knows something the map does not (a closed
+  // road, a nicer way): the way home is changed to follow what they actually ran.
+  const fresh = outbackReroute(area.graph, area.proj, { lat: fix.lat, lon: fix.lon }, nv.route, joinIdx, n.track) || rejoinRoute(area.graph, area.proj, { lat: fix.lat, lon: fix.lon }, nv.route, joinIdx);
   if (!fresh) return;
   n.route = fresh;
   render(nv.reroute(fresh));
@@ -7216,7 +7348,7 @@ function maybeReroute(n, fix) {
   ];
   n.doneLine?.bringToFront?.();
   n.userMarker?.setZIndexOffset?.(1000);
-  toast('New route from here: it joins your run a little further on.');
+  toast(fresh.backMatched ? 'New route from here. The way back now follows the way you ran out.' : 'New route from here: it joins your run a little further on.');
 }
 
 // The runner turned around on a loop (no return leg to switch to): the rest of the run is
@@ -7250,11 +7382,11 @@ function render(v) {
   if (!n) return;
   const banner = $('navBanner');
   banner.classList.toggle('off', v.offRoute);
-  if (v.finished) {
+  if (v.routeDone || v.finished) {
     $('navArrow').innerHTML = arrowSvg('arrive');
     $('navDist').textContent = '';
-    $('navText').textContent = 'You\u2019re back at the start';
-    $('navStreet').textContent = '';
+    $('navText').textContent = 'Route complete';
+    $('navStreet').textContent = v.finished ? '' : 'Keep going if you like. End run when you\u2019re done.';
   } else if (v.joining && v.toLine != null) {
     $('navArrow').innerHTML = arrowSvg('depart');
     $('navDist').textContent = fmtDist(v.toLine);
@@ -7280,36 +7412,53 @@ function render(v) {
 
   // Done part of the route in grey, the runner's dot, and the map following.
   const nv = n.navigator;
-  if (v.onRoute) n.doneLine.setLatLngs([...n.route.latlngs.slice(0, nv.seg + 1), v.onRoute]);
+  if (v.onRoute && !v.routeDone) n.doneLine.setLatLngs([...n.route.latlngs.slice(0, nv.seg + 1), v.onRoute]);
+  else if (v.routeDone && !n.doneAll) { n.doneAll = true; n.doneLine.setLatLngs(n.route.latlngs); }
   const pos = v.fix ? [v.fix.lat, v.fix.lon] : null;
   if (pos) {
     n.userMarker.setLatLng(pos);
     if (n.follow) map.setView(pos, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
   }
-  if (v.finished && !n.done) {
-    n.done = true;
-    setTimeout(() => showFinish(v), 1200);
-  }
+  if (v.routeDone && n.demo && !n.done) { n.done = true; setTimeout(endRun, 1200); } // a demo ends itself
 }
 
-function showFinish(v) {
+// The runner pressed End run: the clock stops, the summary is said, and the card asks
+// whether to keep the run in the journal or drop it.
+function showFinish() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
+  resetEnd();
+  const v = n.navigator.view();
   $('finishStats').innerHTML = `
     <div><b>${U.num(v.odometer, 2)}</b><span>${U.unit}</span></div>
     <div><b>${fmtTime(v.elapsed)}</b><span>time</span></div>
     <div><b>${U.pace(v.pace)}</b><span>${U.paceLabel()}</span></div>`;
+  $('finishTitle').textContent = n.navigator.routeDone ? 'Run complete' : 'Run ended';
+  $('finishSub').textContent = n.demo ? 'Demo runs are not kept.' : 'Keep this run in your journal?';
+  $('finishSave').hidden = n.demo;
+  $('finishDelete').hidden = n.demo;
+  $('finishShare').hidden = true;
+  $('finishDone').hidden = !n.demo;
   $('navFinish').hidden = false;
-  $('finishShare').hidden = n.demo;
-  saveRun(n, { finished: true });
 }
-$('finishShare').addEventListener('click', async () => {
+$('finishSave').addEventListener('click', async () => {
   const n = nav.active;
   if (!n) return;
-  const run = n.savedRun || (await new Promise((r) => setTimeout(() => r(n.savedRun), 1500)));
-  if (!run) { toast('One moment, the run is still being saved.'); return; }
-  shareRun(run);
+  $('finishSave').disabled = true;
+  await saveRun(n, { finished: n.navigator.routeDone });
+  $('finishSave').disabled = false;
+  $('finishSave').hidden = true;
+  $('finishDelete').hidden = true;
+  $('finishSub').textContent = n.savedRun ? 'Saved to My runs.' : 'The run could not be saved.';
+  $('finishShare').hidden = !n.savedRun;
+  $('finishDone').hidden = false;
+});
+$('finishDelete').addEventListener('click', () => { closeRun(); toast('Run discarded.'); });
+$('finishShare').addEventListener('click', async () => {
+  const n = nav.active;
+  if (!n?.savedRun) return;
+  shareRun(n.savedRun);
 });
 // A picture of the run to send on: the Share sheet where the phone has one, else a download.
 async function shareRun(run) {
@@ -7338,7 +7487,6 @@ async function shareRun(run) {
 async function saveRun(n, { finished }) {
   if (!n || n.saved || n.demo) return;
   const nv = n.navigator;
-  if (!finished && nv.odometer < 500) return;
   n.saved = true;
   const run = makeRun({
     route: n.route, track: n.track, odometer: nv.odometer, elapsed: nv.elapsed, startedAt: n.startedAt, start: state.start, settings,
@@ -7359,11 +7507,19 @@ async function saveRun(n, { finished }) {
   }
 }
 
+// End run (confirmed): stop, sum up, ask about the journal.
 function endRun() {
+  const n = nav.active;
+  if (!n || n.navigator.finished) return;
+  n.navigator.finish();
+  showFinish();
+}
+
+// Leave the run screen (after the finish card, or when GPS is refused).
+function closeRun() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
-  saveRun(n, { finished: n.navigator.finished });
   clearInterval(n.timer);
   voice.stop();
   voice.onSay = null;
@@ -7408,12 +7564,13 @@ function resetEnd() {
 }
 $('endBtn').addEventListener('click', () => {
   if (!nav.active) return;
-  if (endTimer || nav.active.navigator.finished) return endRun();
+  if (nav.active.navigator.finished) return;
+  if (endTimer) return endRun();
   $('endBtn').classList.add('confirm');
   $('endBtn').querySelector('span').textContent = 'Tap again to end';
   endTimer = setTimeout(resetEnd, 3000);
 });
-$('finishDone').addEventListener('click', endRun);
+$('finishDone').addEventListener('click', closeRun);
 $('reportRunBtn').addEventListener('click', () => {
   const n = nav.active;
   if (!n) return;
@@ -7772,7 +7929,7 @@ async function openRun(id) {
   if (r.picture) pic.src = r.picture;
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
   const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
-    r.onPlan != null ? `${Math.round(r.onPlan * 100)}% of the run on the planned line (grey); orange is where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
+    r.onPlan != null && r.onPlan < 0.9 ? `${Math.round(r.onPlan * 100)}% of the run on the planned line; the picture shows where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
   $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   $('runShowMap').hidden = !(r.latlngs?.length > 1 || r.track?.length > 1);
   $('runs').hidden = true;
@@ -7816,8 +7973,8 @@ $('runShowMap').addEventListener('click', async () => {
   setView('app');
   journalLayer.clearLayers().addTo(map);
   const pts = r.track?.length > 1 ? r.track : r.latlngs;
-  if (r.latlngs?.length > 1) L.polyline(r.latlngs, { color: '#94a3b8', weight: 5, dashArray: r.track?.length > 1 ? '8 8' : null }).addTo(journalLayer);
-  if (r.track?.length > 1) L.polyline(r.track, { color: '#ff5a36', weight: 5 }).addTo(journalLayer);
+  if (r.track?.length > 1) L.polyline(r.track, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(journalLayer);
+  L.polyline(pts, { color: r.track?.length > 1 ? '#ff5a36' : '#94a3b8', weight: 5 }).addTo(journalLayer);
   map.fitBounds(L.latLngBounds(pts), mapPadding());
   setSheet('peek');
   toast(`${r.name}: ${U.num(r.distance, 2)} ${U.unit} on ${fmtWhen(r.time)}. Tap the map or change the start to clear it.`);

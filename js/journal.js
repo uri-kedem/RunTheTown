@@ -176,7 +176,7 @@ export function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' 
   });
 }
 
-// ---- The picture: map tiles with the planned line, the track and the start ----
+// ---- The picture: map tiles with the run as it was actually run (the planned line only when there is no track) ----
 
 const TILE = 256;
 
@@ -194,8 +194,7 @@ function bounds(pts) {
 export async function drawRunPicture(run, { tileUrl, width = 640, height = 400, pad = 36, fetchTile = null, quality = 0.82 } = {}) {
   const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
   if (pts.length < 2 || typeof document === 'undefined') return null;
-  const all = run.latlngs?.length ? [...run.latlngs, ...(run.track || [])] : pts;
-  const b = bounds(all);
+  const b = bounds(pts);
   // The zoom at which the whole run fits inside the picture (minus the padding).
   let z = 18;
   let fx0, fy0, fx1, fy1;
@@ -256,8 +255,9 @@ export async function drawRunPicture(run, { tileUrl, width = 640, height = 400, 
     // A soft white wash so the lines read on any map.
     g.fillStyle = 'rgba(255,255,255,0.18)';
     g.fillRect(0, 0, width, height);
-    if (r.latlngs?.length > 1) { line(r.latlngs, '#fff', 9); line(r.latlngs, '#94a3b8', 5, r.track?.length > 1 ? [8, 8] : null); }
-    if (r.track?.length > 1) { line(r.track, '#fff', 10); line(r.track, '#ff5a36', 6); }
+    // What was run, in orange; the planned line stands in only for a run with no GPS track.
+    const ran = r.track?.length > 1 ? r.track : r.latlngs;
+    line(ran, '#fff', 10); line(ran, '#ff5a36', 6);
     const s = (r.track?.length ? r.track : r.latlngs)[0];
     const e = (r.track?.length ? r.track : r.latlngs).slice(-1)[0];
     for (const [p, fill] of [[e, '#0f172a'], [s, '#ff5a36']]) {

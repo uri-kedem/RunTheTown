@@ -13,9 +13,10 @@ const PRE_MIN = 60; // ...unless it's already this close, then wait for "now"
 const NOW_M = 30; // "turn left" when this close
 const THEN_M = 70; // a second turn this soon after the first is chained: ", then …"
 const OFF_M = 40; // further than this from the route = off route
+const STILL_M = 20; // off the line, movement counts only while the runner gets this far ...
+const STILL_MS = 20000; // ... within this time (GPS jitter while standing adds nothing)
 const BACK_M = 25; // back within this = on route again
 const OFF_FIXES = 2; // consecutive far fixes before warning
-const OFF_REPEAT_MS = 45000; // repeat the off-route hint at most this often
 const SIGHT_AHEAD = 80; // call out a sight this far before passing it
 const REVERSE_M = 70; // running against the route for this long near the line = the runner turned around on purpose
 const JOIN_START_M = 300; // starting this close to any part of the route: the run begins from there, not from the route's first point
@@ -116,8 +117,9 @@ export class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
+  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
     this.speak = speak;
+    this.sound = sound; // short sounds: 'offroute' (the recalculating chime)
     this.now = now;
     this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
     this.backTravel = 0; // metres run against the route's direction, near the line
@@ -135,6 +137,7 @@ export class Navigator {
     this.elapsed = 0; // ms, excluding pauses
     this.paused = false;
     this.started = false;
+    this.routeDone = false; // the planned line has been run to its end; the run itself goes on until the runner ends it
     this.finished = false;
   }
 
@@ -160,7 +163,6 @@ export class Navigator {
     });
     this.offRoute = false;
     this.farCount = 0;
-    this.lastOffSaid = -Infinity;
     this.snapped = null;
     this.rejoined = false;
     this.backTravel = 0;
@@ -181,7 +183,7 @@ export class Navigator {
     this.rerouted = (this.rerouted || 0) + 1;
     if (say) {
       const d = route.cues?.[0];
-      this.speak(msg('New route from here. ', d?.compass ? `Head ${d.compass}` : null, d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
+      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
     }
     return this.view();
   }
@@ -213,6 +215,7 @@ export class Navigator {
     this.paused = false;
     this.lastTick = this.now();
     this.anchor = null; // don't count the distance moved while paused
+    this.still = null;
     this.speak(msg('Resuming.'), { priority: 2 });
   }
   tick() {
@@ -231,11 +234,25 @@ export class Navigator {
     // Travel direction, from movement of at least 8 m (GPS jitter is ignored).
     if (!this.anchor) this.anchor = { x, y };
     const moved = Math.hypot(x - this.anchor.x, y - this.anchor.y);
+    // Standing still: GPS jitter wanders a few metres each fix and must not add up to
+    // distance. The runner counts as moving while they get 20 m away from where they last
+    // were within 20 s; a runner stopped at a light, or done and chatting, adds nothing.
+    const t = this.now();
+    if (!this.still || Math.hypot(x - this.still.x, y - this.still.y) >= STILL_M) this.still = { x, y, t };
+    const running = t - this.still.t < STILL_MS;
     let hop = 0;
     if (moved >= 8) {
       if (moved < 300) { this.moving = (Math.atan2(x - this.anchor.x, y - this.anchor.y) * 180) / Math.PI; hop = moved; }
-      if (this.offRoute && moved < 300) this.odometer += moved; // off the route: count raw movement
+      if ((this.offRoute || this.routeDone) && moved < 300 && running) this.odometer += moved; // off the route (or past its end): count raw movement
       this.anchor = { x, y };
+    }
+
+    // The route has been run to its end: the runner may well keep going (a 12 km plan that
+    // came out at 11.9, or just a good day). Distance, time and splits carry on from the raw
+    // movement; no more turns, no off-route chime. The run ends when the runner ends it.
+    if (this.routeDone) {
+      this.announceSplit();
+      return this.view(fix);
     }
 
     // Not on the line yet: the run begins wherever the runner meets the route, within
@@ -292,11 +309,14 @@ export class Navigator {
 
     if (snap.dist > OFF_M) {
       this.farCount++;
-      if (this.farCount >= OFF_FIXES && (!this.offRoute || this.now() - this.lastOffSaid > OFF_REPEAT_MS)) {
-        if (!this.offRoute) { this.offOdo = this.odometer; this.offSince = this.now(); }
+      // Off the line: a chime, like a car navigator recalculating, and the screen shows the
+      // way back. No words (the runner usually knows why they left the line); the new route,
+      // when the app finds one, is announced as a plain instruction.
+      if (this.farCount >= OFF_FIXES && !this.offRoute) {
+        this.offOdo = this.odometer;
+        this.offSince = this.now();
         this.offRoute = true;
-        this.lastOffSaid = this.now();
-        this.speak(this.offRouteSpeech(x, y, snap), { priority: 3 });
+        this.sound('offroute');
       }
     } else {
       this.farCount = 0;
@@ -322,7 +342,7 @@ export class Navigator {
       this.announceSights();
     }
     this.announceSplit();
-    if (!this.finished && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.finish();
+    if (!this.routeDone && this.total - this.progress <= ARRIVE_M && this.progress > this.total * 0.8) this.routeComplete();
     return this.view(fix);
   }
 
@@ -482,27 +502,36 @@ export class Navigator {
     this.lastSplit = { t: this.elapsed, odo: this.odometer };
     this.nextSplit += this.splitM;
     if (!this.saying.splits) return;
-    const left = Math.max(0, this.total - this.progress);
     const unit = this.units === 'mi' ? 'mile' : 'kilometer';
     const parts = [`${n} ${unit}${n > 1 ? 's' : ''}.`];
     if (dd > 0.5 * (this.splitM / 1000)) parts.push(`Last ${unit} ${paceText(dt / dd, this.units)}.`);
-    if (left > 300) parts.push(`${distText(left, this.units)} to go.`);
     this.speak(msg(parts.join(' ')), { priority: 1 });
   }
 
-  finish() {
-    this.finished = true;
+  /** The planned line is done. Said once; the run goes on until finish(). */
+  routeComplete() {
+    this.routeDone = true;
     this.progress = this.total;
     this.seg = this.xy.length - 2;
+    this.offRoute = false;
+    this.anchor = null; // raw movement counts from here
+    this.speak(msg(`Route complete, you're back at the start. Keep going if you like; press End run when you're done.`), { priority: 3 });
+  }
+
+  /** The runner ended the run: the clock stops and the summary is said. */
+  finish() {
+    if (this.finished) return;
+    this.tick();
+    this.finished = true;
     const mins = Math.round(this.elapsed / 60000);
     const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
     const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
-    this.speak(msg(`You have arrived back at the start. Great run! ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
+    this.speak(msg(`Run finished. ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 
   /** Everything the screen needs. */
   view(fix = null) {
-    const next = this.finished ? null : this.nextCue();
+    const next = this.finished || this.routeDone ? null : this.nextCue();
     // Point on the route at the accepted progress (not the raw snap, which may be rejected).
     let pos = null;
     if (this.snapped) {
@@ -524,6 +553,7 @@ export class Navigator {
       elapsed: this.elapsed,
       pace: this.odometer > 50 ? this.elapsed / 1000 / (this.odometer / 1000) : NaN,
       next: next && { type: next.type, dir: next.dir, street: next.street, action: cueAction(next), in: next.at - this.progress },
+      routeDone: this.routeDone,
       finished: this.finished,
       paused: this.paused,
     };
