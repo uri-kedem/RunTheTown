@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=3c2fea53" />
+    <link rel="manifest" href="manifest.webmanifest?v=be3ec55d" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=3c2fea53" />
+    <link rel="stylesheet" href="css/style.css?v=be3ec55d" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,56 +50,61 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3c2fea53">3c2fea53</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="be3ec55d">be3ec55d</span></div>
     </nav>
 
     <!-- Cover page -->
     <section class="home" id="home">
       <div class="home-bar">
-        <img class="logo" src="img/logo.5e459302.png" alt="RunTheTown" />
+        <img class="logo" src="img/logo-white.0ef39459.png" alt="RunTheTown" />
         <button type="button" class="menu-btn" id="homeMenu" aria-label="Menu"><span></span><span></span><span></span></button>
       </div>
-      <svg class="home-art" viewBox="0 0 800 600" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7f3" /><stop offset="1" stop-color="#e8f3ff" /></linearGradient>
-        </defs>
-        <rect width="800" height="600" fill="url(#sky)" />
-        <g fill="none" stroke="#dbeafe" stroke-width="2">
-          <path d="M-20 140H820M-20 260H820M-20 380H820M-20 500H820M120-20V620M260-20V620M400-20V620M540-20V620M680-20V620" />
-        </g>
-        <path d="M60 520 Q60 400 180 400 T300 300 T440 260 T560 160 T700 120" fill="none" stroke="#bfdbfe" stroke-width="26" stroke-linecap="round" />
-        <path d="M60 520 Q60 400 180 400 T300 300 T440 260 T560 160 T700 120" fill="none" stroke="var(--brand)" stroke-width="10" stroke-linecap="round" stroke-dasharray="1 0" />
-        <g fill="#fff" stroke="var(--brand)" stroke-width="5"><circle cx="180" cy="400" r="9" /><circle cx="300" cy="300" r="9" /><circle cx="440" cy="260" r="9" /><circle cx="560" cy="160" r="9" /></g>
-        <circle cx="60" cy="520" r="16" fill="var(--brand)" stroke="#fff" stroke-width="6" />
-        <circle cx="700" cy="120" r="14" fill="#0f172a" stroke="#fff" stroke-width="6" />
-      </svg>
       <div class="hero">
-        <img class="hero-logo" src="img/logo.5e459302.png" alt="" aria-hidden="true" />
-        <div class="eyebrow">Routes for runners in a new city</div>
-        <h1>Land in a new town.<br />Run it like a local.</h1>
-        <p class="lede">Tell us your distance and what you like, and RunTheTown draws loops on promenades, parks and waterfronts, finds the athletics tracks nearby, and reads the turns into your earphones.</p>
+        <div class="hero-photo" aria-hidden="true"><img src="img/cover-runners.c9895063.jpg" alt="" /></div>
+        <div class="hero-copy">
+          <h1><span class="h1-a">Explore every corner.</span><span class="h1-b">Run the town.</span></h1>
+          <p class="lede">Set your distance, and we map the loop you would have picked yourself: parks, waterfronts and the quiet streets in between. Then a voice talks you round.</p>
+        </div>
         <div class="modes">
           <button type="button" class="mode-card" data-nav="run">
-            <span class="mode-ic run"><img src="img/mark-orange.4d07c951.png" alt="" /></span>
             <span class="mode-title">Running mode</span>
-            <span class="mode-text">Loops for your distance on smooth, car-free paths, with as few turns and traffic lights as possible, and voice guidance while you run.</span>
-            <span class="mode-cta">Start a run</span>
+            <span class="mode-text">Loops for your distance on car-free paths, promenades and quiet streets, with turn-by-turn voice guidance while you run.</span>
+            <span class="mode-cta">Start run</span>
           </button>
           <button type="button" class="mode-card" data-nav="tour">
-            <span class="mode-ic tour"><img src="img/tour-orange.2f5ac823.png" alt="" /></span>
             <span class="mode-title">Sightseeing tour</span>
-            <span class="mode-text">See the city while you run: museums, monuments, the old town and the viewpoints, with each landmark called out as you pass it.</span>
-            <span class="mode-cta">Plan a tour</span>
+            <span class="mode-text">A scenic run past the landmarks, the old town and the viewpoints, each one called out in your earphones as you pass it.</span>
+            <span class="mode-cta">Plan tour</span>
           </button>
         </div>
         <ul class="perks">
-          <li class="web-only">No sign-up · <button type="button" class="link" data-nav="install">add it to your home screen</button></li>
-          <li class="native-only">No account needed: your runs stay on your phone</li>
-          <li>Works in any city, in English</li>
-          <li>Athletics tracks and big parks marked around you</li>
+          <li class="web-only"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>No sign-up · <button type="button" class="link" data-nav="install">add it to your home screen</button></li>
+          <li class="native-only"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>No sign-up, no account</li>
+          <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Any city worldwide</li>
+          <li><svg viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z"/></svg>Voice guidance, even with the screen locked</li>
         </ul>
         <div class="home-foot"><button type="button" class="link" data-nav="terms">Terms &amp; policy</button> · Map data &copy; OpenStreetMap contributors</div>
       </div>
+      <aside class="home-map" aria-hidden="true">
+        <svg viewBox="0 0 600 900" preserveAspectRatio="xMidYMid slice">
+          <defs>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+            <pattern id="streets" width="120" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
+              <path d="M0 30H120M0 75H120M30 0V120M85 0V120" stroke="#334155" stroke-width="1.2" fill="none" />
+              <path d="M0 105H120M60 0V120" stroke="#2a3850" stroke-width="0.8" fill="none" />
+            </pattern>
+          </defs>
+          <rect width="600" height="900" fill="#1a2436" />
+          <rect width="600" height="900" fill="url(#streets)" />
+          <path d="M-20 560 C120 500 160 640 300 600 S520 520 640 560 L640 900 L-20 900Z" fill="#1f3a3a" opacity="0.55" />
+          <path d="M380 0 C320 160 460 260 400 420 S300 700 420 900" stroke="#223a52" stroke-width="22" fill="none" opacity="0.8" />
+          <g transform="translate(300 450) scale(0.74) translate(-300 -450)">
+          <path d="M60 170 C120 120 200 150 260 110 S380 120 410 200 S360 330 420 380 S520 470 470 560 S300 640 260 720 S150 760 120 660 S60 560 100 450 S30 300 60 170Z" fill="none" stroke="#ff5a36" stroke-width="26" stroke-linejoin="round" opacity="0.45" filter="url(#glow)" />
+          <path d="M60 170 C120 120 200 150 260 110 S380 120 410 200 S360 330 420 380 S520 470 470 560 S300 640 260 720 S150 760 120 660 S60 560 100 450 S30 300 60 170Z" fill="none" stroke="#ff7a4f" stroke-width="7" stroke-linejoin="round" />
+          <circle cx="260" cy="720" r="15" fill="#fff" stroke="#ff5a36" stroke-width="6" />
+          </g>
+        </svg>
+      </aside>
     </section>
 
     <!-- Terms & policy -->
@@ -512,6 +517,6 @@
 
     <script src="js/vendor/leaflet.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=3c2fea53"></script>
+    <script src="js/bundle.js?v=be3ec55d"></script>
   </body>
 </html>

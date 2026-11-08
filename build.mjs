@@ -43,18 +43,19 @@ console.log('wrote js/bundle.js', Buffer.byteLength(out), 'bytes');
 // old cached copy, by a browser or by GitHub's CDN. Sources stay as img/<name>.png; older
 // fingerprinted copies of the same name are removed.
 const fingerprint = new Map();
-const pngs = readdirSync(at('img')).filter((f) => f.endsWith('.png')).sort();
-for (const file of pngs) {
-  if (/\.[0-9a-f]{8}\.png$/.test(file)) continue; // a published copy, handled below
+const pics = readdirSync(at('img')).filter((f) => /\.(png|jpg)$/.test(f)).sort();
+for (const file of pics) {
+  if (/\.[0-9a-f]{8}\.(png|jpg)$/.test(file)) continue; // a published copy, handled below
+  const ext = file.slice(-3);
   const stem = file.slice(0, -4);
   const bytes = readFileSync(at('img', file));
-  const pub = `${stem}.${sha1(bytes)}.png`;
-  for (const old of pngs) if (old !== pub && new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{8}\\.png$`).test(old)) unlinkSync(at('img', old));
+  const pub = `${stem}.${sha1(bytes)}.${ext}`;
+  for (const old of pics) if (old !== pub && new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[0-9a-f]{8}\\.${ext}$`).test(old)) unlinkSync(at('img', old));
   if (!existsSync(at('img', pub))) writeFileSync(at('img', pub), bytes);
   fingerprint.set(file, pub);
 }
-// img/name.png or img/name.<oldhash>.png (with or without ?v=) -> img/name.<hash>.png
-const publishRefs = (text) => text.replace(/img\/([\w-]+?)(?:\.[0-9a-f]{8})?\.png(?:\?v=[0-9a-f]+)?/g, (_, stem) => 'img/' + (fingerprint.get(`${stem}.png`) || `${stem}.png`));
+// img/name.png or img/name.<oldhash>.png (with or without ?v=) -> img/name.<hash>.png; same for .jpg
+const publishRefs = (text) => text.replace(/img\/([\w-]+?)(?:\.[0-9a-f]{8})?\.(png|jpg)(?:\?v=[0-9a-f]+)?/g, (_, stem, ext) => 'img/' + (fingerprint.get(`${stem}.${ext}`) || `${stem}.${ext}`));
 
 // Stamp the build into index.html (cache-busting query on the bundle and stylesheet) and
 // sw.js (the service worker's cache name), so phones that installed the app pick up a new
