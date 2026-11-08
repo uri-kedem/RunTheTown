@@ -85,6 +85,8 @@
       const m = {
         setView(c, z) { view.center = toLL(c); if (z != null) view.zoom = z; render(); return m; },
         getZoom: () => view.zoom,
+        getSize: () => ({ x: el.clientWidth || 390, y: el.clientHeight || 700 }),
+        invalidateSize() { render(); return m; },
         getCenter: () => ({ lat: view.center[0], lng: view.center[1] }),
         on(ev, fn) { handlers[ev] = fn; return m; },
         removeLayer(l) { top.delete(l); render(); return m; },

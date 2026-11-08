@@ -32,6 +32,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 #map { position: fixed; inset: 0; z-index: 0; background: #e5e7eb; }
+/* Heading-up during a run: the map is made a square as wide as the screen's diagonal and
+   turned so the way ahead points up; labels on the route turn back to stay readable. */
+body.heading-up #map { width: var(--map-d); height: var(--map-d); left: calc(50% - var(--map-d) / 2); top: calc(50% - var(--map-d) / 2); right: auto; bottom: auto; transform: rotate(var(--map-rot, 0deg)); transition: transform 0.7s linear; will-change: transform; }
+body.heading-up .map-label { transform: rotate(calc(-1 * var(--map-rot, 0deg))); transition: transform 0.7s linear; }
+body.heading-up .leaflet-control-attribution { display: none; }
 
 /* Top bar */
 .topbar {

@@ -10,6 +10,7 @@ export const DEFAULTS = Object.freeze({
   quiet: false, // only turns and off-route warnings
   warnM: 200, // how far ahead a turn is announced: 100 | 200 | 300
   follow: true, // the map follows the runner
+  headingUp: true, // the map turns so the way ahead is up (during a run, while following)
   awake: true, // keep the screen on during a run
   language: 'en', // 'en' for now; 'he' is coming
 });

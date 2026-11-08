@@ -740,7 +740,7 @@ function drawKmMarkers(route, color, layer = kmLayer) {
       interactive: false,
       icon: L.divIcon({
         className: '',
-        html: `<div style="background:#fff;color:${color};font:800 11px Inter,sans-serif;padding:3px 7px;border-radius:8px;border:2px solid ${color};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25)">Turn around</div>`,
+        html: `<div class="map-label" style="background:#fff;color:${color};font:800 11px Inter,sans-serif;padding:3px 7px;border-radius:8px;border:2px solid ${color};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25)">Turn around</div>`,
         iconSize: [84, 22],
         iconAnchor: [42, 30],
       }),
@@ -759,7 +759,7 @@ function drawKmMarkers(route, color, layer = kmLayer) {
         interactive: false,
         icon: L.divIcon({
           className: '',
-          html: `<div style="background:${color};color:#fff;font:700 10px Inter,sans-serif;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)">${nextKm}</div>`,
+          html: `<div class="map-label" style="background:${color};color:#fff;font:700 10px Inter,sans-serif;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)">${nextKm}</div>`,
           iconSize: [18, 18],
           iconAnchor: [9, 9],
         }),
@@ -990,6 +990,7 @@ function renderSettings() {
   $('setQuiet').checked = settings.quiet;
   $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet;
   $('setFollow').checked = settings.follow;
+  $('setHeading').checked = settings.headingUp;
   $('setAwake').checked = settings.awake;
   $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
 }
@@ -1009,12 +1010,13 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setAwake', 'awake']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setAwake', 'awake']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
     if (key === 'quiet') { $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet; }
     if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
+    if (key === 'headingUp' && nav.active && !settings.headingUp) setMapRotation(null);
     if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
   });
 }
@@ -1332,7 +1334,18 @@ function render(v) {
   const pos = v.fix ? [v.fix.lat, v.fix.lon] : null;
   if (pos) {
     n.userMarker.setLatLng(pos);
-    if (n.follow) map.setView(pos, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
+    // Heading: the phone's course when it has one and the runner moves, else the direction of
+    // travel the navigator sees; smoothed so the map turns, not twitches.
+    const gpsCourse = Number.isFinite(v.fix.heading) && v.fix.heading >= 0 && (v.fix.speed == null || v.fix.speed > 0.7) ? v.fix.heading : null;
+    const course = gpsCourse ?? nv.moving;
+    if (course != null && Number.isFinite(course)) n.heading = n.heading == null ? course : n.heading + angleDiff(n.heading, course) * 0.35;
+    if (n.follow) {
+      const turn = settings.headingUp && n.heading != null;
+      setMapRotation(turn ? n.heading : null);
+      // The runner sits in the lower part of the screen with the way ahead above them.
+      const centre = turn ? aheadOf(pos, n.heading, 0.18 * map.getSize().y * metresPerPixel(pos[0], map.getZoom())) : pos;
+      map.setView(centre, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
+    }
   }
   if (v.routeDone && n.demo && !n.done) { n.done = true; setTimeout(endRun, 1200); } // a demo ends itself
 }
@@ -1435,6 +1448,7 @@ function closeRun() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
+  setMapRotation(null);
   clearInterval(n.timer);
   voice.stop();
   voice.onSay = null;
@@ -1501,8 +1515,43 @@ $('navDemo').addEventListener('click', () => {
 map.on('dragstart', () => {
   if (!nav.active) return;
   nav.active.follow = false;
+  setMapRotation(null); // looking around is done north-up (a turned map would drag the wrong way)
   $('recenterBtn').hidden = false;
 });
+
+// ---- Heading-up map (CSS rotation of the map element; Leaflet itself stays north-up) ----
+let mapRot = null; // degrees the map is turned, or null when north is up
+function setMapRotation(heading) {
+  const body = document.body;
+  if (heading == null) {
+    if (mapRot == null) return;
+    mapRot = null;
+    body.style.setProperty('--map-rot', '0deg');
+    body.classList.remove('heading-up');
+    map.invalidateSize({ animate: false });
+    return;
+  }
+  // The CSS angle is kept continuous (no 359 -> 1 jump the long way round).
+  const want = -heading;
+  let rot = mapRot == null ? want : mapRot + angleDiff(mapRot, want);
+  if (mapRot == null) {
+    const d = Math.ceil(Math.hypot(window.innerWidth, window.innerHeight) * 1.02);
+    body.style.setProperty('--map-d', `${d}px`);
+    body.classList.add('heading-up');
+    map.invalidateSize({ animate: false });
+  }
+  mapRot = rot;
+  body.style.setProperty('--map-rot', `${rot.toFixed(1)}deg`);
+}
+window.addEventListener('resize', () => { if (mapRot != null) { document.body.style.setProperty('--map-d', `${Math.ceil(Math.hypot(window.innerWidth, window.innerHeight) * 1.02)}px`); map.invalidateSize({ animate: false }); } });
+const angleDiff = (from, to) => ((((to - from) % 360) + 540) % 360) - 180; // shortest signed turn, -180..180
+const metresPerPixel = (lat, zoom) => (156543.03 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+function aheadOf([lat, lon], bearingDeg, metres) {
+  const b = (bearingDeg * Math.PI) / 180;
+  const dLat = (metres * Math.cos(b)) / 111320;
+  const dLon = (metres * Math.sin(b)) / (111320 * Math.cos((lat * Math.PI) / 180));
+  return [lat + dLat, lon + dLon];
+}
 $('recenterBtn').addEventListener('click', () => {
   const n = nav.active;
   if (!n) return;
