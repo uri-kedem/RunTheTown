@@ -1533,7 +1533,7 @@ function setMode(mode) {
   $('landscapeLabel').textContent = tour ? 'Mode' : 'Landscape';
   $('landscapeHint').textContent = tour ? 'landmarks on the way' : 'pick any';
   $('tourNote').hidden = !tour;
-  $('modeBadge').textContent = tour ? 'Sightseeing tour' : 'Running mode';
+  $('modeBadge').textContent = tour ? 'Explorer tour' : 'Free-flow run';
   $('goBtn').textContent = tour ? 'Find my sightseeing routes' : 'Find my routes';
   highlightNav(mode);
 }

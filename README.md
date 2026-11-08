@@ -12,7 +12,7 @@ the city's landmarks, then run them with spoken turn-by-turn directions.
   `tour.png` (the runner before the cathedral) as the Sightseeing-tour icon in the same two places, and
   `favicon.png` (the R mark on a dark tile) as the browser icon. To change the artwork, replace those files;
   nothing else references it.
-- **Cover page:** headline, what the app does, and two ways in: **Running mode** and **Sightseeing tour**.
+- **Cover page:** headline, what the app does, and two ways in: **Free-flow run** (called Running mode in the code) and **Explorer tour** (the Sightseeing tour in the code).
 - **Two modes, not one option:** Running mode shows the landscape options (parks & green, waterfront, quiet
   streets) and nothing about sights. The Sightseeing tour is a mode of its own: the landscape row becomes
   "Mode · Sightseeing" (locked on) and the other options are put away, so tour routes are planned for the
