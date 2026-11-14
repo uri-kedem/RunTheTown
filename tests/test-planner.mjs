@@ -330,5 +330,50 @@ for (const km of [4, 8, 12]) {
   check(short.length === 3 && short.every((r) => r.stats.seaFrac === 0), '4 km from home: the sea is out of reach, three routes anyway');
 }
 
+// One way, point to point: from the centre west along the busy avenue to a point 1.6 km away.
+// The best way leaves the avenue for the car-free Market Lane and the quiet streets; the
+// shortest safe way is the avenue itself (it has sidewalks; its four lights do not count for
+// the shortest). Every card ends at the finish and keeps off roads without a sidewalk.
+{
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const ll = (x, y) => [CENTER[0] + y / ky, CENTER[1] + x / kx];
+  const dist = (a, b) => Math.hypot((a[0] - b[0]) * ky, (a[1] - b[1]) * kx);
+  const trunkCap = (r) => Math.min(0.1 * r.distance, 300 + 0.02 * r.distance);
+  const B = ll(-1600, 0);
+  const t = Date.now();
+  const rs = await engine.planOneWay({ lat: CENTER[0], lon: CENTER[1], toLat: B[0], toLon: B[1], destName: 'Founders Memorial', distanceKm: 0, prefs: {}, terrain: 'any' });
+  console.log(`\none way, 1.6 km west (${Date.now() - t} ms)`);
+  rs.forEach((r) => console.log(`   ${r.kind}: ${(r.distance / 1000).toFixed(2)} km | prom ${(r.stats.promFrac * 100) | 0}% busy ${(r.stats.busyFrac * 100) | 0}% lights ${r.stats.signals} | ${r.name} | ${r.highlights.join(' / ')}`));
+  check(rs.length >= 2 && rs.every((r) => r.type === 'oneway'), `at least two one-way cards (${rs.length})`);
+  check(rs.every((r) => dist(r.latlngs[r.latlngs.length - 1], B) <= 40), 'every card ends within 40 m of the finish');
+  check(rs.every((r) => dist(r.latlngs[0], CENTER) <= 40), 'every card starts at the start');
+  check(rs.every((r) => r.stats.trunkFrac * r.distance <= trunkCap(r)), 'no card runs on a road without a sidewalk beyond a crossing');
+  const scenic = rs[0], shortest = rs.find((r) => r.kind === 'shortest');
+  check(scenic.kind === 'scenic' && !!shortest, 'the best way comes first, the shortest safe way is among the cards');
+  check(shortest && shortest.distance <= scenic.distance + 1, 'the shortest way is no longer than the best way');
+  check(shortest && scenic.stats.promFrac + scenic.stats.greenFrac > shortest.stats.promFrac + shortest.stats.greenFrac + 0.2, 'the best way has clearly more promenade and park under its feet than the shortest');
+  check(shortest && Math.abs(shortest.distance - 1600) < 60 && shortest.stats.signals >= 3, 'the shortest safe way is the avenue (1.6 km, with its traffic lights)');
+  check(rs.every((r) => /^(Best|Seaside|Waterfront|Park|Promenade|Quiet|Shortest) way to Founders Memorial$/.test(r.name)), `cards are named for the ground and the finish (${rs.map((r) => r.name).join(' | ')})`);
+  check(rs.every((r) => r.highlights.some((h) => /^One way: finishes at Founders Memorial/.test(h))), 'cards say the run ends at the finish, not back at the start');
+  check(rs.every((r) => r.cues[r.cues.length - 1].type === 'arrive' && /destination/.test(r.cues[r.cues.length - 1].text)), 'the last cue arrives at the destination');
+  check(rs.every((r) => r.dest && dist(r.dest, B) <= 40 && r.destName === 'Founders Memorial'), 'cards carry the finish point and its name');
+
+  // A wish well beyond the way there: a third, longer card comes to the wish by going round
+  // through the park, and the direct cards are unchanged.
+  const wish = await engine.planOneWay({ lat: CENTER[0], lon: CENTER[1], toLat: B[0], toLon: B[1], destName: 'Founders Memorial', distanceKm: 5, prefs: {}, terrain: 'any' });
+  console.log('   wish 5 km: ' + wish.map((r) => `${r.kind} ${(r.distance / 1000).toFixed(2)} km`).join(' | '));
+  const longer = wish.find((r) => r.kind === 'stretched');
+  check(wish.length === 3 && !!longer, 'a 5 km wish adds a longer way round');
+  check(longer && Math.abs(longer.distance - 5000) / 5000 <= 0.1, 'the longer way comes within 10% of the wish');
+  check(longer && dist(longer.latlngs[longer.latlngs.length - 1], B) <= 40 && longer.stats.repeatFrac <= 0.1, 'it still ends at the finish and hardly repeats a street');
+  check(longer && longer.stats.greenFrac >= 0.3 && /^Longer .* way to Founders Memorial$/.test(longer.name) && longer.highlights.some((h) => /long way round/.test(h)), `it goes through the park and says so (${longer?.name})`);
+  check(wish.filter((r) => r.kind !== 'stretched').every((r) => Math.abs(r.distance - rs.find((o) => o.kind === r.kind).distance) < 1), 'the direct cards do not change with the wish');
+
+  // A finish beyond the longest run is refused with a plain message.
+  let refused = null;
+  try { await engine.planOneWay({ lat: CENTER[0], lon: CENTER[1], toLat: CENTER[0] + 0.5, toLon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' }); } catch (err) { refused = err.message; }
+  check(/further than the longest run/.test(refused || ''), `a finish 55 km away is refused: ${refused}`);
+}
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');
 process.exit(failures ? 1 : 0);

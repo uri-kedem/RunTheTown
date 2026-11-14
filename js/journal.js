@@ -97,6 +97,7 @@ export function makeRun({ route, track, odometer, elapsed, startedAt, start, set
     planned: Math.round(route?.distance || 0),
     place: route?.place ? { kind: route.place.kind, name: route.place.name } : null,
     start: start ? { lat: start.lat, lon: start.lon, label: start.label } : null,
+    dest: route?.type === 'oneway' && route.dest ? { lat: route.dest[0], lon: route.dest[1], label: route.destName || '' } : null, // a one-way run's finish
     units: settings?.units || 'km',
     country,
     rerouted,

@@ -430,5 +430,18 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   check(i >= 0 && said[i + 1] === sight.story, `the story follows the call-out (${said[i + 1]})`);
 }
 
+// A one-way run: the navigator follows it like any route and arrives at the destination,
+// never "back at the start".
+{
+  const B = [CENTER[0], CENTER[1] - 1600 / (111320 * Math.cos((CENTER[0] * Math.PI) / 180))];
+  const rs = await engine.planOneWay({ lat: CENTER[0], lon: CENTER[1], toLat: B[0], toLon: B[1], destName: 'Founders Memorial', distanceKm: 0, prefs: {}, terrain: 'any' });
+  const r = rs[0];
+  const { nav, said } = simulate(r);
+  console.log(`\n${r.name} (${(r.distance / 1000).toFixed(2)} km): ${said.length} messages`);
+  check(nav.routeDone, 'the one-way route is run to its end');
+  check(said.some((s) => /Route complete, you're at your destination/.test(s.text)), 'the end of the route is announced as the destination');
+  check(!said.some((s) => /back at the start/.test(s.text)), 'nothing about being back at the start');
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll navigation tests passed');
 process.exit(failures ? 1 : 0);

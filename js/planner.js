@@ -831,6 +831,23 @@ function describe(g, route, start, prefs = {}) {
   }
 
   if (prefs.sights && s.sights.length >= 2) theme = outback ? 'Sightseeing out & back' : 'Sightseeing loop';
+  // One way: named for the ground that carries it (the shortest way is called that), and
+  // for where it ends rather than the direction it heads.
+  const oneway = route.type === 'oneway';
+  let name = `${theme} to the ${heading}`;
+  if (oneway) {
+    let what = 'Best';
+    if (onPaths && s.seaFrac >= 0.2 && g.openSea) what = 'Seaside';
+    else if (onPaths && s.waterFrac >= 0.25 && s.waterFrac >= s.greenFrac) what = 'Waterfront';
+    else if (onPaths && s.greenFrac >= 0.25) what = 'Park';
+    else if (s.promFrac >= 0.4) what = 'Promenade';
+    else if (s.quietFrac >= 0.75) what = 'Quiet';
+    if (route.kind === 'shortest') what = 'Shortest';
+    if (route.kind === 'stretched') what = `Longer ${what === 'Best' ? 'scenic' : what.toLowerCase()}`;
+    if (prefs.sights && s.sights.length >= 2 && route.kind !== 'shortest') what = 'Sightseeing';
+    theme = `${what} way`;
+    name = route.destName ? `${theme} to ${route.destName}` : `${theme} to the ${heading}`;
+  }
   // The card states the facts a runner plans around: where the run goes (the share on
   // park paths and promenades), climb and descent, traffic lights and road crossings
   // (plus the landmarks on a sightseeing tour).
@@ -840,6 +857,8 @@ function describe(g, route, start, prefs = {}) {
   highlights.push(whereText(s, g));
   if (sights.length) highlights.push(sightsText(sights));
   if (outback) highlights.push('Same way there and back');
+  if (oneway) highlights.push(`One way: finishes at ${route.destName || 'your destination'}, not back at the start`);
+  if (oneway && route.kind === 'stretched' && route.directM) highlights.push(`Takes the long way round for your distance: the direct way is ${(route.directM / 1000).toFixed(1)} km`);
   if (g.hasElevation) highlights.push(climbText(s));
   highlights.push(stopsText(s));
   // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
@@ -857,8 +876,10 @@ function describe(g, route, start, prefs = {}) {
     if (i % step === 0 || i === route.nodes.length - 1) profile.push([d, g.z[route.nodes[i]]]);
   }
 
+  const cues = buildCues(g, route);
+  if (oneway) cues[cues.length - 1].text = 'You have arrived at your destination';
   return {
-    name: `${theme} to the ${heading}`,
+    name,
     theme,
     heading: headingDeg,
     distance: s.distance,
@@ -868,10 +889,13 @@ function describe(g, route, start, prefs = {}) {
     profile,
     latlngs: route.nodes.map((v) => [g.lat[v], g.lon[v]]),
     sights: sights.map(({ name, local, kind, lat, lon, at, side }) => ({ name, local, kind, lat, lon, at, side })),
-    cues: buildCues(g, route),
+    cues,
     hasElevation: g.hasElevation,
-    type: outback ? 'outback' : 'loop',
+    type: oneway ? 'oneway' : outback ? 'outback' : 'loop',
+    kind: oneway ? route.kind : undefined,
     turnaround: outback ? [g.lat[route.turnaround], g.lon[route.turnaround]] : null,
+    dest: oneway ? [g.lat[route.nodes[route.nodes.length - 1]], g.lon[route.nodes[route.nodes.length - 1]]] : null,
+    destName: oneway ? route.destName || null : undefined,
   };
 }
 
@@ -1063,4 +1087,161 @@ function fitTour(g, start, stopNodes, D) {
     extra = { after: li, x: mx + (ox / n) * h, y: my + (oy / n) * h, h };
   }
   return best && best.err <= 0.12 ? best : null;
+}
+
+// ---------- One way (point to point) ----------
+
+/**
+ * A one-way run: from the start to a destination (the hotel to a landmark, an inland
+ * start to the beach) and not back. The cards: the best way by the running rules (the
+ * costs applyPreferences put on the graph: promenades and park paths first, quiet streets,
+ * never a road without a sidewalk but for a crossing), the shortest safe way (plain
+ * length, the same roads kept out), and, when the distance asked for is clearly longer
+ * than the way there, a longer way that goes round by the most scenic ground within reach
+ * so the run comes to that distance. The distance is a wish, not a promise: the way there
+ * is as long as it is, and the direct cards say their real length.
+ * @param g     Graph (preferences already applied with applyPreferences)
+ * @param opts  { startXY, destXY, distance: the wish in metres, prefs, terrain, destName }
+ */
+export async function planOneWay(g, { startXY, destXY, distance: D, prefs = {}, terrain = 'any', destName = null }) {
+  nodeAttrs(g);
+  const maxComp = Math.max(...g.compSize);
+  // Start and finish go on the nearest street or made path, like a loop's start; the finish
+  // must be in the start's part of the network, or there is no way between them.
+  const snapFilter = (i) => g.compSize[g.comp[i]] >= Math.min(300, maxComp * 0.5) && (g.allowCountry || !g.nodeCountryOnly?.[i]);
+  const snapScore = (i, d) => d + (g.nodeRough[i] ? 250 : 0);
+  const start = g.nearest(startXY[0], startXY[1], { maxDist: 800, filter: snapFilter, scoreFn: snapScore });
+  if (start < 0) throw new Error('No runnable paths found near the start point. Try moving the pin onto a street.');
+  const dest = g.nearest(destXY[0], destXY[1], { maxDist: 800, filter: (i) => snapFilter(i) && g.comp[i] === g.comp[start], scoreFn: snapScore });
+  if (dest < 0) throw new Error('No runnable way reaches the finish from this start. Try moving the finish pin onto a street.');
+  if (dest === start) throw new Error('The finish is right at the start. Pick a place further away.');
+
+  const asRoute = (p, kind) => {
+    let length = 0;
+    for (const e of p.edges) length += g.len[e];
+    return { nodes: p.nodes, edges: p.edges, length, type: 'oneway', kind, destName };
+  };
+  const best = g.shortestPath(start, dest);
+  if (!best?.edges?.length) throw new Error("Couldn't find a way from the start to the finish on the map. Try another finish.");
+  const candidates = [asRoute(best, 'scenic')];
+  await sleep();
+
+  // The shortest safe way: every made way at its length, with only the rules kept (no
+  // sidewalk, steps, dirt trails priced as always), no stop or turn costs.
+  const saved = { costF: g.costF.slice(), costB: g.costB.slice(), stopWeight: g.stopWeight, turnWeight: g.turnWeight };
+  try {
+    for (let e = 0; e < g.m; e++) {
+      if (g.costF[e] === Infinity) continue;
+      const c = g.hw[e] === HW.TRUNK ? BASE_COST[HW.TRUNK] : g.hw[e] === HW.STEPS ? BASE_COST[HW.STEPS] : g.rough[e] ? ROUGH_COST : 1;
+      g.costF[e] = g.costB[e] = c;
+    }
+    g.stopWeight = 0;
+    g.turnWeight = 0;
+    const p = g.shortestPath(start, dest);
+    if (p?.edges?.length) candidates.push(asRoute(p, 'shortest'));
+  } finally {
+    g.costF.set(saved.costF);
+    g.costB.set(saved.costB);
+    g.stopWeight = saved.stopWeight;
+    g.turnWeight = saved.turnWeight;
+  }
+  await sleep();
+
+  // When the best way is the shortest way too, a second option that leans harder on parks
+  // and water, if the map has any to lean on.
+  if (candidates.length < 2 || overlap(g, candidates[0], candidates[1]) >= 0.9) {
+    applyPreferences(g, { prefs: { ...prefs, green: true, water: true }, terrain });
+    try {
+      const p = g.shortestPath(start, dest);
+      if (p?.edges?.length) {
+        const r = asRoute(p, 'scenic');
+        if (candidates.every((c) => overlap(g, r, c) < 0.9) && r.length <= 1.6 * candidates[0].length) candidates.push(r);
+      }
+    } finally {
+      applyPreferences(g, { prefs, terrain });
+    }
+  }
+
+  // The wish is clearly longer than the way there: a longer way round, through scenery.
+  const direct = candidates[0].length;
+  if (D >= 1.2 * direct && D - direct >= 800) {
+    for (const r of stretchedWays(g, { start, dest, D, prefs, terrain })) {
+      r.destName = destName;
+      r.directM = direct;
+      if (candidates.every((c) => overlap(g, r, c) < 0.8)) { candidates.push(r); break; }
+    }
+  }
+
+  for (const c of candidates) {
+    // A direct way is as long as it is: no distance error. The longer way is measured against the wish.
+    c.stats = routeStats(g, c, c.kind === 'stretched' ? D : c.length, prefs);
+    c.score = scoreRoute(c.stats, prefs, terrain);
+  }
+  // A road with no sidewalk is for a crossing, not for running (the same cap as a loop's);
+  // ways with more of it go only when nothing else reaches the finish.
+  const trunkCap = (c) => Math.min(0.1 * c.stats.distance, 300 + 0.02 * c.stats.distance);
+  const safe = candidates.filter((c) => c.stats.trunkFrac * c.stats.distance <= trunkCap(c));
+  const chosen = safe.length ? safe : candidates;
+  // Order: the best way first, the shortest second, then the rest.
+  const rank = (c) => (c.kind === 'scenic' && c === candidates[0] ? 0 : c.kind === 'shortest' ? 1 : c.kind === 'scenic' ? 2 : 3);
+  chosen.sort((a, b) => rank(a) - rank(b));
+  return finish(g, chosen, start, prefs);
+}
+
+// Longer ways from start to finish that come to the distance D: through a point v where
+// the best way start→v plus the best way v→finish (two Dijkstra trees) measures D, the
+// most scenic such points first; a way whose two legs run over each other is dropped.
+function stretchedWays(g, { start, dest, D, prefs, terrain, count = 2 }) {
+  const walk = (root) => {
+    const { order, prevArc } = g.shortestTree(root);
+    const L = new Float64Array(g.n);
+    const S = new Float64Array(g.n);
+    const Sea = new Float64Array(g.n);
+    const seen = new Uint8Array(g.n);
+    for (const u of order) {
+      seen[u] = 1;
+      if (u === root) continue;
+      const e = g.adjEdge[prevArc[u]];
+      const p = g.other(e, u);
+      L[u] = L[p] + g.len[e];
+      S[u] = S[p] + g.len[e] * scenicOf(g, e, prefs);
+      Sea[u] = Sea[p] + g.len[e] * g.sea[e];
+    }
+    // The tree path from u back to the root, as nodes u … root.
+    const chain = (u) => {
+      const out = [u];
+      while (out[out.length - 1] !== root) { const v = out[out.length - 1]; out.push(g.other(g.adjEdge[prevArc[v]], v)); }
+      return out;
+    };
+    return { L, S, Sea, seen, chain };
+  };
+  const A = walk(start);
+  const B = walk(dest);
+  const cands = [];
+  for (let v = 0; v < g.n; v++) {
+    if (!A.seen[v] || !B.seen[v] || v === start || v === dest) continue;
+    const total = A.L[v] + B.L[v];
+    if (Math.abs(total - D) > 0.08 * D) continue;
+    cands.push({ v, rank: (A.S[v] + B.S[v]) / total + seaBoost((A.Sea[v] + B.Sea[v]) / total) });
+  }
+  cands.sort((a, b) => b.rank - a.rank);
+  const picked = [];
+  for (const { v } of cands.slice(0, 60)) {
+    if (picked.length >= count) break;
+    const nodes = A.chain(v).reverse().concat(B.chain(v).slice(1)); // start … v … finish
+    const edges = [];
+    let length = 0;
+    for (let i = 0; i + 1 < nodes.length; i++) {
+      const e = g.edgeBetween(nodes[i], nodes[i + 1]);
+      edges.push(e);
+      length += g.len[e];
+    }
+    const route = { nodes, edges, length, type: 'oneway', kind: 'stretched' };
+    route.stats = routeStats(g, route, D, prefs);
+    if (route.stats.repeatFrac > 0.1 || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
+    if (picked.some((o) => overlap(g, route, o) > 0.7)) continue;
+    route.score = scoreRoute(route.stats, prefs, terrain);
+    picked.push(route);
+  }
+  return picked.sort((a, b) => b.score - a.score);
 }

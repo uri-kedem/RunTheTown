@@ -92,14 +92,16 @@ export function cueAction(c) {
   }
 }
 
-function cueSpeech(c, { ahead = null, units = 'km' } = {}) {
+function cueSpeech(c, { ahead = null, units = 'km', oneWay = false } = {}) {
   const lead = ahead != null ? `In ${distText(ahead, units)}, ` : '';
   const onto = c.street ? [' onto ', c.street] : [];
   if (c.type === 'turn' && !c.dir && c.text) return msg(ahead != null ? `${lead}${c.text[0].toLowerCase()}${c.text.slice(1)}` : c.text);
   switch (c.type) {
     case 'lap': return msg(`Lap ${c.lap} of ${c.laps}.`);
     case 'uturn': return msg(`${lead}${ahead != null ? 'turn around' : 'Turn around and head back the same way'}`);
-    case 'arrive': return msg(ahead != null ? `In ${distText(ahead, units)}, you'll be back at the start` : 'You have arrived back at the start');
+    case 'arrive': return oneWay
+      ? msg(ahead != null ? `In ${distText(ahead, units)}, you'll reach your destination` : 'You have arrived at your destination')
+      : msg(ahead != null ? `In ${distText(ahead, units)}, you'll be back at the start` : 'You have arrived back at the start');
     case 'slight': return msg(`${lead}${ahead != null ? 'b' : 'B'}ear ${c.dir}`, ...onto);
     case 'sharp': return msg(`${lead}${ahead != null ? 'm' : 'M'}ake a sharp ${c.dir}`, ...onto);
     default: return msg(`${lead}${ahead != null ? 't' : 'T'}urn ${c.dir}`, ...onto);
@@ -478,7 +480,7 @@ export class Navigator {
         // Only the next turn gets an early heads-up.
         if (!c.pre && ahead > PRE_MIN) {
           c.pre = true;
-          this.speak(cueSpeech(c, { ahead, units: this.units }), { priority: 1 });
+          this.speak(cueSpeech(c, { ahead, units: this.units, oneWay: this.route?.type === 'oneway' }), { priority: 1 });
         }
         break;
       }
@@ -522,7 +524,9 @@ export class Navigator {
     this.seg = this.xy.length - 2;
     this.offRoute = false;
     this.anchor = null; // raw movement counts from here
-    this.speak(msg(`Route complete, you're back at the start. Keep going if you like; press End run when you're done.`), { priority: 3 });
+    this.speak(msg(this.route?.type === 'oneway'
+      ? `Route complete, you're at your destination. Keep going if you like; press End run when you're done.`
+      : `Route complete, you're back at the start. Keep going if you like; press End run when you're done.`), { priority: 3 });
   }
 
   /** The runner ended the run: the clock stops and the summary is said. */

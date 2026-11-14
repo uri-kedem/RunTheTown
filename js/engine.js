@@ -11,7 +11,7 @@ import { fetchElevationGrid, ElevationGrid } from './elevation.js';
 import { fetchLandcoverGrid } from './landcover.js';
 import { LandscapeGrid } from './landscape.js';
 import { Graph } from './graph.js';
-import { applyPreferences, planLoops } from './planner.js';
+import { applyPreferences, planLoops, planOneWay } from './planner.js';
 import { findRunningPlaces, placeRoute } from './places.js';
 import { lookupPlace } from './details.js';
 import { scanSpots, mergeSpots } from './spots.js';
@@ -195,8 +195,7 @@ export class RouteEngine {
     const area = await this.loadArea(lat, lon, radiusFor(D), onStatus);
     const g = area.graph;
     g.turnWeight = turnWeight;
-    const design = () => {
-      applyPreferences(g, { prefs, terrain });
+    const routes = await this.design(g, prefs, terrain, () => {
       onStatus('Designing routes…');
       return planLoops(g, {
         startXY: area.proj.toXY(lat, lon),
@@ -205,6 +204,57 @@ export class RouteEngine {
         terrain,
         onProgress: (p) => onStatus(`Designing routes… ${Math.round(p * 100)}%`),
       });
+    });
+    routes.country = routes.some((r) => r.stats?.countryFrac > 0.2);
+    routes.village = !!g.village;
+    routes.partialMap = area.failedTiles > 0;
+    routes.stopsUnknown = !area.stopsKnown;
+    // Running spots nearby (tracks, big parks), with how far they are from the start.
+    onStatus('Looking for running tracks and parks…');
+    routes.places = await this.spotsNear(lat, lon, Math.max(4000, 0.6 * D));
+    this.lastPlan = { lat, lon, distanceKm: Math.min(MAX_DISTANCE_KM, distanceKm), prefs };
+    return routes;
+  }
+
+  /**
+   * A one-way run from (lat, lon) to (toLat, toLon): the map is loaded around the middle of
+   * the two, wide enough for both and for a scenic way round when the distance asked for
+   * is longer than the way there. The cards come from planOneWay (the best way, the
+   * shortest safe way, a longer way for the wished distance). Two points further apart
+   * than the longest run are refused.
+   */
+  async planOneWay({ lat, lon, toLat, toLon, destName = null, distanceKm = 0, prefs = {}, terrain = 'any', onStatus = () => {}, turnWeight = 1 }) {
+    const apart = haversine(lat, lon, toLat, toLon);
+    if (apart > MAX_DISTANCE_KM * 1000) throw new Error(`The finish is ${(apart / 1000).toFixed(0)} km away, further than the longest run (${MAX_DISTANCE_KM} km). Pick a nearer one.`);
+    if (apart < 150) throw new Error('The finish is right at the start. Pick a place further away.');
+    const D = Math.min(MAX_DISTANCE_KM * 1000, Math.max(distanceKm * 1000, apart));
+    // Half the gap plus room at both ends, plus a share of any extra distance asked for (a
+    // longer way round reaches out sideways), but never a bigger map than the longest loop's.
+    const needed = Math.min(radiusFor(MAX_DISTANCE_KM * 1000) * 2, Math.max(1500, apart / 2 + 600 + 0.2 * (D - apart)));
+    const cLat = (lat + toLat) / 2;
+    const cLon = (lon + toLon) / 2;
+    const area = await this.loadArea(cLat, cLon, needed, onStatus);
+    const g = area.graph;
+    g.turnWeight = turnWeight;
+    const routes = await this.design(g, prefs, terrain, () => {
+      onStatus('Designing the way there…');
+      return planOneWay(g, { startXY: area.proj.toXY(lat, lon), destXY: area.proj.toXY(toLat, toLon), distance: D, prefs, terrain, destName });
+    });
+    routes.country = routes.some((r) => r.stats?.countryFrac > 0.2);
+    routes.village = !!g.village;
+    routes.partialMap = area.failedTiles > 0;
+    routes.stopsUnknown = !area.stopsKnown;
+    routes.places = [];
+    this.lastPlan = { lat, lon, distanceKm: D / 1000, prefs };
+    return routes;
+  }
+
+  // Runs one planning request with the preferences on the graph, in country mode when the
+  // paved network cannot carry it. Returns what `plan()` returned.
+  async design(g, prefs, terrain, plan) {
+    const design = () => {
+      applyPreferences(g, { prefs, terrain });
+      return plan();
     };
     // Made surfaces first. In a village or open country the paved network may not reach the
     // start or carry the distance: then the unpaved lanes and dirt tracks are switched on
@@ -222,14 +272,6 @@ export class RouteEngine {
     } finally {
       g.allowCountry = false;
     }
-    routes.country = routes.some((r) => r.stats?.countryFrac > 0.2);
-    routes.village = !!g.village;
-    routes.partialMap = area.failedTiles > 0;
-    routes.stopsUnknown = !area.stopsKnown;
-    // Running spots nearby (tracks, big parks), with how far they are from the start.
-    onStatus('Looking for running tracks and parks…');
-    routes.places = await this.spotsNear(lat, lon, Math.max(4000, 0.6 * D));
-    this.lastPlan = { lat, lon, distanceKm: Math.min(MAX_DISTANCE_KM, distanceKm), prefs };
     return routes;
   }
 

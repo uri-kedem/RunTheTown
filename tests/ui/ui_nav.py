@@ -52,6 +52,11 @@ def route(r):
               'Central Park':[{'name':'Central Park','class':'leisure','type':'park','osm_type':'relation','osm_id':2,'extratags':{'wikipedia':'en:Central Park (Testville)'}}]}
         return r.fulfill(body=json.dumps(hits.get(q,[])), content_type='application/json')
     if 'nominatim.openstreetmap.org/reverse' in u: return r.fulfill(body=json.dumps({'error':'none'}), content_type='application/json')
+    if 'photon.komoot.io' in u:
+        # The search box (Photon): the synthetic stadium answers to its name, nothing else is known.
+        q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query).get('q',[''])[0]; st=SCAN['stadium'][0]
+        feats=[{'type':'Feature','geometry':{'type':'Point','coordinates':[float(st['lon']),float(st['lat'])]},'properties':{'name':'Central Stadium','osm_key':'leisure','osm_value':'stadium','city':'Testville','country':'Testland'}}] if 'stadium' in q.lower() else []
+        return r.fulfill(body=json.dumps({'features':feats}), content_type='application/json')
     if 'wikidata.org' in u: return r.fulfill(body=json.dumps({'entities':{}}), content_type='application/json')
     if 'en.wikipedia.org/w/api.php' in u and 'list=geosearch' in u:
         q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query); lat,lon=[float(x) for x in q['gscoord'][0].split('|')]
@@ -157,7 +162,30 @@ with sync_playwright() as p:
     pg.click('#routeAskClose'); print('pop-up closed:', pg.is_hidden('#routeAsk'))
     pg.click('#backBtn'); pg.wait_for_timeout(300)
     print('back to prefs, spots still listed:', pg.eval_on_selector_all('#spotsPrefs .place', 'e=>e.length'), 'pins:', pg.eval_on_selector_all('.place-pin','e=>e.length'))
+    # ---- One way: from the start to a place chosen in the sheet; the finish is searched like the start ----
+    pg.click('#runStyle [data-style="oneway"]'); pg.wait_for_timeout(100)
+    print('ONE WAY: finish field shown:', pg.is_visible('#destInput'), '| distance shown:', pg.is_visible('#distanceInput'), '| go disabled without a finish:', pg.is_disabled('#goBtn'), '| spots hidden:', pg.is_hidden('#spotsPrefs'))
+    pg.fill('#destInput', 'Central Stadium'); pg.wait_for_selector('#destResults li[role=option]', timeout=5000)
+    print('finish suggestions:', pg.eval_on_selector_all('#destResults li[role=option] .main', 'e=>e.map(x=>x.textContent)'))
+    pg.click('#destResults li[role=option]'); pg.wait_for_timeout(300)
+    print('finish set:', pg.text_content('#destLine'), '| pin on map:', pg.eval_on_selector_all('.dest-pin','e=>e.length'), '| go enabled:', not pg.is_disabled('#goBtn'))
+    pg.fill('#distanceInput', '5')
+    pg.click('#goBtn'); pg.wait_for_selector('#resultsView:not([hidden]) .card', timeout=30000); pg.wait_for_timeout(400)
+    ow=pg.eval_on_selector_all('.card','els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))')
+    for c in ow: print('ONE-WAY CARD:', c)
+    print('one-way cards:', len(ow), '| all one way:', all('One way' in c for c in ow), '| sub:', pg.text_content('#resultsSub'), '| finish label on map:', pg.eval_on_selector_all('.map-label','e=>e.filter(x=>x.textContent==="Finish").length'), '| ends at the stadium:', pg.evaluate("(() => { const r = window.__rtt.state.routes[0]; const p = r.latlngs[r.latlngs.length-1]; return Math.round(Math.hypot((p[0]-%s)*110574,(p[1]-%s)*94300)) + ' m from the stadium label (the street nearest it)'; })()" % (SCAN['stadium'][0]['lat'], SCAN['stadium'][0]['lon'])))
+    pg.screenshot(path=f'{S}/nav-0e-oneway.png')
+    # The demo run follows it like any route and ends at the finish, said as the destination.
+    pg.click('.card:nth-child(1)'); pg.wait_for_timeout(200); pg.click('.card:nth-child(1)'); pg.wait_for_timeout(200)
+    print('one-way pop-up:', pg.text_content('#routeAskName'), '|', pg.eval_on_selector_all('#routeAskFacts li','e=>e.map(x=>x.textContent)'))
+    pg.evaluate('window.__spoken.length=0')
+    pg.click('#demoRunBtn'); pg.wait_for_timeout(300); pg.click('#navDemo')  # x6 -> x15
+    pg.wait_for_function("!document.getElementById('navFinish').hidden", timeout=90000)
+    print('one-way demo done:', pg.text_content('#finishTitle'), '| route type:', pg.evaluate('window.__rtt.nav.active.route.type'), '| said at the end:', [x['text'][:50] for x in spoken(pg) if 'Route complete' in x['text']], '| never "back at the start":', not any('back at the start' in s['text'] for s in spoken(pg)))
+    pg.screenshot(path=f'{S}/nav-0f-oneway-finish.png')
+    pg.click('#finishDone'); pg.wait_for_timeout(300); pg.click('#backBtn'); pg.wait_for_timeout(200)
     pg.click('#runStyle [data-style="streets"]'); pg.wait_for_timeout(100)
+    print('streets again: finish field hidden:', pg.is_hidden('#destInput'), '| finish pin gone:', pg.eval_on_selector_all('.dest-pin','e=>e.length')==0, '| finish kept:', pg.evaluate('window.__rtt.state.dest?.label'))
     pg.fill('#distanceInput','8')
     vis = lambda: pg.eval_on_selector_all('#landscape [data-pref]', 'els=>els.filter(e=>getComputedStyle(e).display!=="none").map(e=>e.dataset.pref+(e.getAttribute("aria-pressed")==="true"?"*":""))')
     print('RUN MODE chips:', vis(), '| label:', pg.text_content('#landscapeLabel'), '| mode attr:', pg.evaluate('document.body.dataset.mode'))

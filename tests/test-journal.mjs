@@ -58,5 +58,13 @@ check(run.onPlan > 0.95, 'the run record carries it');
   check(usualPace(many) === 309, `median of the last ten runs (${usualPace(many)})`);
 }
 
+// A one-way run remembers where it ended, so "Run this route again" can restore the finish.
+{
+  const line = [[32.08, 34.78], [32.08, 34.79]];
+  const ow = makeRun({ route: { name: 'Best way to the Museum', type: 'oneway', distance: 940, latlngs: line, dest: [32.08, 34.79], destName: 'City Museum' }, track: line, odometer: 950, elapsed: 300000, startedAt: '2026-11-14T06:00:00.000Z', start: { lat: 32.08, lon: 34.78, label: 'Hotel' }, settings: { units: 'km' } });
+  check(ow.type === 'oneway' && ow.dest?.lat === 32.08 && ow.dest?.lon === 34.79 && ow.dest?.label === 'City Museum', 'a one-way run keeps its finish and its name');
+  check(makeRun({ route: { name: 'Loop', type: 'loop', distance: 1000, latlngs: line }, track: line, odometer: 1000, elapsed: 300000, startedAt: '2026-11-14T06:00:00.000Z', start: null, settings: null }).dest === null, 'a loop has no finish');
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll journal tests passed');
 process.exit(failures ? 1 : 0);

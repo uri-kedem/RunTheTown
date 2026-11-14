@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=5d3dda36" />
+    <link rel="manifest" href="manifest.webmanifest?v=c048f6a3" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=5d3dda36" />
+    <link rel="stylesheet" href="css/style.css?v=c048f6a3" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="5d3dda36">5d3dda36</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="c048f6a3">c048f6a3</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -316,7 +316,7 @@
       <div id="prefsView">
         <div class="start-line" id="startLine">Tap the map or search to set your start point</div>
 
-        <!-- Running mode: streets (loops from here) or laps (a track, stadium or park loop nearby) -->
+        <!-- Running mode: streets (loops from here), laps (a track, stadium or park loop nearby) or one way (to a place) -->
         <div class="field" id="runStyleField">
           <div class="field-head"><label>How do you want to run?</label></div>
           <div class="run-styles" id="runStyle" role="radiogroup">
@@ -326,7 +326,25 @@
             <button type="button" data-style="laps" role="radio" aria-checked="false">
               <b>Run in laps</b><small>A track, stadium or park loop nearby, with the way there and back</small>
             </button>
+            <button type="button" data-style="oneway" role="radio" aria-checked="false">
+              <b>Run one way</b><small>From here to a place you choose: a landmark, the beach, your hotel</small>
+            </button>
           </div>
+        </div>
+
+        <!-- One way: where the run ends. The same search as the start's, inside the sheet. -->
+        <div class="field oneway-only" id="destField">
+          <div class="field-head"><label for="destInput">Where to?</label><span class="hint">the distance is only a wish</span></div>
+          <div class="search in-sheet" id="destSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input id="destInput" type="text" placeholder="Search a place, or tap the map" aria-label="Search for the finish"
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destResults" spellcheck="false" autocomplete="off" />
+            <button type="button" id="destClear" class="clear-btn" aria-label="Clear the finish" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+          <ul class="search-results in-sheet" id="destResults" role="listbox" hidden></ul>
+          <div class="start-line dest-line" id="destLine">Tap the map to drop the finish pin, or search above</div>
         </div>
 
         <div class="spots-hint" id="spotsHint" hidden></div>
@@ -531,6 +549,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=5d3dda36"></script>
+    <script src="js/bundle.js?v=c048f6a3"></script>
   </body>
 </html>

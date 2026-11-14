@@ -42,7 +42,8 @@ const state = {
   selected: 0,
   spots: [], // running spots around the start, found before any search
   mode: 'run', // 'run' | 'tour'
-  runStyle: 'streets', // Running mode: 'streets' (loops from here) | 'laps' (a track, stadium or park loop nearby)
+  runStyle: 'streets', // Running mode: 'streets' (loops from here) | 'laps' (a track, stadium or park loop nearby) | 'oneway' (from here to a place)
+  dest: null, // { lat, lon, label }: where a one-way run ends
 };
 
 const engine = new RouteEngine();
@@ -68,6 +69,8 @@ function mapPadding() {
 
 map.on('click', (e) => {
   if (state.routes.length) return; // while viewing results, taps select routes instead
+  // Planning a one-way run with the start known: a tap on the map drops the finish pin.
+  if (state.runStyle === 'oneway' && state.start) return setDest(e.latlng.lat, e.latlng.lng, 'Dropped pin');
   setStart(e.latlng.lat, e.latlng.lng, 'Dropped pin');
 });
 
@@ -158,6 +161,51 @@ function setStart(lat, lon, label, { pan = true } = {}) {
   previewSpots();
 }
 
+// ---------- One way: the finish ----------
+// The finish of a one-way run: a chequered pin, draggable like the start's. It is shown only
+// while the One way style is chosen; the place is kept when the runner looks at another style.
+let destMarker = null;
+function setDest(lat, lon, label, { pan = true } = {}) {
+  state.dest = { lat, lon, label };
+  if (!destMarker) {
+    destMarker = glMarker([lat, lon], {
+      draggable: true,
+      icon: glDivIcon({ className: '', html: '<div class="dest-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      zIndexOffset: 1000,
+    });
+    destMarker.on('dragend', () => {
+      const p = destMarker.getLatLng();
+      if (nav.active || busy) { destMarker.setLatLng([state.dest.lat, state.dest.lon]); return; } // not while running or planning
+      showPrefs();
+      setDest(p.lat, p.lng, 'Dropped pin', { pan: false });
+    });
+  } else {
+    destMarker.setLatLng([lat, lon]);
+  }
+  showDestMarker(state.runStyle === 'oneway');
+  if (pan && state.start) map.fitBounds(glBounds([[state.start.lat, state.start.lon], [lat, lon]]), mapPadding());
+  else if (pan) map.setView([lat, lon], Math.max(map.getZoom(), 14));
+  $('destLine').innerHTML = `Finishing at <b>${escapeHtml(label)}</b>`;
+  $('destInput').value = label === 'Dropped pin' ? '' : label; // a pin dropped by hand is not a searched place
+  $('destClear').hidden = !$('destInput').value;
+  updateGoButton();
+}
+function clearDest() {
+  state.dest = null;
+  showDestMarker(false);
+  $('destLine').textContent = 'Tap the map to drop the finish pin, or search above';
+  updateGoButton();
+}
+let destShown = false;
+function showDestMarker(show) {
+  if (!destMarker) return;
+  const want = show && !!state.dest;
+  if (want === destShown) return;
+  destShown = want;
+  if (want) destMarker.addTo(map);
+  else destMarker.remove();
+}
+
 // Tracks, stadiums and parks around the start, shown before any route is asked
 // for. The map it downloads is the one the route search will use anyway.
 let previewToken = 0;
@@ -194,7 +242,7 @@ function previewSpots() {
 }
 
 function updateGoButton() {
-  $('goBtn').disabled = busy || !state.start || !state.distanceValid;
+  $('goBtn').disabled = busy || !state.start || !state.distanceValid || (state.runStyle === 'oneway' && !state.dest);
 }
 
 // ---------- Location ----------
@@ -219,10 +267,6 @@ $('locateBtn').addEventListener('click', () => {
 });
 
 // ---------- Search with autocomplete (Photon, built on OpenStreetMap) ----------
-const searchInput = $('searchInput');
-const list = $('searchResults');
-const ac = { items: [], active: -1, timer: null, controller: null, query: '' };
-
 const ICONS = {
   pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
   hotel: '<svg viewBox="0 0 24 24"><path d="M3 20V6M3 14h18v6M21 14v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="10.5" r="1.8"/></svg>',
@@ -264,138 +308,164 @@ function highlight(text, query) {
     .join('');
 }
 
-async function fetchSuggestions(q) {
-  ac.controller?.abort();
-  ac.controller = new AbortController();
-  const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
-  const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`);
-  try {
-    const res = await fetch(url, { signal: ac.controller.signal });
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    if (searchInput.value.trim() !== q) return; // user kept typing
-    // Long streets come back once per OSM segment: keep one of each.
-    const seen = new Set();
-    const items = (data.features || []).map(photonToItem).filter((it) => {
-      const key = `${it.main}|${it.secondary}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+// One search box with its list of suggestions: the start point in the top bar, and the
+// finish of a one-way run inside the sheet. `onPick(item)` gets the chosen place (or
+// { isLocation: true } for "Your location", offered first in an empty box when
+// `offerLocation` is set); `onClear` runs when the box is emptied with its button.
+function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLocation = false }) {
+  const ac = { items: [], active: -1, timer: null, controller: null, query: '' };
+  const prefix = input.id;
+
+  async function fetchSuggestions(q) {
+    ac.controller?.abort();
+    ac.controller = new AbortController();
+    const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
+    const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`);
+    try {
+      const res = await fetch(url, { signal: ac.controller.signal });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      if (input.value.trim() !== q) return; // user kept typing
+      // Long streets come back once per OSM segment: keep one of each.
+      const seen = new Set();
+      const items = (data.features || []).map(photonToItem).filter((it) => {
+        const key = `${it.main}|${it.secondary}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      renderSuggestions(items.slice(0, 6), q);
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      renderSuggestions([], q, "Suggestions unavailable. Press Enter to search.");
+    }
+  }
+
+  function renderSuggestions(items, q, emptyText = 'No matching places') {
+    ac.items = items;
+    ac.query = q;
+    ac.active = -1;
+    list.innerHTML = '';
+    if (!q) {
+      // Empty box: offer the runner's own location first, like a maps app (for the start only).
+      ac.items = offerLocation ? [{ main: 'Your location', secondary: 'Use GPS', icon: ICONS.loc, isLocation: true }] : [];
+      if (!ac.items.length) return closeList();
+    }
+    if (!ac.items.length) {
+      list.innerHTML = `<li class="muted">${escapeHtml(emptyText)}</li>`;
+    }
+    ac.items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.id = `${prefix}-sugg-${i}`;
+      li.setAttribute('role', 'option');
+      li.innerHTML = `<span class="ico${it.isLocation ? ' loc' : ''}">${it.icon}</span>
+        <span class="txt"><span class="main">${it.isLocation ? escapeHtml(it.main) : highlight(it.main, q)}</span>
+        <small>${escapeHtml(it.secondary || '')}</small></span>`;
+      li.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the box
+      li.addEventListener('click', () => choose(i));
+      li.addEventListener('mousemove', () => setActive(i));
+      list.appendChild(li);
     });
-    renderSuggestions(items.slice(0, 6), q);
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    renderSuggestions([], q, "Suggestions unavailable. Press Enter to search.");
+    if (q && items.length) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
+    openList();
   }
-}
 
-function renderSuggestions(items, q, emptyText = 'No matching places') {
-  ac.items = items;
-  ac.query = q;
-  ac.active = -1;
-  list.innerHTML = '';
-  if (!q) {
-    // Empty box: offer the runner's own location first, like a maps app.
-    ac.items = [{ main: 'Your location', secondary: 'Use GPS', icon: ICONS.loc, isLocation: true }];
+  function openList() {
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
   }
-  if (!ac.items.length) {
-    list.innerHTML = `<li class="muted">${escapeHtml(emptyText)}</li>`;
+  function closeList() {
+    list.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
   }
-  ac.items.forEach((it, i) => {
-    const li = document.createElement('li');
-    li.id = `sugg-${i}`;
-    li.setAttribute('role', 'option');
-    li.innerHTML = `<span class="ico${it.isLocation ? ' loc' : ''}">${it.icon}</span>
-      <span class="txt"><span class="main">${it.isLocation ? escapeHtml(it.main) : highlight(it.main, q)}</span>
-      <small>${escapeHtml(it.secondary || '')}</small></span>`;
-    li.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the box
-    li.addEventListener('click', () => chooseSuggestion(i));
-    li.addEventListener('mousemove', () => setActive(i));
-    list.appendChild(li);
-  });
-  if (q && items.length) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
-  openList();
-}
-
-function openList() {
-  list.hidden = false;
-  searchInput.setAttribute('aria-expanded', 'true');
-}
-function closeList() {
-  list.hidden = true;
-  searchInput.setAttribute('aria-expanded', 'false');
-  searchInput.removeAttribute('aria-activedescendant');
-}
-function setActive(i) {
-  ac.active = i;
-  [...list.querySelectorAll('li[role=option]')].forEach((li, k) => li.classList.toggle('active', k === i));
-  if (i >= 0) searchInput.setAttribute('aria-activedescendant', `sugg-${i}`);
-}
-
-function chooseSuggestion(i) {
-  const it = ac.items[i];
-  if (!it) return;
-  closeList();
-  searchInput.blur();
-  showPrefs();
-  if (it.isLocation) {
-    searchInput.value = '';
-    $('clearBtn').hidden = true;
-    return locate();
+  function setActive(i) {
+    ac.active = i;
+    [...list.querySelectorAll('li[role=option]')].forEach((li, k) => li.classList.toggle('active', k === i));
+    if (i >= 0) input.setAttribute('aria-activedescendant', `${prefix}-sugg-${i}`);
   }
-  searchInput.value = it.main;
-  $('clearBtn').hidden = false;
-  setStart(it.lat, it.lon, it.main);
-}
 
-searchInput.addEventListener('input', () => {
-  const q = searchInput.value.trim();
-  $('clearBtn').hidden = !searchInput.value;
-  clearTimeout(ac.timer);
-  if (!q) return renderSuggestions([], '');
-  if (q.length < 2) return;
-  ac.timer = setTimeout(() => fetchSuggestions(q), 220);
-});
-searchInput.addEventListener('focus', () => {
-  if (!searchInput.value.trim()) renderSuggestions([], '');
-  else if (ac.items.length) openList();
-});
-searchInput.addEventListener('blur', () => setTimeout(closeList, 120));
-searchInput.addEventListener('keydown', (e) => {
-  const n = ac.items.length;
-  if (e.key === 'ArrowDown' && n) {
-    e.preventDefault();
-    if (list.hidden) openList();
-    setActive((ac.active + 1) % n);
-  } else if (e.key === 'ArrowUp' && n) {
-    e.preventDefault();
-    setActive((ac.active - 1 + n) % n);
-  } else if (e.key === 'Escape') {
+  function choose(i) {
+    const it = ac.items[i];
+    if (!it) return;
     closeList();
+    input.blur();
+    if (it.isLocation) {
+      input.value = '';
+      clearBtn.hidden = true;
+      return onPick({ isLocation: true });
+    }
+    input.value = it.main;
+    clearBtn.hidden = false;
+    onPick(it);
   }
-});
-$('searchForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (ac.active >= 0) return chooseSuggestion(ac.active);
-  const q = searchInput.value.trim();
-  if (!q) return;
-  if (ac.items.length && ac.query === q && !ac.items[0].isLocation) return chooseSuggestion(0);
-  // Fallback: a single geocode with Nominatim.
-  try {
-    const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`));
-    const [hit] = await res.json();
-    if (!hit) return toast('No places found for that search.');
-    ac.items = [{ main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon }];
-    chooseSuggestion(0);
-  } catch {
-    toast('Search is unavailable right now. Tap the map to set your start.');
+
+  // Enter: the highlighted suggestion, else the first one, else one plain geocode (Nominatim).
+  async function submit() {
+    if (ac.active >= 0) return choose(ac.active);
+    const q = input.value.trim();
+    if (!q) return;
+    if (ac.items.length && ac.query === q && !ac.items[0].isLocation) return choose(0);
+    try {
+      const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`));
+      const [hit] = await res.json();
+      if (!hit) return toast('No places found for that search.');
+      ac.items = [{ main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon }];
+      choose(0);
+    } catch {
+      toast('Search is unavailable right now. Tap the map instead.');
+    }
   }
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearBtn.hidden = !input.value;
+    clearTimeout(ac.timer);
+    if (!q) return renderSuggestions([], '');
+    if (q.length < 2) return;
+    ac.timer = setTimeout(() => fetchSuggestions(q), 220);
+  });
+  input.addEventListener('focus', () => {
+    if (!input.value.trim()) renderSuggestions([], '');
+    else if (ac.items.length) openList();
+  });
+  input.addEventListener('blur', () => setTimeout(closeList, 120));
+  input.addEventListener('keydown', (e) => {
+    const n = ac.items.length;
+    if (e.key === 'ArrowDown' && n) {
+      e.preventDefault();
+      if (list.hidden) openList();
+      setActive((ac.active + 1) % n);
+    } else if (e.key === 'ArrowUp' && n) {
+      e.preventDefault();
+      setActive((ac.active - 1 + n) % n);
+    } else if (e.key === 'Escape') {
+      closeList();
+    } else if (e.key === 'Enter' && !input.form) {
+      e.preventDefault(); // a box outside a form (the finish) submits from here
+      submit();
+    }
+  });
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    clearBtn.hidden = true;
+    input.focus();
+    renderSuggestions([], '');
+    onClear?.();
+  });
+  return { submit, close: closeList };
+}
+
+const startSearch = attachSearch({
+  input: $('searchInput'), list: $('searchResults'), clearBtn: $('clearBtn'), offerLocation: true,
+  onPick: (it) => { showPrefs(); if (it.isLocation) return locate(); setStart(it.lat, it.lon, it.main); },
 });
-$('clearBtn').addEventListener('click', () => {
-  searchInput.value = '';
-  $('clearBtn').hidden = true;
-  searchInput.focus();
-  renderSuggestions([], '');
+$('searchForm').addEventListener('submit', (e) => { e.preventDefault(); startSearch.submit(); });
+// The finish of a one-way run, searched from inside the sheet.
+attachSearch({
+  input: $('destInput'), list: $('destResults'), clearBtn: $('destClear'),
+  onPick: (it) => setDest(it.lat, it.lon, it.main),
+  onClear: clearDest,
 });
 
 // ---------- Preferences ----------
@@ -501,18 +571,23 @@ $('terrain').addEventListener('click', (e) => {
 $('goBtn').addEventListener('click', async () => {
   readDistance();
   if (!state.start || busy || !state.distanceValid) return;
+  if (state.runStyle === 'oneway' && !state.dest) return toast('Pick where the run should end: search a place or tap the map.');
   busy = true;
   $('goBtn').disabled = true;
   status('Getting ready…');
   try {
-    const routes = await engine.plan({
+    const ask = {
       lat: state.start.lat,
       lon: state.start.lon,
       distanceKm: state.distanceKm,
       prefs: { ...state.prefs },
       terrain: state.terrain,
       onStatus: status,
-    });
+    };
+    // One way: the way from the start to the finish; otherwise loops from the start.
+    const routes = state.runStyle === 'oneway'
+      ? await engine.planOneWay({ ...ask, toLat: state.dest.lat, toLon: state.dest.lon, destName: state.dest.label })
+      : await engine.plan(ask);
     state.routes = routes;
     showRoutes(routes);
     if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
@@ -533,17 +608,18 @@ function showRoutes(routes, { keep = false } = {}) {
   if (!keep) lastTapped = -1;
   $('prefsView').hidden = true;
   $('resultsView').hidden = false;
-  const bits = [`${U.num(state.distanceKm * 1000)} ${U.unit}`];
+  const oneWay = routes[0]?.type === 'oneway';
+  const bits = [oneWay ? 'One way' : `${U.num(state.distanceKm * 1000)} ${U.unit}`];
   const p = state.prefs;
   if (p.green) bits.push('parks');
   if (p.water) bits.push('waterfront');
   if (p.quiet) bits.push('quiet');
   if (p.sights) bits.push('sightseeing');
   if (state.terrain !== 'any') bits.push(state.terrain);
-  $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}`;
+  $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}${oneWay && state.dest ? ` to ${state.dest.label}` : ''}`;
   // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
   const note = $('resultsNote');
-  if (note) note.textContent = (routes.length < 3 && routes.every((r) => r.stats?.promFrac >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
+  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => r.stats?.promFrac >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';
@@ -555,7 +631,7 @@ function showRoutes(routes, { keep = false } = {}) {
     // The card: name, distance, then the facts (climb & descent, traffic lights & road crossings,
     // landmarks on a tour) and the elevation profile.
     card.innerHTML = `
-      <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : ''}</div>
+      <div class="card-top"><span class="swatch"></span><span class="card-name">${escapeHtml(r.name)}</span>${r.type === 'outback' ? '<span class="badge">Out &amp; back</span>' : r.type === 'laps' ? '<span class="badge laps">Laps</span>' : r.type === 'oneway' ? '<span class="badge oneway">One way</span>' : ''}</div>
       <div class="card-dist">${U.num(r.distance, 2)}<small>${U.unit}</small></div>
       <ul>${r.highlights.map((h) => `<li>${escapeHtml(inUnits(h))}</li>`).join('')}</ul>
       ${r.hasElevation ? profileSvg(r.profile) : ''}`;
@@ -771,6 +847,18 @@ function selectRoute(i, { fit = false } = {}) {
 function drawKmMarkers(route, color, layer = kmLayer) {
   layer.clearLayers();
   drawSights(route, layer);
+  // A one-way run ends away from the start: its finish is labelled.
+  if (route.type === 'oneway' && route.dest) {
+    glMarker(route.dest, {
+      interactive: false,
+      icon: glDivIcon({
+        className: '',
+        html: `<div class="map-label" style="background:#fff;color:${color};font:800 11px Inter,sans-serif;padding:3px 7px;border-radius:8px;border:2px solid ${color};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25)">Finish</div>`,
+        iconSize: [52, 22],
+        iconAnchor: [26, 30],
+      }),
+    }).addTo(layer);
+  }
   if (route.turnaround) {
     glMarker(route.turnaround, {
       interactive: false,
@@ -1183,7 +1271,7 @@ $('reportSend').addEventListener('click', () => {
   window.location.href = `mailto:${REPORT_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
 });
 
-// Running mode: run the streets (loops from here) or run in laps (a spot nearby).
+// Running mode: run the streets (loops from here), run in laps (a spot nearby) or run one way (to a place).
 function setRunStyle(style) {
   state.runStyle = style;
   $('prefsView').dataset.style = style;
@@ -1192,6 +1280,8 @@ function setRunStyle(style) {
     b.classList.toggle('on', on);
     b.setAttribute('aria-checked', String(on));
   }
+  showDestMarker(style === 'oneway');
+  updateGoButton();
   if (style === 'laps' && state.start && !state.spots.length && !$('spotsEmpty').hidden) toast('No running spots were found near this start.');
 }
 $('runStyle').addEventListener('click', (e) => {
@@ -2020,7 +2110,7 @@ async function openRun(id) {
   $('runPicBtn').hidden = !r.picture;
   if (r.picture) pic.src = r.picture;
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
-  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
+  const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.dest ? `One way to ${r.dest.label || 'the finish'}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
     r.onPlan != null && r.onPlan < 0.9 ? `${Math.round(r.onPlan * 100)}% of the run on the planned line; the picture shows where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
   $('runFacts').innerHTML = facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   $('runs').hidden = true;
@@ -2042,6 +2132,13 @@ $('runAgain').addEventListener('click', async () => {
   setDistanceKm(km);
   highlightNav(state.mode);
   if (r.type === 'laps' && r.place) { setRunStyle('laps'); toast(`Pick ${r.place.name} in the list to plan the laps again.`); return; }
+  // A one-way run: its finish comes back too, and the way there is planned afresh.
+  if (r.type === 'oneway' && r.dest) {
+    setRunStyle('oneway');
+    setDest(r.dest.lat, r.dest.lon, r.dest.label || 'Saved finish');
+    $('goBtn').click();
+    return;
+  }
   setRunStyle('streets');
   $('goBtn').click();
 });
@@ -2102,7 +2199,7 @@ if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
+window.__rtt = { state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
 if (!state.linkStart) locate({ quiet: true });
