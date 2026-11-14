@@ -96,8 +96,8 @@ Reasoning, if Apple asks: location is processed on the device to plan and guide 
 request map tiles and street data for the surrounding area from public map services
 (OpenStreetMap tile servers, Overpass API, Microsoft Planetary Computer / AWS Terrain tiles for
 elevation). Those requests carry coordinates of the area being planned, like any map app, and
-are not linked to an identity; the developer runs no server and receives nothing. Name, email
-and photo entered in the profile stay in the app's local storage on the phone. The run
+are not linked to an identity; the developer runs no server and receives nothing. Name and
+photo entered in the profile stay in the app's local storage on the phone. The run
 journal is stored on the phone only. No analytics SDK, no advertising SDK, no crash reporter,
 no account.
 

@@ -1,6 +1,6 @@
 // The runner and their runs, kept on the phone.
 //
-// Profile: name, e-mail and a small photo in localStorage ('rtt-profile'). Runs: one record
+// Profile: name and a small photo in localStorage ('rtt-profile'). Runs: one record
 // per completed run in IndexedDB (cache.js `runStore`): when, how far, how long, the pace, the
 // route's name and type, the planned line, the GPS track actually run, and a picture of the
 // route over the map (drawn here from the map tiles, so the journal needs no network to show
@@ -15,7 +15,7 @@ const PROFILE_KEY = 'rtt-profile';
 export function loadProfile(storage = globalThis.localStorage) {
   try {
     const p = JSON.parse(storage?.getItem(PROFILE_KEY) || 'null');
-    if (p && typeof p === 'object') return { name: String(p.name || ''), email: String(p.email || ''), photo: typeof p.photo === 'string' ? p.photo : null, photoFull: typeof p.photoFull === 'string' ? p.photoFull : null, since: p.since || null, skipped: !!p.skipped };
+    if (p && typeof p === 'object') return { name: String(p.name || ''), photo: typeof p.photo === 'string' ? p.photo : null, photoFull: typeof p.photoFull === 'string' ? p.photoFull : null, since: p.since || null, skipped: !!p.skipped };
   } catch {
     /* defaults */
   }
@@ -24,7 +24,7 @@ export function loadProfile(storage = globalThis.localStorage) {
 
 export function saveProfile(profile, storage = globalThis.localStorage) {
   // photo: the avatar (a 320 px circle); photoFull: the same crop at 800 px for viewing.
-  const slim = { name: String(profile.name || '').trim().slice(0, 80), email: String(profile.email || '').trim().slice(0, 120), photo: profile.photo || null, photoFull: profile.photoFull || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
+  const slim = { name: String(profile.name || '').trim().slice(0, 80), photo: profile.photo || null, photoFull: profile.photoFull || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
   try {
     storage?.setItem(PROFILE_KEY, JSON.stringify(slim));
   } catch {
@@ -34,7 +34,6 @@ export function saveProfile(profile, storage = globalThis.localStorage) {
   return slim;
 }
 
-export const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 
 // A photo from the camera roll, shrunk to a small square JPEG data URL (browser only).
 export function shrinkPhoto(file, { size = 160, quality = 0.82 } = {}) {
@@ -106,6 +105,37 @@ export function makeRun({ route, track, odometer, elapsed, startedAt, start, set
     onPlan: matchShare(simplifyTrack(track), route?.latlngs || []), // share of the track on the planned line (null without a track)
     picture: null, // a JPEG data URL, added by drawRunPicture
   };
+}
+
+/**
+ * The run as a GPX 1.1 file: one track of the fixes actually run (the planned line when
+ * there is no track). A fix is [lat, lon, secondsSinceStart]; fixes recorded before the
+ * time was kept get their time from the distance covered at the run's average pace, so
+ * every point carries a timestamp (Strava and Garmin refuse tracks without them).
+ */
+export function runGpx(run) {
+  const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
+  const startMs = Date.parse(run.time) || Date.now();
+  const esc = (s) => String(s || '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+  // Cumulative distance along the points, for the fixes without a time of their own.
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  const total = cum[cum.length - 1] || 1;
+  const elapsedS = (run.elapsed || 0) / 1000;
+  const when = (p, i) => new Date(startMs + 1000 * (p[2] != null ? p[2] : (elapsedS * cum[i]) / total)).toISOString();
+  const trk = pts.map((p, i) => `   <trkpt lat="${(+p[0]).toFixed(6)}" lon="${(+p[1]).toFixed(6)}"><time>${when(p, i)}</time></trkpt>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RunTheTown" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata><name>${esc(run.name)}</name><time>${new Date(startMs).toISOString()}</time></metadata>
+ <trk>
+  <name>${esc(run.name)}</name>
+  <type>running</type>
+  <trkseg>
+${trk}
+  </trkseg>
+ </trk>
+</gpx>
+`;
 }
 
 // How much of the track ran on the planned line: the share of track points within `tol` m of

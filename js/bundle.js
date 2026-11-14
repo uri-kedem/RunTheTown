@@ -4464,7 +4464,11 @@ function radiusFor(distanceM) {
 }
 
 class RouteEngine {
-  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050 } = {}) {
+  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050, cityScan = false } = {}) {
+    // The city-wide stadium scan asks Nominatim several times per start. Its usage policy
+    // forbids that from an app on many phones, so the scan is off until the queries go
+    // through a server of our own; the loaded map still provides the tracks it covers.
+    this.cityScan = cityScan;
     this.area = null;
     this.scanPauseMs = scanPauseMs;
     this.fetchImpl = fetchImpl;
@@ -4657,6 +4661,7 @@ class RouteEngine {
 
   // Stadiums and athletics tracks within ~8 km, from one quick scan (no map download). Cached per start.
   scanSpots(lat, lon) {
+    if (!this.cityScan) return Promise.resolve([]);
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     this.scanMemo ||= new Map();
     if (!this.scanMemo.has(key)) {
@@ -5607,7 +5612,7 @@ function houseVoices(voices) {
 // ---- journal.js ----
 // The runner and their runs, kept on the phone.
 //
-// Profile: name, e-mail and a small photo in localStorage ('rtt-profile'). Runs: one record
+// Profile: name and a small photo in localStorage ('rtt-profile'). Runs: one record
 // per completed run in IndexedDB (cache.js `runStore`): when, how far, how long, the pace, the
 // route's name and type, the planned line, the GPS track actually run, and a picture of the
 // route over the map (drawn here from the map tiles, so the journal needs no network to show
@@ -5622,7 +5627,7 @@ const PROFILE_KEY = 'rtt-profile';
 function loadProfile(storage = globalThis.localStorage) {
   try {
     const p = JSON.parse(storage?.getItem(PROFILE_KEY) || 'null');
-    if (p && typeof p === 'object') return { name: String(p.name || ''), email: String(p.email || ''), photo: typeof p.photo === 'string' ? p.photo : null, photoFull: typeof p.photoFull === 'string' ? p.photoFull : null, since: p.since || null, skipped: !!p.skipped };
+    if (p && typeof p === 'object') return { name: String(p.name || ''), photo: typeof p.photo === 'string' ? p.photo : null, photoFull: typeof p.photoFull === 'string' ? p.photoFull : null, since: p.since || null, skipped: !!p.skipped };
   } catch {
     /* defaults */
   }
@@ -5631,7 +5636,7 @@ function loadProfile(storage = globalThis.localStorage) {
 
 function saveProfile(profile, storage = globalThis.localStorage) {
   // photo: the avatar (a 320 px circle); photoFull: the same crop at 800 px for viewing.
-  const slim = { name: String(profile.name || '').trim().slice(0, 80), email: String(profile.email || '').trim().slice(0, 120), photo: profile.photo || null, photoFull: profile.photoFull || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
+  const slim = { name: String(profile.name || '').trim().slice(0, 80), photo: profile.photo || null, photoFull: profile.photoFull || null, since: profile.since || new Date().toISOString(), skipped: !!profile.skipped };
   try {
     storage?.setItem(PROFILE_KEY, JSON.stringify(slim));
   } catch {
@@ -5641,7 +5646,6 @@ function saveProfile(profile, storage = globalThis.localStorage) {
   return slim;
 }
 
-const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
 
 // A photo from the camera roll, shrunk to a small square JPEG data URL (browser only).
 function shrinkPhoto(file, { size = 160, quality = 0.82 } = {}) {
@@ -5713,6 +5717,37 @@ function makeRun({ route, track, odometer, elapsed, startedAt, start, settings, 
     onPlan: matchShare(simplifyTrack(track), route?.latlngs || []), // share of the track on the planned line (null without a track)
     picture: null, // a JPEG data URL, added by drawRunPicture
   };
+}
+
+/**
+ * The run as a GPX 1.1 file: one track of the fixes actually run (the planned line when
+ * there is no track). A fix is [lat, lon, secondsSinceStart]; fixes recorded before the
+ * time was kept get their time from the distance covered at the run's average pace, so
+ * every point carries a timestamp (Strava and Garmin refuse tracks without them).
+ */
+function runGpx(run) {
+  const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
+  const startMs = Date.parse(run.time) || Date.now();
+  const esc = (s) => String(s || '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+  // Cumulative distance along the points, for the fixes without a time of their own.
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  const total = cum[cum.length - 1] || 1;
+  const elapsedS = (run.elapsed || 0) / 1000;
+  const when = (p, i) => new Date(startMs + 1000 * (p[2] != null ? p[2] : (elapsedS * cum[i]) / total)).toISOString();
+  const trk = pts.map((p, i) => `   <trkpt lat="${(+p[0]).toFixed(6)}" lon="${(+p[1]).toFixed(6)}"><time>${when(p, i)}</time></trkpt>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RunTheTown" xmlns="http://www.topografix.com/GPX/1/1">
+ <metadata><name>${esc(run.name)}</name><time>${new Date(startMs).toISOString()}</time></metadata>
+ <trk>
+  <name>${esc(run.name)}</name>
+  <type>running</type>
+  <trkseg>
+${trk}
+  </trkseg>
+ </trk>
+</gpx>
+`;
 }
 
 // How much of the track ran on the planned line: the share of track points within `tol` m of
@@ -6277,8 +6312,8 @@ function previewSpots() {
     if (!state.routes.length) drawPlaces(spots, $('spotsPrefs'));
     hint.hidden = false;
     hint.textContent = spots.length
-      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} within ${U.lenShort(8000)} · tap one to plan your laps`
-      : final ? `No athletics tracks or stadiums within ${U.lenShort(8000)} of here` : 'Looking for running tracks and parks nearby…';
+      ? `${spots.length} running spot${spots.length > 1 ? 's' : ''} nearby · tap one to plan your laps`
+      : final ? 'No athletics tracks or stadiums near here' : 'Looking for running tracks and parks nearby…';
     $('spotsEmpty').hidden = !(final && !spots.length);
   };
   previewSpots.timer = setTimeout(async () => {
@@ -7305,7 +7340,7 @@ async function startRun({ demo }) {
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
-    if (!demo && (fix.accuracy == null || fix.accuracy <= 60)) n.track.push([fix.lat, fix.lon]);
+    if (!demo && (fix.accuracy == null || fix.accuracy <= 60)) n.track.push([fix.lat, fix.lon, Math.round((Date.now() - Date.parse(n.startedAt)) / 1000)]);
     const v = n.navigator.update(fix);
     render(v);
     if (v.offRoute && !demo) maybeReroute(n, fix);
@@ -7505,6 +7540,30 @@ async function shareRun(run) {
     setTimeout(() => a.remove(), 500);
   } catch (err) {
     if (err?.name !== 'AbortError') toast('Could not share this run.');
+  }
+}
+
+// The run as a GPX file (the track actually run, with timestamps), handed to the share
+// sheet on the phone so it can go to Strava, Garmin Connect or Files, downloaded in a browser.
+async function exportGpx(run) {
+  try {
+    const gpx = runGpx(run);
+    const fileName = `runthetown-${run.time.slice(0, 10)}.gpx`;
+    const bytes = new TextEncoder().encode(gpx);
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    const dataUrl = `data:application/gpx+xml;base64,${btoa(bin)}`;
+    if (isNative() && (await nativeShare({ dataUrl, fileName, text: run.name }).catch(() => false))) return;
+    const file = new File([bytes], fileName, { type: 'application/gpx+xml' });
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: run.name }); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/gpx+xml' }));
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('Could not export this run.');
   }
 }
 
@@ -7802,7 +7861,7 @@ async function refreshRailUser() {
     try { const t = await journal.totals(); $('railRuns').textContent = t.runs ? `${t.runs} run${t.runs > 1 ? 's' : ''} · ${U.len(t.distance)}` : 'No runs yet'; } catch { $('railRuns').textContent = ''; }
   } else {
     $('railName').textContent = 'Set up your profile';
-    $('railRuns').textContent = 'name, e-mail, photo';
+    $('railRuns').textContent = 'name, photo';
   }
 }
 let photoDraft = null; // { photo, photoFull } or null
@@ -7819,7 +7878,6 @@ function openProfile({ first = false } = {}) {
   $('profileTitle').textContent = first ? 'Welcome to RunTheTown' : 'Your profile';
   $('profileIntro').hidden = !first && !!profile?.name;
   $('profileName').value = profile?.name || '';
-  $('profileEmail').value = profile?.email || '';
   photoDraft = profile?.photo ? { photo: profile.photo, photoFull: profile.photoFull || profile.photo } : null;
   previewPhoto(photoDraft, profile?.name);
   $('profileMsg').textContent = '';
@@ -7942,17 +8000,15 @@ function cropPhoto(file) {
 }
 $('profileSave').addEventListener('click', () => {
   const name = $('profileName').value.trim();
-  const email = $('profileEmail').value.trim();
   if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
-  if (!validEmail(email)) { $('profileMsg').textContent = 'That e-mail address does not look right.'; return; }
-  profile = saveProfile({ ...(profile || {}), name, email, photo: photoDraft?.photo || null, photoFull: photoDraft?.photoFull || null, skipped: false });
+  profile = saveProfile({ ...(profile || {}), name, photo: photoDraft?.photo || null, photoFull: photoDraft?.photoFull || null, skipped: false });
   refreshRailUser();
   $('profile').hidden = true;
   highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
   toast(`Welcome, ${name.split(' ')[0]}. Your runs will be saved to your journal.`);
 });
 $('profileSkip').addEventListener('click', () => {
-  profile = saveProfile({ name: '', email: '', photo: null, skipped: true });
+  profile = saveProfile({ name: '', photo: null, skipped: true });
   $('profile').hidden = true;
   highlightNav(null);
 });
@@ -8018,6 +8074,7 @@ $('runAgain').addEventListener('click', async () => {
   $('goBtn').click();
 });
 $('runShare').addEventListener('click', async () => { const r = await journal.get(openRunId).catch(() => null); if (r) shareRun(r); });
+$('runGpx').addEventListener('click', async () => { const r = await journal.get(openRunId).catch(() => null); if (r) exportGpx(r); });
 $('runsBack').addEventListener('click', () => { $('runs').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 $('runDelete').addEventListener('click', async () => {
   if (!openRunId) return;

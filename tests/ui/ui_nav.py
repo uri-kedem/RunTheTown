@@ -4,7 +4,10 @@ import pathlib; HERE=pathlib.Path(__file__).resolve().parent; ROOT=str(HERE.pare
 # Map-tile fixtures for the synthetic city: unpacked next to this script on first use.
 VT=str(HERE/'vt')
 if not os.path.isdir(VT):
-    import tarfile; tarfile.open(HERE/'vt-fixtures.tar.gz').extractall(HERE, filter='data')
+    import tarfile
+    with tarfile.open(HERE/'vt-fixtures.tar.gz') as tar:
+        try: tar.extractall(HERE, filter='data')
+        except TypeError: tar.extractall(HERE)  # Python before 3.12 has no filter
 stub=open(ROOT+'/tests/leaflet-stub.js').read()
 lat0,lon0=32.08,34.78
 def hill(lat,lon): return 10
@@ -74,8 +77,8 @@ with sync_playwright() as p:
     pg.goto('http://127.0.0.1:8766/index.html'); pg.wait_for_timeout(600)
     print('first open shows the profile page:', pg.is_visible('#profile'), '|', pg.text_content('#profileTitle'))
     pg.click('#profileSave'); print('empty name refused:', pg.text_content('#profileMsg'))
-    pg.fill('#profileName', 'Uri Kedem'); pg.fill('#profileEmail', 'uri@example'); pg.click('#profileSave'); print('bad email refused:', pg.text_content('#profileMsg'))
-    pg.fill('#profileEmail', 'uri@example.com')
+    pg.fill('#profileName', 'Uri Kedem')
+    print('no e-mail field:', pg.query_selector('#profileEmail') is None)
     # a photo: the crop dialog opens, zoom and drag, keep it
     pg.set_input_files('#photoInput', ROOT+'/img/logo.png'); pg.wait_for_timeout(400)
     print('crop dialog:', pg.is_visible('#cropAsk')); pg.fill('#cropZoom', '1.6'); pg.dispatch_event('#cropZoom', 'input')
@@ -83,7 +86,7 @@ with sync_playwright() as p:
     pg.click('#cropDone'); pg.wait_for_timeout(200)
     print('photo set on the big avatar:', pg.evaluate("document.getElementById('photoPick').style.backgroundImage.slice(0,30)"))
     pg.click('#profileSave'); pg.wait_for_timeout(200)
-    print('profile saved:', pg.is_hidden('#profile'), '| rail:', pg.text_content('#railName'), '/', pg.text_content('#railAvatar'), '| stored:', pg.evaluate('JSON.parse(localStorage.getItem("rtt-profile")).email'))
+    print('profile saved:', pg.is_hidden('#profile'), '| rail:', pg.text_content('#railName'), '/', pg.text_content('#railAvatar'), '| stored:', pg.evaluate('JSON.parse(localStorage.getItem("rtt-profile")).name'))
     pg.click('#homeMenu'); pg.wait_for_timeout(250); pg.click('#railUser'); pg.wait_for_timeout(300)
     pg.click('#photoPick'); pg.wait_for_timeout(150); print('photo menu:', pg.is_visible('#photoAsk')); pg.click('#photoView'); pg.wait_for_timeout(150)
     print('viewer:', pg.is_visible('#photoViewer'), pg.evaluate("document.getElementById('photoViewerImg').naturalWidth")); pg.click('#photoViewer'); pg.wait_for_timeout(100)
@@ -101,7 +104,8 @@ with sync_playwright() as p:
     print('laps style: distance hidden:', pg.is_hidden('#distanceInput'), '| go hidden:', pg.is_hidden('#goBtn'))
     pg.wait_for_selector('#spotsPrefs .place', timeout=30000)
     print('pins before tiles? tiles requested so far:', len(tile_hits), '| early list:', pg.eval_on_selector_all('#spotsPrefs .place', 'els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))'))
-    pg.wait_for_function("/within 8 km/.test(document.getElementById('spotsHint').textContent) && document.querySelectorAll('#spotsPrefs .place').length >= 3", timeout=30000)
+    # No city-wide scan any more (Nominatim policy): the spots are the ones the loaded map covers.
+    pg.wait_for_function("/nearby · tap one/.test(document.getElementById('spotsHint').textContent) && document.querySelectorAll('#spotsPrefs .place').length >= 1", timeout=30000)
     print('prefs spots:', pg.eval_on_selector_all('#spotsPrefs .place', 'els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))'), '| hint:', pg.text_content('#spotsHint'), '| pins:', pg.eval_on_selector_all('.place-pin','e=>e.length'))
     pg.screenshot(path=f'{S}/nav-0a-spots.png')
     pg.click('#spotsPrefs .place.track'); pg.wait_for_timeout(200)
@@ -266,6 +270,7 @@ with sync_playwright() as p:
     pg.click('.run-card'); pg.wait_for_timeout(300)
     print('run page:', pg.text_content('#runTitle'), '| picture:', pg.evaluate("document.getElementById('runPic').naturalWidth+'x'+document.getElementById('runPic').naturalHeight"), '| facts:', pg.eval_on_selector_all('#runFacts li','e=>e.map(x=>x.textContent)'))
     pg.screenshot(path=f'{S}/nav-7-run.png')
+    print('GPX export offered:', pg.is_visible('#runGpx'), '| gpx text:', pg.evaluate("(async () => { const r = await window.__rtt.journal.get((await window.__rtt.journal.list())[0].id); const g = (await import('/js/journal.js')).runGpx(r); return g.slice(0, 38) + ' … trkpts ' + (g.match(/<trkpt /g) || []).length + ', timed ' + /<trkpt [^>]*><time>/.test(g); })()"))
     print('show-on-map gone:', pg.query_selector('#runShowMap') is None)
     pg.click('#runPicBtn'); pg.wait_for_timeout(500); print('route viewer:', pg.is_visible('#runMapPage'), '|', pg.text_content('#runMapTitle'), '|', pg.text_content('#runMapFoot'), '| app untouched (results hidden):', pg.is_hidden('#resultsView') or pg.is_hidden('#runs')==False)
     pg.screenshot(path=f'{S}/nav-7b-runmap.png')

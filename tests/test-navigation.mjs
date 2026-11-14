@@ -8,7 +8,7 @@ import { makeProjection } from '../js/geo.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
-const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0 });
+const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0, cityScan: true });
 
 check(roundDist(147) === 150 && roundDist(42) === 40 && roundDist(1234) === 1200, 'distance rounding');
 check(paceShort(332) === '5:32', 'pace format');

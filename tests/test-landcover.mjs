@@ -65,7 +65,7 @@ check(/esa-worldcover.*N30E033.*assets=map/.test(landcoverTileUrl(13, 4887, 3324
   };
   const city = syntheticOverpass();
   const run = async (fetchLandcoverImpl) => {
-    const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(city), fetchElevationImpl: fakeElev, fetchLandcoverImpl, useCache: false, scanPauseMs: 0 });
+    const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(city), fetchElevationImpl: fakeElev, fetchLandcoverImpl, useCache: false, scanPauseMs: 0, cityScan: true });
     const rs = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: { green: true }, terrain: 'any' });
     return { rs, area: eng.area };
   };

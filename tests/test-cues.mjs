@@ -5,7 +5,7 @@ import { makeMockMapBackend } from './mock-vectortiles.mjs';
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
-const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0 });
+const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0, cityScan: true });
 
 for (const [km, prefs] of [[5, {}], [8, { sights: true }], [10, { water: true }]]) {
   const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs, terrain: 'any' });

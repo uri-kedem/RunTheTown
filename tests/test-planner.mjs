@@ -15,7 +15,7 @@ const fakeElev = async (proj, radius) => {
   return new ElevationGrid(proj, radius, n, v);
 };
 
-const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(city), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(city), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
 let failures = 0;
 const check = (cond, msg) => {
   console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`);
@@ -197,7 +197,7 @@ const messy = () => {
   }
   return { elements: out };
 };
-const messyEngine = new RouteEngine({ fetchImpl: makeMockMapBackend(messy()), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+const messyEngine = new RouteEngine({ fetchImpl: makeMockMapBackend(messy()), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
 for (const km of [4, 8, 12]) {
   const t = Date.now();
   const rs = loopsOnly(await messyEngine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs: { green: true, quiet: true }, terrain: 'any' }));
@@ -252,7 +252,7 @@ for (const km of [4, 8, 12]) {
 // Running spots before any search: the preview loads the map once; the plan reuses it.
 {
   const fetchImpl = makeMockMapBackend(syntheticOverpass());
-  const eng = new RouteEngine({ fetchImpl, fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+  const eng = new RouteEngine({ fetchImpl, fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
   const [spots, routes] = await Promise.all([
     eng.previewSpots(CENTER[0], CENTER[1], { distanceKm: 5 }),
     eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' }),
@@ -299,7 +299,7 @@ for (const km of [4, 8, 12]) {
 // long enough to reach the sea, the first option is the beach promenade, not the river.
 {
   const coastal = syntheticOverpass({ size: 12000, spacing: 100, riverX: 1000, seaX: -3000, fullGrid: true });
-  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(coastal), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(coastal), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
   for (const km of [8, 10, 12]) {
     const rs = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: km, prefs: {}, terrain: 'any' });
     console.log(`\nRamat Aviv ${km} km: ` + rs.map((r) => `${r.name} sea ${(r.stats.seaFrac * 100) | 0}% water ${(r.stats.waterFrac * 100) | 0}%`).join(' | '));

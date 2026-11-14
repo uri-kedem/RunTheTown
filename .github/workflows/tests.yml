@@ -1,0 +1,35 @@
+# Every push and pull request: the Node test suites (one job per suite, side by side, so
+# the whole run takes a few minutes instead of twelve) and the build. Nothing is deployed
+# from here: GitHub Pages serves the committed files on main as before.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  suites:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [vectortiles, planner, cues, navigation, details, spots, landcover, country, journal, long-runs]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tests/test-${{ matrix.suite }}.mjs
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node build.mjs
+      # The bundle in git must be the one the sources produce.
+      - run: git diff --stat --exit-code -- js/bundle.js || (echo "js/bundle.js is out of date: run node build.mjs and commit" && exit 1)

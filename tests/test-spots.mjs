@@ -79,7 +79,7 @@ const oval = (clat, clon, half = 84.39, r = 36.5, n = 40) => {
 // Through the engine on the synthetic city: the scan alone gives pins before the map is loaded.
 {
   const fetchImpl = makeMockMapBackend(syntheticOverpass());
-  const eng = new RouteEngine({ fetchImpl, fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0 });
+  const eng = new RouteEngine({ fetchImpl, fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0, cityScan: true });
   const early = await eng.spotsNear(CENTER[0], CENTER[1], 8500, { scanned: await eng.scanSpots(CENTER[0], CENTER[1]) });
   console.log('before the map:', early.map((s) => `${s.kind} ${s.name} node=${s.node}`).join(' | '), '| tiles:', fetchImpl.calls.tiles);
   check(fetchImpl.calls.tiles === 0 && early.length === 2 && early.every((s) => s.node === -1), 'stadium and track shown before any tile is downloaded');

@@ -53,7 +53,7 @@ const fetchHadar = async (url) => {
 // Through the engine, with caching: one lookup per place.
 {
   const fetchImpl = makeMockMapBackend(syntheticOverpass());
-  const engine = new RouteEngine({ fetchImpl, fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0 });
+  const engine = new RouteEngine({ fetchImpl, fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0, cityScan: true });
   const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
   const track = routes.places.find((p) => p.kind === 'track');
   const park = routes.places.find((p) => p.kind === 'park');

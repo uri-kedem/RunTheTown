@@ -46,7 +46,7 @@ for (const [cityName, city] of Object.entries(cities)) {
     for (const km of distances) {
       for (const prefs of [{}, { water: true, green: true }]) {
         const fetchImpl = makeMockMapBackend(city, { ...cond, seed: Math.round(km * 10) });
-        const engine = new RouteEngine({ fetchImpl, fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+        const engine = new RouteEngine({ fetchImpl, fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
         const t = Date.now();
         let routes, err;
         try {
@@ -89,7 +89,7 @@ check(tiles42 <= 150, 'marathon needs at most 150 map tiles');
 
 // Servers so overloaded that most pieces fail: a clear, friendly error (not a crash).
 {
-  const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(cities.inland, { vtDown: true, overpass: { failRate: 0.97 } }), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0 });
+  const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(cities.inland, { vtDown: true, overpass: { failRate: 0.97 } }), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
   let msg = '';
   try {
     await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 25, prefs: {}, terrain: 'any' });

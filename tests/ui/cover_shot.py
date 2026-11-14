@@ -1,4 +1,4 @@
-import sys, threading, http.server, functools
+import sys, os, threading, http.server, functools
 from playwright.sync_api import sync_playwright
 import pathlib; HERE=pathlib.Path(__file__).resolve().parent; ROOT=str(HERE.parent.parent); S=sys.argv[1] if len(sys.argv)>1 else str(HERE/'out'); os.makedirs(S, exist_ok=True)
 H=functools.partial(http.server.SimpleHTTPRequestHandler, directory=ROOT); H.log_message=lambda *a: None

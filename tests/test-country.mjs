@@ -43,7 +43,7 @@ function hamlet() {
   return { elements };
 }
 
-const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(hamlet()), fetchElevationImpl: flatElev, useCache: false, scanPauseMs: 0 });
+const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(hamlet()), fetchElevationImpl: flatElev, useCache: false, scanPauseMs: 0, cityScan: true });
 
 {
   const routes = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' });
@@ -73,7 +73,7 @@ const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(hamlet()), fetchE
 // cover that); here we only make sure the city's plan is not flagged as country.
 {
   const { syntheticOverpass } = await import('./synthetic-city.mjs');
-  const city = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: flatElev, useCache: false, scanPauseMs: 0 });
+  const city = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: flatElev, useCache: false, scanPauseMs: 0, cityScan: true });
   const routes = await city.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' });
   check(routes.length === 3 || routes.length >= 1, 'the city plans as before');
   check(routes.country === false && routes.every((r) => r.stats.countryFrac === 0), 'a town run touches no unpaved way');

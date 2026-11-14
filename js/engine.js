@@ -38,7 +38,11 @@ export function radiusFor(distanceM) {
 }
 
 export class RouteEngine {
-  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050 } = {}) {
+  constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050, cityScan = false } = {}) {
+    // The city-wide stadium scan asks Nominatim several times per start. Its usage policy
+    // forbids that from an app on many phones, so the scan is off until the queries go
+    // through a server of our own; the loaded map still provides the tracks it covers.
+    this.cityScan = cityScan;
     this.area = null;
     this.scanPauseMs = scanPauseMs;
     this.fetchImpl = fetchImpl;
@@ -231,6 +235,7 @@ export class RouteEngine {
 
   // Stadiums and athletics tracks within ~8 km, from one quick scan (no map download). Cached per start.
   scanSpots(lat, lon) {
+    if (!this.cityScan) return Promise.resolve([]);
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     this.scanMemo ||= new Map();
     if (!this.scanMemo.has(key)) {

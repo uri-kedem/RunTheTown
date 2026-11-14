@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=9e99b68c" />
+    <link rel="manifest" href="manifest.webmanifest?v=38b44c71" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/leaflet.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=9e99b68c" />
+    <link rel="stylesheet" href="css/style.css?v=38b44c71" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -30,7 +30,7 @@
       </button>
       <button type="button" class="rail-user" id="railUser" data-nav="profile">
         <span class="avatar" id="railAvatar"></span>
-        <span class="who"><b id="railName">Set up your profile</b><small id="railRuns">name, e-mail, photo</small></span>
+        <span class="who"><b id="railName">Set up your profile</b><small id="railRuns">name, photo</small></span>
       </button>
       <button type="button" class="rail-item" data-nav="runs">
         <img class="ic mark" src="img/runs-outline.29121f1c.png" alt="" /><span>My runs</span>
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="9e99b68c">9e99b68c</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="38b44c71">38b44c71</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -76,14 +76,14 @@
           </button>
           <button type="button" class="mode-card" data-nav="tour">
             <span class="mode-title">Explorer tour</span>
-            <span class="mode-text">A scenic journey through iconic landmarks, historical spots, and viewpoint with immersive audio-guide stories</span>
+            <span class="mode-text">A scenic journey through iconic landmarks, historical spots, and viewpoint, each called out by voice as you pass</span>
             <span class="mode-cta">Plan Tour</span>
           </button>
         </div>
         <ul class="perks">
           <li><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>No sign-up required</li>
           <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Any city worldwide</li>
-          <li><svg viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z"/></svg>Over 1M routes generated</li>
+          <li><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>Free voice guidance</li>
         </ul>
         <div class="home-foot"><button type="button" class="link" data-nav="terms">Terms &amp; policy</button> · Map data &copy; OpenStreetMap contributors</div>
       </div>
@@ -122,7 +122,7 @@
         <h2>Your location</h2>
         <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never sent to a RunTheTown server (there is none) and never stored by us. To fetch map data and look up places, the app sends coordinates to the public services below; they receive the area you are looking at, not your identity.</p>
         <h2>Your profile and your runs stay on the device</h2>
-        <p>Your name, e-mail address and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. Nothing is sent to us: there is no server and no account. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
+        <p>Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. Nothing is sent to us: there is no server and no account. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
         <h2>No tracking</h2>
         <p>No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.</p>
         <h2>Services used</h2>
@@ -186,7 +186,6 @@
           <div><b>Photo</b><small>Tap to pick one from your photos (optional)</small></div>
         </div>
         <label class="field-label">Name<input type="text" id="profileName" autocomplete="name" maxlength="80" placeholder="Your name" /></label>
-        <label class="field-label">E-mail<input type="email" id="profileEmail" autocomplete="email" inputmode="email" maxlength="120" placeholder="you@example.com" /></label>
         <div class="distance-msg error" id="profileMsg" aria-live="polite"></div>
         <button type="button" class="primary" id="profileSave">Save</button>
         <div class="route-pop-foot"><button type="button" class="link" id="profileSkip">Skip for now</button></div>
@@ -221,6 +220,7 @@
         <div class="run-actions">
           <button type="button" class="primary" id="runAgain">Run this route again</button>
           <button type="button" class="ghost" id="runShare">Share</button>
+          <button type="button" class="ghost" id="runGpx">Export GPX</button>
         </div>
         <div class="route-pop-foot"><button type="button" class="link danger-link" id="runDelete">Delete this run</button></div>
       </div>
@@ -530,6 +530,6 @@
 
     <script src="js/vendor/leaflet.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=9e99b68c"></script>
+    <script src="js/bundle.js?v=38b44c71"></script>
   </body>
 </html>
