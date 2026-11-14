@@ -137,7 +137,7 @@ body.navigating .map-back { display: none; }
 }
 .distance-value:focus-within { border-color: var(--ink); background: var(--bg); }
 .distance-value input {
-  width: 4.2ch; border: 0; outline: 0; background: transparent; text-align: right;
+  width: 1.4ch; min-width: 1.4ch; max-width: 6ch; border: 0; outline: 0; background: transparent; text-align: center; /* the width follows the number (fitDistanceInput) */
   font: 800 34px/1.2 Inter, system-ui, sans-serif; letter-spacing: -0.03em; color: var(--ink); padding: 0;
 }
 .distance-value input::placeholder { color: var(--ink-3); }
@@ -333,6 +333,11 @@ body.navigating #map .maplibregl-ctrl-top-right { display: none; }
   box-shadow: var(--shadow); padding: 10px 14px; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;
 }
 .recenter svg { width: 16px; height: 16px; fill: #2563eb; stroke: #2563eb; }
+/* North up: shown once the map has been turned by hand while planning (never during a run). */
+.map-north { position: fixed; right: 12px; top: calc(env(safe-area-inset-top, 0px) + 118px); z-index: 1051; width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--bg); box-shadow: var(--shadow); display: grid; place-items: center; }
+.map-north svg { width: 24px; height: 24px; }
+.map-north .n { fill: var(--brand); } .map-north .s { fill: #94a3b8; }
+body.navigating .map-north { display: none; }
 .nav-bottom { background: var(--bg); border-radius: var(--radius) var(--radius) 0 0; box-shadow: var(--shadow); padding: 0 14px calc(12px + var(--safe-b)); overflow: hidden; }
 .nav-progress { height: 5px; background: var(--bg-2); margin: 0 -14px 10px; }
 .nav-progress i { display: block; height: 100%; width: 0; background: #10b981; transition: width 0.5s; }
@@ -426,7 +431,7 @@ body[data-view='app'] .home { display: none; }
 .mode-card:hover { transform: translateY(-2px); border-color: rgba(255, 122, 79, 0.6); }
 .mode-title { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
 .mode-text { font-size: 14px; line-height: 1.45; color: #cbd5e1; }
-.mode-cta { justify-self: start; margin-top: 6px; font-weight: 700; font-size: 14.5px; color: #fff; background: var(--brand); border-radius: 10px; padding: 9px 14px; }
+.mode-cta { justify-self: stretch; text-align: center; margin-top: 10px; font-weight: 800; font-size: 19px; letter-spacing: 0.01em; color: #fff; background: var(--brand); border-radius: 14px; padding: 16px 18px; box-shadow: 0 8px 24px rgba(255, 122, 79, 0.45); }
 .mode-cta::after { content: ' \2197'; }
 .perks { position: relative; z-index: 1; list-style: none; margin: 0 0 14px; padding: 0 20px; display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13.5px; color: #e2e8f0; }
 .perks li { display: inline-flex; align-items: center; gap: 8px; }
@@ -451,6 +456,7 @@ body[data-view='app'] .home { display: none; }
 .page-note { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
 
 @media (min-width: 900px) {
+  .map-north { top: 110px; }
   /* The toolbar is a permanent rail on wide screens; the app and the cover sit to its right. */
   .rail { transform: none; width: 220px; box-shadow: none; }
   .drawer-backdrop { display: none; }
@@ -462,7 +468,7 @@ body[data-view='app'] .home { display: none; }
   .hero-photo { position: absolute; left: 0; right: 0; top: var(--photo-top); bottom: 0; height: auto; margin: 0; }
   .hero-copy { padding: 44px 48px 0; }
   .hero h1 { font-size: clamp(36px, 3.9vw, 58px); }
-  .modes { grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 48px; margin: auto 0 16px; padding-top: 24vh; }
+  .modes { grid-template-columns: minmax(0, 560px); gap: 16px; padding: 0 48px; margin: auto 0 16px; padding-top: 24vh; }
   .perks, .home-foot { padding-left: 48px; padding-right: 48px; }
   .home-map { display: block; position: relative; overflow: hidden; clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%); background: #1a2436; }
   .home-map::before { content: ''; position: absolute; inset: 0; background: linear-gradient(104deg, var(--brand) 0, var(--brand) 100%); clip-path: polygon(14% 0, calc(14% + 14px) 0, 14px 100%, 0 100%); z-index: 1; }
@@ -627,6 +633,9 @@ body.native .perks .native-only { display: inline-flex !important; }
 
 /* Plan by distance or by time: a small switch in the field's head. */
 .plan-by { grid-template-columns: repeat(2, 1fr); width: 180px; padding: 3px; }
+/* The Distance | Time switch sits in the middle of its row, the limits at the right. */
+.plan-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.plan-head .hint { justify-self: end; }
 .plan-by button { padding: 5px 0; font-size: 13px; }
 /* The run screen's small links: take me back, report a problem. */
 .nav-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }

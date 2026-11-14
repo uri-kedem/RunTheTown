@@ -6759,6 +6759,15 @@ function glCreateMap(id, { zoomControl = false, attributionControl = true, dark 
       return m;
     },
     getBearing() { return m._gl.getBearing(); },
+    /**
+     * Whether the runner may turn the map by hand (a two-finger twist, or a right-button /
+     * ctrl drag on a computer). Off during a run, where the map turns with the runner.
+     */
+    setRotatable(on) {
+      if (on) { m._gl.dragRotate.enable(); m._gl.touchZoomRotate.enableRotation(); }
+      else { m._gl.dragRotate.disable(); m._gl.touchZoomRotate.disableRotation(); }
+      return m;
+    },
     /** Day or night look: 'light' | 'dark'. Lines are put back once the new style is in. */
     setTheme(theme) {
       if (theme === m._theme) return m;
@@ -6909,6 +6918,17 @@ const map = glCreateMap('map', { zoomControl: isDesktop(), attributionControl: t
 map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { animate: false });
 function applyMapTheme() { map.setTheme(nightMap() ? 'dark' : 'light'); }
 setInterval(applyMapTheme, 10 * 60 * 1000);
+// While planning, the map can be turned by hand (two fingers; a right-button or ctrl drag on
+// a computer) to look at a route from any side; a compass button puts north back up. During
+// a run the map turns with the runner instead, so turning by hand is off then.
+map.setRotatable(true);
+map.on('rotate', () => {
+  if (nav.active) return;
+  const b = map.getBearing();
+  $('northBtn').hidden = Math.abs(b) < 0.5;
+  $('northBtn').firstElementChild.style.transform = `rotate(${-b}deg)`; // the needle keeps pointing north
+});
+$('northBtn').addEventListener('click', () => { map.setBearing(null); $('northBtn').hidden = true; });
 
 const routeLayer = glLayerGroup().addTo(map);
 let startMarker = null;
@@ -7328,7 +7348,14 @@ state.distanceValid = true;
 // Limits in the unit on screen (the planner works in km).
 const limits = () => ({ min: Math.round(U.fromKm(MIN_KM) * 10) / 10, max: Math.round(U.fromKm(MAX_DISTANCE_KM) * 10) / 10 });
 const MIN_MIN = 10, MAX_MIN = 360; // minutes, when the run is planned by time
+// The number box is as wide as what is in it, so the number and its unit sit together in
+// the middle of the row ("5 km"), not a four-digit box with the digit pushed to its right.
+function fitDistanceInput() {
+  const input = $('distanceInput');
+  input.style.width = `${(input.value.length || input.placeholder.length || 1) + 0.4}ch`;
+}
 function readDistance() {
+  fitDistanceInput();
   const raw = $('distanceInput').value.trim().replace(',', '.');
   const v = Number(raw);
   const msg = $('distanceMsg');
@@ -8182,6 +8209,8 @@ async function startRun({ demo }) {
   $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
+  map.setRotatable(false); // the map turns with the runner now
+  $('northBtn').hidden = true;
   startMarker?.dragging?.disable(); // the start stays put during the run
   map.closePopup?.();
   $('navView').hidden = false;
@@ -8522,6 +8551,7 @@ function closeRun() {
   map.removeLayer(navLayer);
   routeLayer.addTo(map);
   document.body.classList.remove('navigating');
+  map.setRotatable(true);
   startMarker?.dragging?.enable();
   window.dispatchEvent(new Event('rtt:runended')); // a build update that waited for the run can reload now
   $('navView').hidden = true;

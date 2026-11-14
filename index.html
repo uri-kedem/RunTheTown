@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=c048f6a3" />
+    <link rel="manifest" href="manifest.webmanifest?v=dd4b67ed" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=c048f6a3" />
+    <link rel="stylesheet" href="css/style.css?v=dd4b67ed" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="c048f6a3">c048f6a3</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="dd4b67ed">dd4b67ed</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -73,11 +73,6 @@
             <span class="mode-title">Free-flow run</span>
             <span class="mode-text">Custom routes on pedestrian-friendly paths, parks, and natural urban routes with turn-by-turn voice guidance</span>
             <span class="mode-cta">Start Run</span>
-          </button>
-          <button type="button" class="mode-card" data-nav="tour">
-            <span class="mode-title">Explorer tour</span>
-            <span class="mode-text">A scenic journey through iconic landmarks, historical spots, and viewpoint, each called out by voice as you pass</span>
-            <span class="mode-cta">Plan Tour</span>
           </button>
         </div>
         <ul class="perks">
@@ -307,6 +302,10 @@
       <ul class="search-results" id="searchResults" role="listbox" hidden></ul>
     </header>
     <button type="button" class="map-back" id="mapBack" aria-label="Change the start point"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>Start point</button>
+    <!-- North up, once the map has been turned by hand while planning -->
+    <button type="button" class="map-north" id="northBtn" hidden aria-label="Put north up" title="Put north up">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path class="n" d="M12 2 8.5 12h7z" /><path class="s" d="M12 22l3.5-10h-7z" /></svg>
+    </button>
 
     <section class="sheet" id="sheet" data-pos="half">
       <div class="grab" id="sheetGrab"><div class="handle"></div></div>
@@ -352,7 +351,7 @@
         <div class="spots-empty" id="spotsEmpty" hidden>No athletics track, stadium or park loop was found within 8 km of this start. Try another start, or run the streets.</div>
 
         <div class="field streets-only">
-          <div class="field-head"><div class="segmented plan-by" id="planBy" role="radiogroup" aria-label="Plan by distance or by time"><button type="button" data-v="km" role="radio" aria-checked="true" class="on">Distance</button><button type="button" data-v="min" role="radio" aria-checked="false">Time</button></div><span class="hint" id="distanceHint">1–42.2 km</span></div>
+          <div class="field-head plan-head"><span></span><div class="segmented plan-by" id="planBy" role="radiogroup" aria-label="Plan by distance or by time"><button type="button" data-v="km" role="radio" aria-checked="true" class="on">Distance</button><button type="button" data-v="min" role="radio" aria-checked="false">Time</button></div><span class="hint" id="distanceHint">1–42.2 km</span></div>
           <div class="distance-value" id="distanceBox">
             <input id="distanceInput" type="text" inputmode="decimal" autocomplete="off" value="5" placeholder="10"
               aria-label="Distance in kilometers" aria-describedby="distanceMsg" />
@@ -549,6 +548,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=c048f6a3"></script>
+    <script src="js/bundle.js?v=dd4b67ed"></script>
   </body>
 </html>

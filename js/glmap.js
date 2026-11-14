@@ -288,6 +288,15 @@ export function glCreateMap(id, { zoomControl = false, attributionControl = true
       return m;
     },
     getBearing() { return m._gl.getBearing(); },
+    /**
+     * Whether the runner may turn the map by hand (a two-finger twist, or a right-button /
+     * ctrl drag on a computer). Off during a run, where the map turns with the runner.
+     */
+    setRotatable(on) {
+      if (on) { m._gl.dragRotate.enable(); m._gl.touchZoomRotate.enableRotation(); }
+      else { m._gl.dragRotate.disable(); m._gl.touchZoomRotate.disableRotation(); }
+      return m;
+    },
     /** Day or night look: 'light' | 'dark'. Lines are put back once the new style is in. */
     setTheme(theme) {
       if (theme === m._theme) return m;
