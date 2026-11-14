@@ -66,8 +66,9 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/cues.js` | A path becomes turn-by-turn cues |
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
+| `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look, the offline cache |
-| `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a Leaflet stub, and `tests/ui/` browser scripts |
+| `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |
 | `native/` | iOS notes (`README-ios.md`), the store listing (`APPSTORE.md`), the plugin patch |
 
 Mode names: the interface says **Free-flow run** and **Explorer tour**; the code says `run`
@@ -93,8 +94,10 @@ and `tour` (and "sightseeing"). Do not rename the code.
 
 ## Conventions
 
-- Plain JavaScript, no framework, no TypeScript, no bundler other than `build.mjs`. Leaflet
-  1.9.4 and the Capacitor runtime are vendored in `js/vendor/`; the app must work with no CDN.
+- Plain JavaScript, no framework, no TypeScript, no bundler other than `build.mjs`. MapLibre GL
+  5.24.1 and the Capacitor runtime are vendored in `js/vendor/`; the app must work with no CDN.
+  The map is OpenFreeMap's vector tiles (styles `liberty` by day, `dark` at night); the app
+  never talks to MapLibre directly, only through `js/glmap.js`.
 - Comments explain why, in full sentences, above the code they describe. Match the style around.
 - Every behaviour change gets a test in the matching `tests/test-*.mjs`; the navigation suite
   drives a `Navigator` with a `SimulatedRun`, the planner suites plan in the synthetic city.

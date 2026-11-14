@@ -8,7 +8,7 @@ if not os.path.isdir(VT):
     with tarfile.open(HERE/'vt-fixtures.tar.gz') as tar:
         try: tar.extractall(HERE, filter='data')
         except TypeError: tar.extractall(HERE)  # Python before 3.12 has no filter
-stub=open(ROOT+'/tests/leaflet-stub.js').read()
+stub=open(ROOT+'/tests/maplibre-stub.js').read()
 lat0,lon0=32.08,34.78
 def hill(lat,lon): return 10
 Handler=functools.partial(http.server.SimpleHTTPRequestHandler, directory=ROOT)
@@ -31,8 +31,8 @@ import('__ROOT__/tests/synthetic-city.mjs').then(({syntheticOverpass}) => {
 SCAN=_scan['SCAN']; SCAN_LOOKUP=_scan['LOOKUP']
 def route(r):
     u=r.request.url
-    if 'leaflet.js' in u: return r.fulfill(body=stub, content_type='application/javascript')
-    if 'leaflet.css' in u or 'fonts.g' in u: return r.fulfill(body='', content_type='text/css')
+    if 'maplibre-gl.js' in u: return r.fulfill(body=stub, content_type='application/javascript')
+    if 'maplibre-gl.css' in u or 'fonts.g' in u: return r.fulfill(body='', content_type='text/css')
     if u=='https://tiles.openfreemap.org/planet': return r.fulfill(body=json.dumps({'tiles':['https://tiles.openfreemap.org/planet/test/{z}/{x}/{y}.pbf']}), content_type='application/json')
     if u.endswith('.pbf'):
         z,x,y=u.split('/')[-3:]; f=f'{VT}/{x}_{y[:-4]}.pbf'

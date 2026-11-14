@@ -11,6 +11,7 @@ export const DEFAULTS = Object.freeze({
   warnM: 200, // how far ahead a turn is announced: 100 | 200 | 300
   follow: true, // the map follows the runner
   headingUp: true, // the map turns so the way ahead is up (during a run, while following)
+  darkMap: true, // the dark map style between 19:00 and 06:00
   awake: true, // keep the screen on during a run
   language: 'en', // 'en' for now; 'he' is coming
 });

@@ -259,7 +259,11 @@ export class Navigator {
     // JOIN_START_M of any part of it (a runner who sets off 60 m past the start point, or
     // from their hotel door onto the loop, did that on purpose). Further away, one hint.
     if (!this.begun) {
-      const s0 = this.snap(x, y, 0, this.total, 0);
+      // On an out-and-back the return leg runs over the same ground as the way out, so the
+      // first fix is as close to the end of the route as to its start. A slight preference
+      // for the earliest point (a metre per kilometre) joins the route at its start; a
+      // runner really joining further along is still matched there, as nothing else is near.
+      const s0 = this.snap(x, y, 0, this.total, 0.001);
       if (s0.dist <= OFF_M) {
         this.begun = true;
         this.progress = s0.at;

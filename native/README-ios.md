@@ -42,6 +42,6 @@ then Run in Xcode. The web app is copied fresh into the project each time.
 3. Finish → Share this run: the share sheet with the picture.
 
 ## Known limits of this first shell
-- Leaflet is still loaded from unpkg at launch (network needed at start, as before).
+- The map library (MapLibre GL) is bundled in the app; map tiles and the map style come from OpenFreeMap at run time (network needed, as before).
 - The service worker does not run inside the app (not needed there).
 - Push notifications, Sign in with Apple and a backend are not part of this step.

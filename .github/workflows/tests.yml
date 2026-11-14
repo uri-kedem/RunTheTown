@@ -32,4 +32,5 @@ jobs:
           node-version: 22
       - run: node build.mjs
       # The bundle in git must be the one the sources produce.
-      - run: git diff --stat --exit-code -- js/bundle.js || (echo "js/bundle.js is out of date: run node build.mjs and commit" && exit 1)
+      - run: |
+          git diff --stat --exit-code -- js/bundle.js || { echo "js/bundle.js is out of date; run node build.mjs and commit"; exit 1; }

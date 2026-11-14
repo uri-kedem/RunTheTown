@@ -32,11 +32,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 #map { position: fixed; inset: 0; z-index: 0; background: #e5e7eb; }
-/* Heading-up during a run: the map is made a square as wide as the screen's diagonal and
-   turned so the way ahead points up; labels on the route turn back to stay readable. */
-body.heading-up #map { width: var(--map-d); height: var(--map-d); left: calc(50% - var(--map-d) / 2); top: calc(50% - var(--map-d) / 2); right: auto; bottom: auto; transform: rotate(var(--map-rot, 0deg)); transition: transform 0.7s linear; will-change: transform; }
-body.heading-up .map-label { transform: rotate(calc(-1 * var(--map-rot, 0deg))); transition: transform 0.7s linear; }
-body.heading-up .leaflet-control-attribution { display: none; }
+/* Heading-up during a run: the map's own bearing turns it (street names stay upright). */
+body.heading-up .maplibregl-ctrl-attrib { display: none; }
+/* Markers: the HTML icons the app draws, centred on their point by the adapter. */
+.rtt-marker { display: grid; place-items: center; }
+.rtt-marker > * { pointer-events: auto; }
+.maplibregl-popup { z-index: 5; font-family: inherit; }
+.maplibregl-popup-content { padding: 12px 14px; border-radius: 12px; box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25); font: 13px/1.4 Inter, system-ui, sans-serif; color: var(--ink, #0f172a); }
+.maplibregl-popup-close-button { font-size: 18px; padding: 2px 8px; color: #64748b; }
+.maplibregl-ctrl-attrib { font-size: 10px; }
+.maplibregl-ctrl-group button { width: 36px; height: 36px; }
 
 /* Top bar */
 .topbar {
@@ -232,7 +237,6 @@ body[data-mode='tour'] #landscape [data-pref='sights']::after {
 
 /* Map markers */
 .start-pin { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); border: 4px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
-.leaflet-control-attribution { font-size: 10px; }
 
 /* Desktop: side panel instead of bottom sheet */
 @media (min-width: 900px) {
@@ -243,7 +247,6 @@ body[data-mode='tour'] #landscape [data-pref='sights']::after {
   .map-back { display: none !important; }
   .cards { flex-direction: column; overflow: visible; margin: 0; padding: 0; }
   .card { flex: none; }
-  .leaflet-left { left: 404px; }
 }
 
 /* Sightseeing */
@@ -300,7 +303,7 @@ body[data-mode='tour'] #landscape [data-pref='sights']::after {
 
 /* Live navigation */
 body.navigating .topbar, body.navigating .sheet { display: none; }
-body.navigating .leaflet-control-zoom { display: none; }
+body.navigating #map .maplibregl-ctrl-top-right { display: none; }
 .nav { position: fixed; inset: 0; z-index: 1060; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
 .nav > * { pointer-events: auto; }
 .nav-top { padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 0; display: grid; gap: 8px; pointer-events: none; }
@@ -364,7 +367,7 @@ body.navigating .leaflet-control-zoom { display: none; }
 
 
 /* ---------- Views: home cover, app, pages ---------- */
-body[data-view='home'] .topbar, body[data-view='home'] .sheet, body[data-view='home'] .leaflet-control-zoom { display: none; }
+body[data-view='home'] .topbar, body[data-view='home'] .sheet, body[data-view='home'] #map .maplibregl-ctrl-top-right { display: none; }
 body[data-view='app'] .home { display: none; }
 
 /* Side toolbar */
@@ -464,8 +467,6 @@ body[data-view='app'] .home { display: none; }
   .home-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .topbar { left: 236px; }
   .sheet, .sheet[data-pos] { left: 236px; } /* the panel rule above also matches .sheet[data-pos], so this must too */
-  .leaflet-left { left: 624px; }
-  .leaflet-control-attribution { margin-left: 220px; }
   /* The run screen, its finish card, dialogs and messages also start right of the rail, never under it. */
   .nav, .nav-finish, .ask { left: 220px; }
   .toast { left: 236px; }
@@ -559,9 +560,6 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .run-map-page { display: flex; flex-direction: column; }
 .run-map-page[hidden] { display: none; }
 .run-map { flex: 1; min-height: 0; background: #e5e7eb; }
-.run-map .leaflet-left { left: 0 !important; }
-.run-map .leaflet-control-attribution { margin-left: 0 !important; }
-body[data-view='home'] .run-map .leaflet-control-zoom, body.navigating .run-map .leaflet-control-zoom { display: block; }
 .run-map-foot { padding: 10px 16px calc(10px + var(--safe-b)); font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--line); background: var(--bg); }
 .run-actions { display: grid; grid-template-columns: 1.6fr 1fr; gap: 8px; margin: 4px 0 12px; }
 .run-actions .primary { margin: 0; }

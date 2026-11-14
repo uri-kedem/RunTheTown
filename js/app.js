@@ -7,6 +7,7 @@ import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenTe
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, journal } from './journal.js';
 import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare } from './native.js';
+import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
 import { fallbackLinks } from './details.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
@@ -45,36 +46,15 @@ let busy = false; // a route search is running
 const isDesktop = () => window.matchMedia('(min-width: 900px)').matches;
 
 // ---------- Map ----------
-const map = L.map('map', { zoomControl: false, attributionControl: true }).setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom);
-// Map tiles: Esri first. OpenStreetMap's own tile servers refuse pages opened
-// from a file (they answer with "Access blocked" images rather than errors,
-// so a fallback can't detect it), and their policy discourages app use anyway.
-const TILE_SOURCES = [
-  {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    opts: { maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' },
-  },
-  {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    opts: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
-  },
-];
-let tileSource = 0;
-function addTiles() {
-  let errors = 0;
-  const layer = L.tileLayer(TILE_SOURCES[tileSource].url, TILE_SOURCES[tileSource].opts).addTo(map);
-  layer.on('tileerror', () => {
-    if (++errors >= 4 && tileSource < TILE_SOURCES.length - 1) {
-      layer.remove();
-      tileSource++;
-      addTiles();
-    }
-  });
-}
-addTiles();
-if (isDesktop()) L.control.zoom({ position: 'topright' }).addTo(map);
+// Night: the dark style between 19:00 and 06:00 when the setting allows it.
+const isNight = () => { const h = new Date().getHours(); return h >= 19 || h < 6; };
+const nightMap = () => !!settings.darkMap && isNight();
+const map = glCreateMap('map', { zoomControl: isDesktop(), attributionControl: true, dark: nightMap() });
+map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { animate: false });
+function applyMapTheme() { map.setTheme(nightMap() ? 'dark' : 'light'); }
+setInterval(applyMapTheme, 10 * 60 * 1000);
 
-const routeLayer = L.layerGroup().addTo(map);
+const routeLayer = glLayerGroup().addTo(map);
 let startMarker = null;
 
 function mapPadding() {
@@ -123,7 +103,7 @@ function sheetPos() { return $('sheet').dataset.pos || 'half'; }
       setSheet(h < vh * 0.3 ? 'peek' : h < vh * 0.68 ? 'half' : 'full');
     }
     drag = null;
-    setTimeout(() => { if (state.routes[state.selected]) map.fitBounds(L.latLngBounds(state.routes[state.selected].latlngs), mapPadding()); }, 280);
+    setTimeout(() => { if (state.routes[state.selected]) map.fitBounds(glBounds(state.routes[state.selected].latlngs), mapPadding()); }, 280);
   };
   grab.addEventListener('pointerup', end);
   grab.addEventListener('pointercancel', end);
@@ -154,9 +134,9 @@ function setStart(lat, lon, label, { pan = true } = {}) {
   state.start = { lat, lon, label };
   showSearch(false);
   if (!startMarker) {
-    startMarker = L.marker([lat, lon], {
+    startMarker = glMarker([lat, lon], {
       draggable: true,
-      icon: L.divIcon({ className: '', html: '<div class="start-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
+      icon: glDivIcon({ className: '', html: '<div class="start-pin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }),
       zIndexOffset: 1000,
     }).addTo(map);
     startMarker.on('dragend', () => {
@@ -542,7 +522,7 @@ const PLACE_ICON = {
   stadium: '<svg viewBox="0 0 24 24"><path d="M3 9c0-2 4-3.5 9-3.5s9 1.5 9 3.5v6c0 2-4 3.5-9 3.5S3 17 3 15z"/><path d="M3 9c0 2 4 3.5 9 3.5s9-1.5 9-3.5"/></svg>',
   park: '<svg viewBox="0 0 24 24"><path d="M12 3 6 11h3l-3 5h5v4h2v-4h5l-3-5h3z"/></svg>',
 };
-const placesLayer = L.layerGroup().addTo(map); // pins stay while routes come and go
+const placesLayer = glLayerGroup().addTo(map); // pins stay while routes come and go
 let drawnPlaces = []; // what the pins and the list currently show
 function placeText(p) {
   if (p.kind === 'track') return `${fmtKmShort(p.lapM)} athletics track`;
@@ -556,8 +536,8 @@ function drawPlaces(places, list = $('places')) {
   list.innerHTML = '';
   list.hidden = !places.length;
   places.forEach((p, i) => {
-    const marker = L.marker(p.entry, {
-      icon: L.divIcon({ className: '', html: `<div class="place-pin ${p.kind}">${PLACE_ICON[p.kind]}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
+    const marker = glMarker(p.entry, {
+      icon: glDivIcon({ className: '', html: `<div class="place-pin ${p.kind}">${PLACE_ICON[p.kind]}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
       zIndexOffset: 600,
     })
       .bindPopup(placePopup(p, i, null), { maxWidth: 280 })
@@ -702,14 +682,14 @@ $('lapsAsk').addEventListener('click', (e) => { if (e.target === $('lapsAsk')) c
 function drawRoutes() {
   routeLayer.clearLayers();
   state.routes.forEach((r, i) => {
-    const casing = L.polyline(r.latlngs, { color: '#fff', weight: 9, opacity: 0.9, lineJoin: 'round' });
-    const line = L.polyline(r.latlngs, { color: COLORS[i], weight: 5, opacity: 0.9, lineJoin: 'round' });
+    const casing = glPolyline(r.latlngs, { color: '#fff', weight: 9, opacity: 0.9, lineJoin: 'round' });
+    const line = glPolyline(r.latlngs, { color: COLORS[i], weight: 5, opacity: 0.9, lineJoin: 'round' });
     for (const l of [casing, line]) l.on('click', () => { const again = lastTapped === i; lastTapped = i; selectRoute(i); if (again) openRouteAsk(i); });
     r._layers = { casing, line };
     casing.addTo(routeLayer);
     line.addTo(routeLayer);
   });
-  kmLayer = L.layerGroup().addTo(routeLayer);
+  kmLayer = glLayerGroup().addTo(routeLayer);
 }
 
 let kmLayer = null;
@@ -729,16 +709,16 @@ function selectRoute(i, { fit = false } = {}) {
   const card = $('cards').children[i];
   if (card && !isDesktop()) card.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   drawKmMarkers(state.routes[i], COLORS[i]);
-  if (fit) map.fitBounds(L.latLngBounds(state.routes[i].latlngs), mapPadding());
+  if (fit) map.fitBounds(glBounds(state.routes[i].latlngs), mapPadding());
 }
 
 function drawKmMarkers(route, color, layer = kmLayer) {
   layer.clearLayers();
   drawSights(route, layer);
   if (route.turnaround) {
-    L.marker(route.turnaround, {
+    glMarker(route.turnaround, {
       interactive: false,
-      icon: L.divIcon({
+      icon: glDivIcon({
         className: '',
         html: `<div class="map-label" style="background:#fff;color:${color};font:800 11px Inter,sans-serif;padding:3px 7px;border-radius:8px;border:2px solid ${color};white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25)">Turn around</div>`,
         iconSize: [84, 22],
@@ -755,9 +735,9 @@ function drawKmMarkers(route, color, layer = kmLayer) {
       const t = (nextKm * 1000 - d) / seg;
       const lat = pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t;
       const lon = pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t;
-      L.marker([lat, lon], {
+      glMarker([lat, lon], {
         interactive: false,
-        icon: L.divIcon({
+        icon: glDivIcon({
           className: '',
           html: `<div class="map-label" style="background:${color};color:#fff;font:700 10px Inter,sans-serif;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)">${nextKm}</div>`,
           iconSize: [18, 18],
@@ -776,7 +756,7 @@ function drawSights(route, layer) {
   const labels = list.length <= 12;
   for (const sg of list) {
     const html = `<div class="sight-pin"><i>★</i>${labels ? `<span>${escapeHtml(sg.name)}</span>` : ''}</div>`;
-    L.marker([sg.lat, sg.lon], { icon: L.divIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 500 })
+    glMarker([sg.lat, sg.lon], { icon: glDivIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 500 })
       .bindPopup(`<b>${escapeHtml(sg.name)}</b>${sg.local && sg.local !== sg.name ? `<br><span dir="auto">${escapeHtml(sg.local)}</span>` : ''}<br><small>${escapeHtml(sg.kind || '')} · ${U.len(sg.at)} into the run</small>`)
       .addTo(layer);
   }
@@ -880,7 +860,7 @@ function chime(name) {
 }
 const screenLock = isNative() ? new NativeScreenLock() : new ScreenLock();
 document.body.classList.toggle('native', isNative());
-const navLayer = L.layerGroup();
+const navLayer = glLayerGroup();
 const nav = { active: null }; // { navigator, source, route, color, demo, ... }
 const DEMO_RATES = [1, 6, 15];
 
@@ -1004,6 +984,7 @@ function renderSettings() {
   $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet;
   $('setFollow').checked = settings.follow;
   $('setHeading').checked = settings.headingUp;
+  $('setDark').checked = settings.darkMap;
   $('setAwake').checked = settings.awake;
   $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
 }
@@ -1023,13 +1004,14 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setAwake', 'awake']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
     if (key === 'quiet') { $('setSplits').disabled = $('setLandmarks').disabled = settings.quiet; }
     if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
     if (key === 'headingUp' && nav.active && !settings.headingUp) setMapRotation(null);
+    if (key === 'darkMap') applyMapTheme();
     if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
   });
 }
@@ -1196,13 +1178,13 @@ async function startRun({ demo }) {
   map.removeLayer(routeLayer);
   navLayer.clearLayers().addTo(map);
   n.lines = [
-    L.polyline(route.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
-    L.polyline(route.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(route.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(route.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
   ];
-  n.doneLine = L.polyline([], { color: '#94a3b8', weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer);
-  const extras = L.layerGroup().addTo(navLayer);
+  n.doneLine = glPolyline([], { color: '#94a3b8', weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer);
+  const extras = glLayerGroup().addTo(navLayer);
   drawKmMarkers(route, n.color, extras);
-  n.userMarker = L.marker(route.latlngs[0], { icon: L.divIcon({ className: '', html: '<div class="user-dot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000, interactive: false }).addTo(navLayer);
+  n.userMarker = glMarker(route.latlngs[0], { icon: glDivIcon({ className: '', html: '<div class="user-dot"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000, interactive: false }).addTo(navLayer);
   map.setView(route.latlngs[0], 17);
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
@@ -1273,8 +1255,8 @@ function maybeReroute(n, fix) {
   // Redraw the line to follow (the part already run stays grey).
   n.lines?.forEach((l) => l.remove());
   n.lines = [
-    L.polyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
-    L.polyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
   ];
   n.doneLine?.bringToFront?.();
   n.userMarker?.setZIndexOffset?.(1000);
@@ -1293,8 +1275,8 @@ function turnedAroundOnLoop({ seg }) {
   render(n.navigator.reroute(fresh, { say: false }));
   n.lines?.forEach((l) => l.remove());
   n.lines = [
-    L.polyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
-    L.polyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
+    glPolyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
   ];
   n.doneLine?.setLatLngs([]);
   voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
@@ -1354,10 +1336,11 @@ function render(v) {
     if (course != null && Number.isFinite(course)) n.heading = n.heading == null ? course : n.heading + angleDiff(n.heading, course) * 0.35;
     if (n.follow) {
       const turn = settings.headingUp && n.heading != null;
-      setMapRotation(turn ? n.heading : null);
+      setMapRotation(turn ? n.heading : null, { move: false });
       // The runner sits in the lower part of the screen with the way ahead above them.
       const centre = turn ? aheadOf(pos, n.heading, 0.18 * map.getSize().y * metresPerPixel(pos[0], map.getZoom())) : pos;
-      map.setView(centre, map.getZoom(), { animate: !n.demo || n.rate <= 6 }); // follow at the zoom the runner chose
+      // One glide per fix: centre and bearing together, at the zoom the runner chose.
+      map.follow(centre, { bearing: turn ? n.heading : 0, animate: !n.demo || n.rate <= 6 });
     }
   }
   if (v.routeDone && n.demo && !n.done) { n.done = true; setTimeout(endRun, 1200); } // a demo ends itself
@@ -1458,7 +1441,7 @@ async function saveRun(n, { finished }) {
     country: !!state.routes.country, rerouted: !!(nv.rerouted || nv.turnarounds), finished,
   });
   try {
-    run.picture = await drawRunPicture(run, { tileUrl: TILE_SOURCES[tileSource].url });
+    run.picture = await drawRunPicture(run, { snapshot: glSnapshot });
   } catch {
     run.picture = null;
   }
@@ -1500,7 +1483,7 @@ function closeRun() {
   $('navView').hidden = true;
   $('recenterBtn').hidden = true;
   resetEnd();
-  if (state.routes[state.selected]) map.fitBounds(L.latLngBounds(state.routes[state.selected].latlngs), mapPadding());
+  if (state.routes[state.selected]) map.fitBounds(glBounds(state.routes[state.selected].latlngs), mapPadding());
 }
 
 function setPaused(p) {
@@ -1556,31 +1539,22 @@ map.on('dragstart', () => {
   $('recenterBtn').hidden = false;
 });
 
-// ---- Heading-up map (CSS rotation of the map element; Leaflet itself stays north-up) ----
-let mapRot = null; // degrees the map is turned, or null when north is up
-function setMapRotation(heading) {
+// ---- Heading-up map: the map's bearing follows the runner's course; street names stay upright ----
+let mapRot = null; // degrees the map is turned (the course that points up), or null when north is up
+// `move: false` only records the state: the follow() call that comes next turns the map.
+function setMapRotation(heading, { move = true } = {}) {
   const body = document.body;
   if (heading == null) {
     if (mapRot == null) return;
     mapRot = null;
-    body.style.setProperty('--map-rot', '0deg');
     body.classList.remove('heading-up');
-    map.invalidateSize({ animate: false });
+    if (move) map.setBearing(null);
     return;
   }
-  // The CSS angle is kept continuous (no 359 -> 1 jump the long way round).
-  const want = -heading;
-  let rot = mapRot == null ? want : mapRot + angleDiff(mapRot, want);
-  if (mapRot == null) {
-    const d = Math.ceil(Math.hypot(window.innerWidth, window.innerHeight) * 1.02);
-    body.style.setProperty('--map-d', `${d}px`);
-    body.classList.add('heading-up');
-    map.invalidateSize({ animate: false });
-  }
-  mapRot = rot;
-  body.style.setProperty('--map-rot', `${rot.toFixed(1)}deg`);
+  if (mapRot == null) body.classList.add('heading-up');
+  mapRot = heading;
+  if (move) map.setBearing(heading);
 }
-window.addEventListener('resize', () => { if (mapRot != null) { document.body.style.setProperty('--map-d', `${Math.ceil(Math.hypot(window.innerWidth, window.innerHeight) * 1.02)}px`); map.invalidateSize({ animate: false }); } });
 const angleDiff = (from, to) => ((((to - from) % 360) + 540) % 360) - 180; // shortest signed turn, -180..180
 const metresPerPixel = (lat, zoom) => (156543.03 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
 function aheadOf([lat, lon], bearingDeg, metres) {
@@ -1975,18 +1949,17 @@ $('runPicBtn').addEventListener('click', async () => {
   $('runMapFoot').textContent = `${U.num(r.distance, 2)} ${U.unit} · ${fmtTime(r.elapsed)} · ${fmtWhen(r.time)}${r.track?.length > 1 ? ' · orange: where you ran' : ' · grey: the planned route (no GPS track)'}`;
   $('runMapPage').hidden = false;
   if (!runMap) {
-    runMap = L.map('runMap', { zoomControl: true, attributionControl: true });
-    L.tileLayer(TILE_SOURCES[tileSource].url, TILE_SOURCES[tileSource].opts).addTo(runMap);
-    runMapLayer = L.layerGroup().addTo(runMap);
+    runMap = glCreateMap('runMap', { zoomControl: true, attributionControl: true });
+    runMapLayer = glLayerGroup().addTo(runMap);
   }
   runMapLayer.clearLayers();
-  if (r.track?.length > 1) L.polyline(r.track, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(runMapLayer);
-  L.polyline(pts, { color: r.track?.length > 1 ? '#ff5a36' : '#94a3b8', weight: 5 }).addTo(runMapLayer);
-  L.circleMarker(pts[0], { radius: 7, color: '#fff', weight: 3, fillColor: '#ff5a36', fillOpacity: 1 }).addTo(runMapLayer);
-  L.circleMarker(pts[pts.length - 1], { radius: 7, color: '#fff', weight: 3, fillColor: '#0f172a', fillOpacity: 1 }).addTo(runMapLayer);
+  if (r.track?.length > 1) glPolyline(r.track, { color: '#fff', weight: 9, opacity: 0.9 }).addTo(runMapLayer);
+  glPolyline(pts, { color: r.track?.length > 1 ? '#ff5a36' : '#94a3b8', weight: 5 }).addTo(runMapLayer);
+  glCircleMarker(pts[0], { radius: 7, color: '#fff', weight: 3, fillColor: '#ff5a36', fillOpacity: 1 }).addTo(runMapLayer);
+  glCircleMarker(pts[pts.length - 1], { radius: 7, color: '#fff', weight: 3, fillColor: '#0f172a', fillOpacity: 1 }).addTo(runMapLayer);
   runMap.invalidateSize();
-  runMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30] });
-  setTimeout(() => { runMap.invalidateSize(); runMap.fitBounds(L.latLngBounds(pts), { padding: [30, 30] }); }, 150);
+  runMap.fitBounds(glBounds(pts), { padding: [30, 30] });
+  setTimeout(() => { runMap.invalidateSize(); runMap.fitBounds(glBounds(pts), { padding: [30, 30] }); }, 150);
 });
 $('runMapBack').addEventListener('click', () => { $('runMapPage').hidden = true; });
 $('runsExport').addEventListener('click', async () => {
@@ -2009,7 +1982,7 @@ if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal };
+window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture };
 
 // Arriving somewhere new: try to find the runner right away.
 locate({ quiet: true });

@@ -217,11 +217,12 @@ function bounds(pts) {
 }
 
 /**
- * Draws the run over map tiles into a canvas and returns a JPEG data URL. `tileUrl` is a
- * {z}/{x}/{y} template (the map's own source). Tiles that fail to load (offline) leave a
- * plain patch; if the canvas is tainted (no CORS), it is redrawn without tiles.
+ * Draws the run over the map into a canvas and returns a JPEG data URL. `snapshot(pts, { width,
+ * height, pad })` (the app's vector-map snapshot) gives the map picture and a lat/lon-to-pixel
+ * function; without it, or when it fails (offline, no WebGL), the run is drawn on a plain
+ * background with the same framing.
  */
-export async function drawRunPicture(run, { tileUrl, width = 640, height = 400, pad = 36, fetchTile = null, quality = 0.82 } = {}) {
+export async function drawRunPicture(run, { snapshot = null, width = 640, height = 400, pad = 36, quality = 0.82 } = {}) {
   const pts = (run.track?.length > 1 ? run.track : run.latlngs) || [];
   if (pts.length < 2 || typeof document === 'undefined') return null;
   const b = bounds(pts);
@@ -234,40 +235,35 @@ export async function drawRunPicture(run, { tileUrl, width = 640, height = 400, 
     if ((fx1 - fx0) * TILE <= width - 2 * pad && (fy1 - fy0) * TILE <= height - 2 * pad) break;
   }
   const cx = (fx0 + fx1) / 2, cy = (fy0 + fy1) / 2; // picture centre in tile units
-  const toPx = (lat, lon) => { const [tx, ty] = tileXY(lat, lon, z); return [width / 2 + (tx - cx) * TILE, height / 2 + (ty - cy) * TILE]; };
+  const plainPx = (lat, lon) => { const [tx, ty] = tileXY(lat, lon, z); return [width / 2 + (tx - cx) * TILE, height / 2 + (ty - cy) * TILE]; };
   const c = document.createElement('canvas');
   c.width = width;
   c.height = height;
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#eef1f5';
   ctx.fillRect(0, 0, width, height);
-  // Tiles covering the picture.
-  const x0 = Math.floor(cx - width / 2 / TILE), x1 = Math.floor(cx + width / 2 / TILE);
-  const y0 = Math.floor(cy - height / 2 / TILE), y1 = Math.floor(cy + height / 2 / TILE);
-  const n = 1 << z;
-  const jobs = [];
-  if (tileUrl) {
-    for (let tx = x0; tx <= x1; tx++) {
-      for (let ty = y0; ty <= y1; ty++) {
-        if (ty < 0 || ty >= n) continue;
-        const url = tileUrl.replace('{z}', z).replace('{x}', ((tx % n) + n) % n).replace('{y}', ty);
-        jobs.push(loadTile(url, fetchTile).then((img) => { if (img) ctx.drawImage(img, width / 2 + (tx - cx) * TILE, height / 2 + (ty - cy) * TILE, TILE, TILE); }).catch(() => {}));
-      }
-    }
-    await Promise.all(jobs);
+  let base = null;
+  if (snapshot) {
+    try { base = await snapshot(pts, { width, height, pad }); } catch { base = null; }
   }
-  const drawn = draw(ctx, run, toPx);
+  let toPx = plainPx;
+  if (base?.canvas) {
+    ctx.drawImage(base.canvas, 0, 0, width, height);
+    toPx = base.project;
+  }
+  draw(ctx, run, toPx);
+  base?.release?.();
   try {
     return c.toDataURL('image/jpeg', quality);
   } catch {
-    // Tainted by a tile without CORS headers: the same picture on a plain background.
+    // A tainted canvas: the same picture on a plain background.
     const c2 = document.createElement('canvas');
     c2.width = width;
     c2.height = height;
     const ctx2 = c2.getContext('2d');
     ctx2.fillStyle = '#eef1f5';
     ctx2.fillRect(0, 0, width, height);
-    draw(ctx2, run, toPx);
+    draw(ctx2, run, plainPx);
     return c2.toDataURL('image/jpeg', quality);
   }
   function draw(g, r, px) {
@@ -297,17 +293,6 @@ export async function drawRunPicture(run, { tileUrl, width = 640, height = 400, 
     }
     return true;
   }
-}
-
-function loadTile(url, fetchTile) {
-  if (fetchTile) return fetchTile(url);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
 }
 
 // ---- The journal ----

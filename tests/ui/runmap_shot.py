@@ -17,6 +17,6 @@ with sync_playwright() as p:
     pg.click('.run-card'); pg.wait_for_timeout(400)
     pg.click('#runPicBtn'); pg.wait_for_timeout(900)
     pg.screenshot(path=f'{S}/runmap-real.png')
-    print('viewer:', pg.is_visible('#runMapPage'), '| leaflet polylines:', pg.eval_on_selector_all('#runMap path','e=>e.length'), '| errors:', errs)
+    print('viewer:', pg.is_visible('#runMapPage'), '| map lines:', pg.eval_on_selector_all('#runMap polyline','e=>e.length'), '| errors:', errs)
     ctx.close(); b.close()
 srv.shutdown()

@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = '38b44c71';
+const CACHE_VERSION = 'daeeee2f';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -31,8 +31,8 @@ const SHELL = [
   './img/icon-180.1901e532.png',
   './img/icon-192.7de3f5f2.png',
   './img/icon-512.3c491c08.png',
-  './js/vendor/leaflet.css',
-  './js/vendor/leaflet.js',
+  './js/vendor/maplibre-gl.css',
+  './js/vendor/maplibre-gl.js',
 ];
 
 self.addEventListener('install', (event) => {

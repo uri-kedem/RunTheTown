@@ -13,6 +13,21 @@ const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass
 check(roundDist(147) === 150 && roundDist(42) === 40 && roundDist(1234) === 1200, 'distance rounding');
 check(paceShort(332) === '5:32', 'pace format');
 
+// An out-and-back: the way home runs over the way out, so the first fix is as near the end of
+// the route as its start. The run must begin at the start, whichever side the GPS jitter falls.
+{
+  const A = [32.08, 34.78], B = [32.08, 34.79]; // 940 m east and back
+  const line = [];
+  for (let i = 0; i <= 20; i++) line.push([A[0], A[1] + ((B[1] - A[1]) * i) / 20]);
+  const outback = { name: 'Out & back', type: 'outback', latlngs: [...line, ...line.slice(0, -1).reverse()], cues: [], sights: [] };
+  for (const side of [1, -1]) {
+    const nav = new Navigator(outback, { now: () => 1000 });
+    nav.start();
+    nav.update({ lat: A[0] + (side * 2) / 110574, lon: A[1] + 15 / (111320 * Math.cos((A[0] * Math.PI) / 180)), accuracy: 5 });
+    check(nav.begun && nav.progress < 60 && !nav.routeDone, `out-and-back joins at its start, jitter ${side > 0 ? 'north' : 'south'} (progress ${Math.round(nav.progress)} of ${Math.round(nav.total)})`);
+  }
+}
+
 function simulate(route, { detour = null, speed = 3.0, dt = 2, noise = 4 } = {}) {
   let t = 0;
   const said = [];
