@@ -7,3 +7,6 @@ ios/App/App/public/
 ios/App/build/
 ios/App/Pods/
 ios/DerivedData/
+tests/ui/out/
+tests/ui/vt/
+docs/
