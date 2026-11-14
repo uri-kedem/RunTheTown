@@ -138,6 +138,17 @@ ${trk}
 `;
 }
 
+/**
+ * The runner's usual pace (seconds per km): the median of their last ten real runs of a
+ * kilometre or more; `fallback` (a gentle 6:00 min/km) until there are any.
+ */
+export function usualPace(runs, fallback = 360) {
+  const paces = (runs || []).filter((r) => r.pace > 0 && r.distance >= 1000).sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 10).map((r) => r.pace).sort((a, b) => a - b);
+  if (!paces.length) return fallback;
+  const mid = paces.length >> 1;
+  return paces.length % 2 ? paces[mid] : (paces[mid - 1] + paces[mid]) / 2;
+}
+
 // How much of the track ran on the planned line: the share of track points within `tol` m of
 // it (brute force: the track is thinned to a few hundred points, the line to a few hundred vertices).
 export function matchShare(track, latlngs, tol = 30) {

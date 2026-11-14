@@ -443,6 +443,34 @@ export function backRoute(g, proj, from, route, seg) {
   return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, turnedAround: true };
 }
 
+/**
+ * "Take me back": the shortest way from where the runner is (`from`) to the run's start
+ * (`start`, { lat, lon }; the route's first point when not given, but a rerouted line
+ * begins where the runner rejoined it, so the app passes the start it remembers), on the
+ * streets the planner prefers (its costs are still on the graph: sidewalks, parks, no busy
+ * roads). Not the way they came, the short way. Null when the runner or the start is not
+ * near a street, or the runner is already there.
+ */
+export function homeRoute(g, proj, from, route, { start = null } = {}) {
+  if (!route?.latlngs?.length) return null;
+  const origin = start || { lat: route.latlngs[0][0], lon: route.latlngs[0][1] };
+  const [fx, fy] = proj.toXY(from.lat, from.lon);
+  const here = g.nearest(fx, fy, { maxDist: 200, scoreFn: (i, d) => d + (g.nodeRough[i] ? 250 : 0) });
+  if (here < 0) return null;
+  // The start's node must be reachable from here: a street cut off from the network (a
+  // cul-de-sac the map does not connect) is skipped for the nearest connected one.
+  const [sx, sy] = proj.toXY(origin.lat, origin.lon);
+  const home = g.nearest(sx, sy, { maxDist: 400, filter: (v) => !g.comp || g.comp[v] === g.comp[here] });
+  if (home < 0 || here === home) return null;
+  const path = g.shortestPath(here, home);
+  if (!path?.edges?.length) return null;
+  let distance = 0;
+  for (const e of path.edges) distance += g.len[e];
+  const latlngs = path.nodes.map((v) => [g.lat[v], g.lon[v]]);
+  const cues = buildCues(g, path);
+  return { ...route, latlngs, cues, sights: [], distance, type: 'back', rerouted: true, home: true };
+}
+
 // Graph nodes within maxDist m of the points, in order, without repeats.
 function nearNodes(g, proj, pts, maxDist) {
   const nodes = [];

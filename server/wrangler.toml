@@ -1,0 +1,10 @@
+# Cloudflare Worker settings for RunTheTown's proxy. Deploy with: npx wrangler deploy
+name = "runthetown-proxy"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Sent to Nominatim with every request, as its usage policy asks. Set to Uri's address.
+CONTACT_EMAIL = ""
+# Who may call the proxy from a browser (comma-separated). Empty: anyone (testing).
+ALLOWED_ORIGINS = "https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"

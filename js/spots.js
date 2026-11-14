@@ -4,8 +4,9 @@
 // (so laps can be planned on them). Big parks still come from the map tiles.
 
 import { haversine } from './geo.js';
+import { nominatimUrl } from './services.js';
 
-const NOMINATIM_SCAN = 'https://nominatim.openstreetmap.org';
+const NOMINATIM_SCAN = nominatimUrl('');
 const SCAN_KM = 8; // half-size of the box scanned around the start
 const SCAN_TIMEOUT_MS = 8000;
 const NOT_RUNNING_SPORT = /^(cycling|motor|motocross|karting|horse_racing|equestrian|basketball|tennis|swimming|skateboard|ice_hockey|ice_skating|volleyball|handball|baseball|cricket|golf|shooting|bowls|boules|climbing|table_tennis|badminton|gymnastics|boxing|judo)$/;

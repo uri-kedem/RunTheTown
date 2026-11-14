@@ -1,5 +1,6 @@
 // Live-guidance tests with simulated GPS. Run: node tests/test-navigation.mjs
 import { RouteEngine } from '../js/engine.js';
+import { homeRoute } from '../js/planner.js';
 import { Navigator, SimulatedRun, Voice, roundDist, paceShort, distText, paceText, lenText, MILE } from '../js/navigation.js';
 import { loadSettings, saveSettings, houseVoices, DEFAULTS } from '../js/settings.js';
 import { syntheticOverpass, CENTER } from './synthetic-city.mjs';
@@ -384,6 +385,49 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
       }
     }
   }
+}
+
+// "Take me back": from 40% along a loop, the shortest way to the start on the planner's
+// streets, shorter than finishing the loop, ending at the start, with turn cues.
+{
+  const [r] = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
+  const { graph: g, proj } = engine.area;
+  const pts = r.latlngs;
+  let d = 0, k = 1;
+  for (; k < pts.length && d < r.distance * 0.4; k++) d += Math.hypot((pts[k][0] - pts[k - 1][0]) * 110574, (pts[k][1] - pts[k - 1][1]) * 111320 * Math.cos((pts[k][0] * Math.PI) / 180));
+  const here = { lat: pts[k][0], lon: pts[k][1] };
+  const home = homeRoute(g, proj, here, r);
+  const end = home?.latlngs[home.latlngs.length - 1];
+  const endGap = end ? Math.hypot((end[0] - pts[0][0]) * 110574, (end[1] - pts[0][1]) * 111320 * Math.cos((end[0] * Math.PI) / 180)) : Infinity;
+  check(home && home.home && home.type === 'back' && home.distance < r.distance - d && endGap < 40 && home.cues.length >= 1, `way home: ${home ? Math.round(home.distance) : '-'} m instead of ${Math.round(r.distance - d)} m left, ends ${Math.round(endGap)} m from the start, ${home?.cues.length} cues`);
+  check(homeRoute(g, proj, { lat: pts[0][0], lon: pts[0][1] }, r) === null, 'already at the start: nothing to do');
+  // After a reroute the line begins where the runner rejoined it; the way home still goes to the run's start.
+  const rerouted = { ...r, latlngs: r.latlngs.slice(k) };
+  const home2 = homeRoute(g, proj, here, rerouted, { start: { lat: pts[0][0], lon: pts[0][1] } });
+  check(home2 && Math.abs(home2.distance - home.distance) < 1 && homeRoute(g, proj, here, rerouted) === null, 'a rerouted line still leads home to the start the app remembers');
+  // A navigator switched to it carries on: distance so far kept, the rest of the run is the way home.
+  const nav = new Navigator(r, { now: () => 1000 });
+  nav.start();
+  nav.update({ lat: pts[0][0], lon: pts[0][1], accuracy: 5 });
+  nav.odometer = 2400;
+  const v = nav.reroute(home, { say: false });
+  check(Math.abs(nav.total - home.distance) < 0.02 * home.distance && nav.odometer === 2400 && !nav.routeDone && nav.total - nav.progress > 0, `the run goes on along the way home (${Math.round(nav.total)} m to run, ${Math.round(home.distance)} m planned, remaining ${v.remaining})`);
+}
+
+// A sight's story (from Wikipedia, arriving after the run began) is read after the call-out.
+{
+  const A = [32.08, 34.78];
+  const line = [];
+  for (let i = 0; i <= 20; i++) line.push([A[0], A[1] + (0.01 * i) / 20]);
+  const sight = { name: 'Old Lighthouse', kind: 'lighthouse', lat: A[0] + 0.0002, lon: A[1] + 0.005, at: 470 };
+  const route = { name: 'Straight', type: 'loop', latlngs: line, cues: [], sights: [sight] };
+  const said = [];
+  const nav = new Navigator(route, { now: () => 1000, speak: (parts) => said.push(parts.map((p) => p.text).join('')) });
+  nav.start();
+  sight.story = 'The Old Lighthouse was built in 1868 and guided ships into the harbour for a century.';
+  for (let m = 0; m <= 500; m += 50) nav.update({ lat: A[0], lon: A[1] + m / (111320 * Math.cos((A[0] * Math.PI) / 180)), accuracy: 5 });
+  const i = said.findIndex((t) => /Old Lighthouse/.test(t) && /left|right|ahead/i.test(t));
+  check(i >= 0 && said[i + 1] === sight.story, `the story follows the call-out (${said[i + 1]})`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll navigation tests passed');

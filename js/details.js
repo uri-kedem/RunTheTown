@@ -3,7 +3,9 @@
 // looked up on tap: the place in OpenStreetMap through Nominatim (with its
 // extra tags), then Wikidata for the official website when OSM has none.
 
-const NOMINATIM = 'https://nominatim.openstreetmap.org';
+import { nominatimUrl } from './services.js';
+
+const NOMINATIM = nominatimUrl(''); // the public server, or our proxy's /nominatim
 const WIKIDATA = 'https://www.wikidata.org/wiki/Special:EntityData';
 const LOOKUP_TIMEOUT_MS = 7000;
 const GENERIC_NAME = /^(athletics track|running track|park)$/i;
@@ -132,6 +134,73 @@ export async function lookupPlace(place, { fetchImpl = (...a) => fetch(...a) } =
 }
 
 /** Links that always work, even with nothing found. */
+// ---- Landmark stories: a sentence or two about a sight from English Wikipedia ----
+// The article is found by position (within 150 m of the sight) and name, so a street or a
+// neighbour's article is not read out as the sight's; without a match there is no story.
+const WIKIPEDIA_API = 'https://en.wikipedia.org/w/api.php';
+const WIKIPEDIA_SUMMARY = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const STORY_MAX_CHARS = 260;
+
+/** The first sentence or two of an article extract, as spoken text; null when too thin. */
+export function storyFromSummary(extract, { maxChars = STORY_MAX_CHARS } = {}) {
+  const text = String(extract || '').replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').replace(/\s+([,.;:])/g, '$1').trim();
+  if (!text) return null;
+  const sentences = text.match(/[^.!?]+[.!?]+(?=\s|$)/g) || [text];
+  let out = '';
+  for (const s of sentences) {
+    if (out && (out + s).trim().length > maxChars) break;
+    out += s;
+    if (out.trim().length >= maxChars * 0.6) break;
+  }
+  out = out.trim();
+  return out.length >= 30 ? out : null;
+}
+
+const normName = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/** Picks, among nearby articles [{ title, dist }], the one that is this sight: by name, else right on top of it. */
+export function pickArticle(pages, sight) {
+  const name = normName(sight.name), local = normName(sight.local);
+  let best = null;
+  for (const p of pages) {
+    const t = normName(p.title);
+    let score = 0;
+    if (name && t === name) score = 3;
+    else if (name && (t.includes(name) || name.includes(t))) score = 2;
+    else if (local && (t === local || t.includes(local) || local.includes(t))) score = 2;
+    else if (p.dist != null && p.dist <= 40) score = 1;
+    score -= (p.dist || 0) / 1000;
+    if (score > 0.5 && (!best || score > best.score)) best = { ...p, score };
+  }
+  return best;
+}
+
+const storyMemo = new Map();
+/**
+ * The story for a sight { name, local, lat, lon }: { title, url, story } or null.
+ * Never throws; a failed lookup is tried again next time.
+ */
+export async function findStory(sight, { fetchImpl = (...a) => fetch(...a) } = {}) {
+  const key = `${sight.name}|${(+sight.lat).toFixed(4)},${(+sight.lon).toFixed(4)}`;
+  if (storyMemo.has(key)) return storyMemo.get(key);
+  const p = (async () => {
+    try {
+      const geo = await getJson(`${WIKIPEDIA_API}?action=query&list=geosearch&gscoord=${(+sight.lat).toFixed(6)}|${(+sight.lon).toFixed(6)}&gsradius=150&gslimit=8&format=json&origin=*`, fetchImpl);
+      const page = pickArticle(geo?.query?.geosearch || [], sight);
+      if (!page) return null;
+      const sum = await getJson(`${WIKIPEDIA_SUMMARY}/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, fetchImpl);
+      const story = storyFromSummary(sum?.extract);
+      if (!story) return null;
+      return { title: page.title, url: sum?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, story };
+    } catch {
+      return null;
+    }
+  })();
+  storyMemo.set(key, p);
+  p.then((v) => { if (!v) storyMemo.delete(key); });
+  return p;
+}
+
 export function fallbackLinks(place) {
   const q = `${place.name}${place.local && place.local !== place.name ? ' ' + place.local : ''} ${place.kind === 'park' ? 'park' : 'athletics track'}`;
   return {

@@ -1,6 +1,6 @@
 // The runner's profile and run records (pure parts; the picture and the store need a browser).
 // Run: node tests/test-journal.mjs
-import { loadProfile, saveProfile, simplifyTrack, makeRun, matchShare, runGpx } from '../js/journal.js';
+import { loadProfile, saveProfile, simplifyTrack, makeRun, matchShare, runGpx, usualPace } from '../js/journal.js';
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
@@ -47,6 +47,15 @@ check(run.onPlan > 0.95, 'the run record carries it');
   check(oldTimes.every((t, i) => !i || t >= oldTimes[i - 1]), 'timestamps never go backwards');
   const planned = runGpx({ name: 'Plan', time: '2026-11-06T06:00:00.000Z', elapsed: 0, track: [], latlngs: line });
   check((planned.match(/<trkpt /g) || []).length === line.length, 'a run without a GPS track exports the planned line');
+}
+
+// The usual pace: the median of the last ten real runs; a gentle default before any.
+{
+  const mk = (i, pace, distance = 5000) => ({ time: `2026-10-${String(1 + i).padStart(2, '0')}T06:00:00.000Z`, pace, distance });
+  check(usualPace([]) === 360 && usualPace(null) === 360, 'no runs yet: 6:00 min/km');
+  check(usualPace([mk(1, 330), mk(2, 20, 300)]) === 330, 'a few metres do not count');
+  const many = [mk(1, 900), ...Array.from({ length: 10 }, (_, i) => mk(2 + i, 300 + i * 2))]; // an old slow walk, then ten runs
+  check(usualPace(many) === 309, `median of the last ten runs (${usualPace(many)})`);
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll journal tests passed');

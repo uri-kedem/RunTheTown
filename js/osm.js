@@ -4,12 +4,9 @@
 // Public Overpass servers differ a lot in speed and rate limits. Map data is
 // downloaded in tiles on a fixed grid, spread over two main servers with
 // fallbacks, and each tile is cached on the device (see cache.js).
-export const ENDPOINTS = [
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-];
+import { overpassEndpoints } from './services.js';
+
+export const ENDPOINTS = overpassEndpoints();
 const ATTEMPT_TIMEOUT_MS = 75000;
 
 const RUNNABLE =

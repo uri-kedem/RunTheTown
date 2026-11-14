@@ -53,6 +53,12 @@ def route(r):
         return r.fulfill(body=json.dumps(hits.get(q,[])), content_type='application/json')
     if 'nominatim.openstreetmap.org/reverse' in u: return r.fulfill(body=json.dumps({'error':'none'}), content_type='application/json')
     if 'wikidata.org' in u: return r.fulfill(body=json.dumps({'entities':{}}), content_type='application/json')
+    if 'en.wikipedia.org/w/api.php' in u and 'list=geosearch' in u:
+        q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query); lat,lon=[float(x) for x in q['gscoord'][0].split('|')]
+        # Every sight of the synthetic city has an article right on top of it.
+        return r.fulfill(body=json.dumps({'query':{'geosearch':[{'title':f'Sight at {lat:.3f},{lon:.3f}','dist':8}]}}), content_type='application/json')
+    if 'en.wikipedia.org/api/rest_v1/page/summary/' in u:
+        return r.fulfill(body=json.dumps({'extract':'This landmark was built in 1931 and is loved by the runners of Testville. It is open every day of the year.','content_urls':{'desktop':{'page':'https://en.wikipedia.org/wiki/Test'}}}), content_type='application/json')
     if '127.0.0.1' in u: return r.continue_()
     return r.abort()
 INIT='''
@@ -100,6 +106,12 @@ with sync_playwright() as p:
     pg.on('request', lambda rq: tile_hits.append(rq.url) if rq.url.endswith('.pbf') else None)
     # Run in laps: the spots list is the menu; one tap on a track opens the distance dialog.
     print('streets style: spots list hidden:', pg.is_hidden('#spotsPrefs'), '| distance shown:', pg.is_visible('#distanceInput'))
+    # Plan by time: minutes at the runner's usual pace (6:00 min/km before any run is logged).
+    pg.click('#planBy [data-v="min"]'); pg.fill('#distanceInput', '30'); pg.wait_for_timeout(100)
+    print('BY TIME: unit:', pg.text_content('#distanceUnit'), '| hint:', pg.text_content('#distanceHint'), '| msg:', pg.text_content('#distanceMsg'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'), '| go enabled:', not pg.is_disabled('#goBtn'))
+    pg.fill('#distanceInput', '5'); print('too short:', pg.text_content('#distanceMsg'))
+    pg.click('#planBy [data-v="km"]'); pg.wait_for_timeout(100)
+    print('back to distance:', pg.input_value('#distanceInput'), pg.text_content('#distanceUnit'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'))
     pg.click('#runStyle [data-style="laps"]'); pg.wait_for_timeout(100)
     print('laps style: distance hidden:', pg.is_hidden('#distanceInput'), '| go hidden:', pg.is_hidden('#goBtn'))
     pg.wait_for_selector('#spotsPrefs .place', timeout=30000)
@@ -169,6 +181,9 @@ with sync_playwright() as p:
     for c in pg.eval_on_selector_all('.card','els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))'): print('CARD:', c)
     print('exactly 3 routes:', pg.eval_on_selector_all('.card','e=>e.length')==3, '| start buttons on the sheet:', pg.eval_on_selector_all('#resultsView .primary','e=>e.length'))
     print('sight pins on map:', pg.eval_on_selector_all('.sight-pin','e=>e.length'))
+    pg.click('.card:nth-child(1)'); pg.wait_for_timeout(200); pg.click('.card:nth-child(1)'); pg.wait_for_timeout(1500)
+    print('STORIES on the tour route:', pg.evaluate("(() => { const r = window.__rtt.state.routes[window.__rtt.state.selected]; return (r.sights||[]).map(s => s.name + ': ' + (s.story ? s.story.slice(0, 40) + '…' : s.story)); })()"))
+    pg.click('#routeAskClose'); pg.wait_for_timeout(200)
     print('places list:', pg.eval_on_selector_all('#places .place', 'els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))'))
     print('place pins:', pg.eval_on_selector_all('.place-pin', 'e=>e.length'))
     pg.screenshot(path=f'{S}/nav-1b-places.png')
@@ -255,6 +270,10 @@ with sync_playwright() as p:
     pg.wait_for_timeout(500)
     print('REROUTED:', rerouted, '| banner:', pg.inner_text('#navBanner').replace('\n',' | '), '| said:', [s['text'] for s in spoken(pg)][-2:], '| lines:', pg.evaluate('window.__rtt.nav?.active?.lines?.length'))
     pg.screenshot(path=f'{S}/nav-4c-reroute.png')
+    # "Take me back": two taps, then the rest of the run is the shortest way to the start.
+    pg.click('#homeBtn'); print('home armed:', pg.text_content('#homeBtn'))
+    pg.click('#homeBtn'); pg.wait_for_timeout(500); print('home toast:', pg.text_content('#toast'))
+    print('HOME ROUTE:', pg.evaluate('!!window.__rtt.nav.active.route.home'), '|', pg.text_content('#navText'), '| to go:', pg.text_content('#statLeft'), pg.text_content('#statLeftLabel'), '| said:', [s['text'] for s in spoken(pg)[-1:]], '| button:', pg.text_content('#homeBtn'))
     pg.evaluate('window.__stubMap._drag()'); print('recenter visible after drag:', pg.is_visible('#recenterBtn'))
     pg.click('#recenterBtn'); print('recenter hidden after tap:', pg.is_hidden('#recenterBtn'))
     # end the GPS run: it is saved to the journal with a picture (tiles are blocked here, so the plain version)
@@ -279,6 +298,10 @@ with sync_playwright() as p:
     print('share image:', dl.value.suggested_filename, '| on-plan fact:', [f for f in pg.eval_on_selector_all('#runFacts li','e=>e.map(x=>x.textContent)') if 'planned line' in f])
     pg.click('#runAgain'); pg.wait_for_selector('#resultsView:not([hidden]) .card', timeout=40000); pg.wait_for_timeout(300)
     print('run again planned:', pg.eval_on_selector_all('.card','e=>e.length'), 'routes from', pg.text_content('#resultsSub'))
+    # A link that carries the start (a hotel's QR code): straight to the planner with that start.
+    pg.goto('http://127.0.0.1:8766/index.html?start=32.0812,34.7791&name=Test%20Hotel&km=7&mode=tour'); pg.wait_for_timeout(1500)
+    if pg.is_visible('#profile'): pg.click('#profileBack'); pg.wait_for_timeout(300)
+    print('FROM LINK: view:', pg.evaluate('document.body.dataset.view'), '| mode:', pg.evaluate('window.__rtt.state.mode'), '| start:', pg.text_content('#startLine'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'), '| input:', pg.input_value('#distanceInput'))
     # desktop look
     pg.set_viewport_size({'width':1280,'height':800}); pg.wait_for_timeout(400); pg.screenshot(path=f'{S}/nav-5-desktop.png')
     ctx.close(); b.close()

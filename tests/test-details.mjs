@@ -1,5 +1,5 @@
 // Place details (website, Wikipedia, hours) lookups. Run: node tests/test-details.mjs
-import { lookupPlace, pickOsmPlace, detailsFromTags, detailsFromWikidata, fallbackLinks } from '../js/details.js';
+import { lookupPlace, pickOsmPlace, detailsFromTags, detailsFromWikidata, fallbackLinks, storyFromSummary, pickArticle, findStory } from '../js/details.js';
 import { RouteEngine } from '../js/engine.js';
 import { syntheticOverpass, CENTER } from './synthetic-city.mjs';
 import { makeMockMapBackend } from './mock-vectortiles.mjs';
@@ -66,5 +66,32 @@ const fetchHadar = async (url) => {
   await engine.placeDetails(track);
   check(fetchImpl.calls.details === before, 'second tap uses the cache');
 }
+// Landmark stories: a sentence or two from the Wikipedia article at the sight's position.
+{
+  const extract = 'The Tel Aviv Museum of Art (Hebrew: מוזיאון תל אביב לאמנות) is an art museum in Tel Aviv, Israel. It was established in 1932 in a building that was the home of the first mayor, Meir Dizengoff. The museum moved in 1971.';
+  const story = storyFromSummary(extract);
+  check(story === 'The Tel Aviv Museum of Art is an art museum in Tel Aviv, Israel. It was established in 1932 in a building that was the home of the first mayor, Meir Dizengoff.', `story: two sentences, parentheses dropped (${story})`);
+  check(storyFromSummary('Short.') === null && storyFromSummary('') === null, 'too thin: no story');
+  const long = storyFromSummary('A'.repeat(200) + ' is a museum. ' + 'B'.repeat(200) + ' is nearby.');
+  check(long.endsWith('is a museum.') && long.length < 230, 'one long sentence is enough');
+  const pages = [{ title: 'Shaul HaMelech Boulevard', dist: 12 }, { title: 'Tel Aviv Museum of Art', dist: 48 }, { title: 'Tel Aviv', dist: 90 }];
+  check(pickArticle(pages, { name: 'Tel Aviv Museum of Art' })?.title === 'Tel Aviv Museum of Art', 'the article is matched by name, not by being nearest');
+  check(pickArticle([{ title: 'Some Street', dist: 30 }], { name: 'Independence Monument' })?.title === 'Some Street' && pickArticle([{ title: 'Some Street', dist: 70 }], { name: 'Independence Monument' }) === null, 'without a name match only an article right on the spot counts');
+  const calls = [];
+  const fetchWiki = async (url) => {
+    calls.push(url);
+    if (url.includes('list=geosearch')) return json({ query: { geosearch: pages } });
+    if (url.includes('/page/summary/Tel_Aviv_Museum_of_Art')) return json({ extract, content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Tel_Aviv_Museum_of_Art' } } });
+    throw new Error('unexpected ' + url);
+  };
+  const sight = { name: 'Tel Aviv Museum of Art', local: 'מוזיאון תל אביב לאמנות', lat: 32.0773, lon: 34.7866 };
+  const found = await findStory(sight, { fetchImpl: fetchWiki });
+  check(found?.story === story && found.url.endsWith('Tel_Aviv_Museum_of_Art') && calls.length === 2 && calls[0].includes('gscoord=32.077300|34.786600') && calls[0].includes('origin=*'), 'story found: one geosearch, one summary');
+  await findStory(sight, { fetchImpl: fetchWiki });
+  check(calls.length === 2, 'the second ask for the same sight is answered from memory');
+  const none = await findStory({ name: 'Nothing Here', lat: 32.0, lon: 34.7 }, { fetchImpl: async () => { throw new Error('offline'); } });
+  check(none === null, 'offline: no story, no exception');
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll details tests passed');
 process.exit(failures ? 1 : 0);

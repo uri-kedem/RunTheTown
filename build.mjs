@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ORDER = ['geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'landcover', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'settings', 'journal', 'native', 'glmap', 'app'];
+const ORDER = ['services', 'geo', 'osm', 'vectortiles', 'landscape', 'elevation', 'landcover', 'graph', 'cues', 'planner', 'places', 'details', 'spots', 'cache', 'engine', 'navigation', 'settings', 'journal', 'native', 'glmap', 'app'];
 const root = dirname(fileURLToPath(import.meta.url));
 const at = (...p) => join(root, ...p);
 const read = (p) => readFileSync(at(p), 'utf8');

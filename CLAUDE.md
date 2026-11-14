@@ -66,6 +66,8 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/cues.js` | A path becomes turn-by-turn cues |
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
+| `js/services.js` | Where search, Nominatim and Overpass live: the public servers, or our proxy when `PROXY` is set |
+| `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it |
 | `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look, the offline cache |
 | `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |

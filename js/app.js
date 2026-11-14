@@ -1,14 +1,15 @@
 // UI: map, start point, preferences and route results.
 
 import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
-import { rejoinRoute, backRoute, outbackReroute } from './planner.js';
+import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
-import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, journal } from './journal.js';
+import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
 import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare } from './native.js';
 import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
-import { fallbackLinks } from './details.js';
+import { fallbackLinks, findStory } from './details.js';
+import { searchUrl, nominatimUrl } from './services.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
@@ -32,6 +33,9 @@ const U = {
 const state = {
   start: null, // { lat, lon, label }
   distanceKm: 5,
+  planBy: 'km', // 'km' (the distance typed) or 'min' (minutes, turned into a distance at the runner's usual pace)
+  minutes: 30,
+  pace: 360, // the runner's usual pace, s/km, from the journal
   prefs: { green: false, water: false, quiet: false, sights: false },
   terrain: 'any',
   routes: [],
@@ -264,7 +268,7 @@ async function fetchSuggestions(q) {
   ac.controller?.abort();
   ac.controller = new AbortController();
   const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`;
+  const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`);
   try {
     const res = await fetch(url, { signal: ac.controller.signal });
     if (!res.ok) throw new Error(res.status);
@@ -378,7 +382,7 @@ $('searchForm').addEventListener('submit', async (e) => {
   if (ac.items.length && ac.query === q && !ac.items[0].isLocation) return chooseSuggestion(0);
   // Fallback: a single geocode with Nominatim.
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`);
+    const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`));
     const [hit] = await res.json();
     if (!hit) return toast('No places found for that search.');
     ac.items = [{ main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon }];
@@ -402,21 +406,74 @@ state.distanceValid = true;
 // The runner types the distance. Accepts "10", "7.5" or "7,5".
 // Limits in the unit on screen (the planner works in km).
 const limits = () => ({ min: Math.round(U.fromKm(MIN_KM) * 10) / 10, max: Math.round(U.fromKm(MAX_DISTANCE_KM) * 10) / 10 });
+const MIN_MIN = 10, MAX_MIN = 360; // minutes, when the run is planned by time
 function readDistance() {
   const raw = $('distanceInput').value.trim().replace(',', '.');
   const v = Number(raw);
-  const { min, max } = limits();
-  const ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
-  state.distanceValid = ok;
-  if (ok) state.distanceKm = Math.round(U.toKm(v) * 10) / 10;
-  $('distanceBox').classList.toggle('invalid', !ok && raw !== '');
   const msg = $('distanceMsg');
-  msg.classList.toggle('error', !ok);
-  if (!ok) msg.textContent = raw === '' ? `Type how many ${U.mi ? 'miles' : 'kilometers'} you want to run` : `Enter a distance between ${min} and ${max} ${U.unit}`;
-  else if (state.distanceKm > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
-  else msg.textContent = '';
+  let ok;
+  if (state.planBy === 'min') {
+    // So many minutes at the runner's usual pace (their journal's median; 6:00 min/km before any run).
+    ok = raw !== '' && Number.isFinite(v) && v >= MIN_MIN && v <= MAX_MIN;
+    if (ok) {
+      state.minutes = Math.round(v);
+      state.distanceKm = Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, Math.round(((v * 60) / state.pace) * 10) / 10));
+    }
+    state.distanceValid = ok;
+    msg.classList.toggle('error', !ok);
+    if (!ok) msg.textContent = raw === '' ? 'Type how many minutes you want to run' : `Enter a time between ${MIN_MIN} and ${MAX_MIN} minutes`;
+    else msg.textContent = `About ${U.len(state.distanceKm * 1000)} at your usual pace of ${U.pace(state.pace)} ${U.paceLabel()}${state.distanceKm > LONG_RUN_KM ? '. Long run: the first map download takes a few seconds longer' : ''}`;
+  } else {
+    const { min, max } = limits();
+    ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
+    state.distanceValid = ok;
+    if (ok) state.distanceKm = Math.round(U.toKm(v) * 10) / 10;
+    msg.classList.toggle('error', !ok);
+    if (!ok) msg.textContent = raw === '' ? `Type how many ${U.mi ? 'miles' : 'kilometers'} you want to run` : `Enter a distance between ${min} and ${max} ${U.unit}`;
+    else if (state.distanceKm > LONG_RUN_KM) msg.textContent = 'Long run: the first map download for this area takes a few seconds longer.';
+    else msg.textContent = '';
+  }
+  $('distanceBox').classList.toggle('invalid', !ok && raw !== '');
   updateGoButton();
 }
+// Distance or time in the field: the field keeps the value it had in the other unit.
+function setPlanBy(by) {
+  state.planBy = by;
+  setSegment('planBy', by);
+  const input = $('distanceInput');
+  if (by === 'min') {
+    input.value = String(state.minutes);
+    input.placeholder = '30';
+    input.setAttribute('aria-label', 'Time in minutes');
+    $('distanceUnit').textContent = 'min';
+    $('distanceHint').textContent = `${MIN_MIN}–${MAX_MIN} min`;
+  } else {
+    input.value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10); // the distance is always a valid one
+    input.placeholder = '10';
+    input.setAttribute('aria-label', `Distance in ${U.mi ? 'miles' : 'kilometers'}`);
+    $('distanceUnit').textContent = U.unit;
+    const { min, max } = limits();
+    $('distanceHint').textContent = `${min}–${max} ${U.unit}`;
+  }
+  readDistance();
+}
+$('planBy').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b && b.dataset.v !== state.planBy) setPlanBy(b.dataset.v);
+});
+// A distance chosen elsewhere (a run from the journal, laps at a track) is a distance: the field shows it as one.
+function setDistanceKm(km) {
+  state.planBy = 'km';
+  setSegment('planBy', 'km');
+  $('distanceUnit').textContent = U.unit;
+  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
+  readDistance();
+}
+// The runner's usual pace, for runs planned by time: from the journal, again after every saved run.
+function refreshPace() {
+  journal.list().then((runs) => { state.pace = usualPace(runs); if (state.planBy === 'min') readDistance(); }).catch(() => {});
+}
+refreshPace();
 $('distanceInput').addEventListener('input', readDistance);
 $('distanceInput').addEventListener('keydown', (e) => e.key === 'Enter' && e.target.blur());
 $('distanceInput').addEventListener('focus', (e) => e.target.select());
@@ -639,8 +696,7 @@ async function planLaps() {
   if (busy) return toast('Still working on the last search — one moment.');
   closeLapsAsk();
   // The chosen distance becomes the app's distance too, so the next search matches.
-  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
-  readDistance();
+  setDistanceKm(km);
   // The map must reach from the start to the spot (the spot list looks 8 km out, the
   // preview map only a few), or there is no way there and back to plan.
   const toPlace = haversine(state.start.lat, state.start.lon, place.lat, place.lon);
@@ -865,9 +921,27 @@ const nav = { active: null }; // { navigator, source, route, color, demo, ... }
 const DEMO_RATES = [1, 6, 15];
 
 // The route pop-up: name, distance, the facts, and the Start button.
+// A line or two about each landmark on a tour, from Wikipedia, fetched one after the other
+// once the route is chosen (the popup) and again at Start; each sight gets its `story` as it
+// arrives, and the navigator reads it after calling the sight out.
+async function loadStories(route) {
+  if (!route?.sights?.length || route._storiesLoading) return;
+  route._storiesLoading = true;
+  try {
+    for (const s of route.sights) {
+      if (s.story !== undefined) continue;
+      s.story = null;
+      const found = await findStory(s).catch(() => null);
+      if (found) { s.story = found.story; s.wiki = found.url; }
+    }
+  } finally {
+    route._storiesLoading = false;
+  }
+}
 function openRouteAsk(i) {
   const r = state.routes[i];
   if (!r) return;
+  loadStories(r);
   $('routeAskName').textContent = r.name;
   $('routeAskDist').textContent = U.num(r.distance, 2);
   $('routeAskUnit').textContent = U.unit;
@@ -900,9 +974,8 @@ function applyUnits() {
   $('statDistLabel').textContent = `${U.unit} run`;
   $('statPaceLabel').textContent = U.paceLabel();
   $('statLeftLabel').textContent = `${U.unit} to go`;
-  // The typed distance keeps its meaning: shown in the new unit.
-  if (state.distanceValid) $('distanceInput').value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10);
-  readDistance();
+  // The typed distance keeps its meaning: shown in the new unit (minutes stay minutes).
+  if (state.planBy === 'min') readDistance(); else { if (state.distanceValid) $('distanceInput').value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10); $('distanceUnit').textContent = U.unit; readDistance(); }
   if (state.routes.length) showRoutes(state.routes, { keep: true });
   if (!$('routeAsk').hidden && state.routes[state.selected]) openRouteAsk(state.selected);
   if (state.spots.length && !state.routes.length) drawPlaces(state.spots, $('spotsPrefs'));
@@ -1163,7 +1236,8 @@ async function startRun({ demo }) {
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
     onTurnaround: (where) => turnedAroundOnLoop(where),
   });
-  const n = (nav.active = { navigator: navigator_, route, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6, track: [], startedAt: new Date().toISOString(), saved: false });
+  const n = (nav.active = { navigator: navigator_, route, origin: { lat: route.latlngs[0][0], lon: route.latlngs[0][1] }, color: COLORS[state.selected], demo, clock, follow: settings.follow, rate: 6, track: [], startedAt: new Date().toISOString(), saved: false });
+  loadStories(route);
   $('recenterBtn').hidden = settings.follow;
 
   document.body.classList.add('navigating');
@@ -1252,16 +1326,48 @@ function maybeReroute(n, fix) {
   if (!fresh) return;
   n.route = fresh;
   render(nv.reroute(fresh));
-  // Redraw the line to follow (the part already run stays grey).
+  followNewLine(n, fresh);
+  toast(fresh.backMatched ? 'New route from here. The way back now follows the way you ran out.' : 'New route from here: it joins your run a little further on.');
+}
+
+// A new line to follow during the run (the part already run stays grey).
+function followNewLine(n, fresh) {
   n.lines?.forEach((l) => l.remove());
   n.lines = [
     glPolyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
     glPolyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
   ];
   n.doneLine?.bringToFront?.();
-  n.userMarker?.setZIndexOffset?.(1000);
-  toast(fresh.backMatched ? 'New route from here. The way back now follows the way you ran out.' : 'New route from here: it joins your run a little further on.');
 }
+
+// "Take me back to the start": two taps (a mis-tap must not throw the route away), then the
+// shortest safe way home from here replaces the rest of the route. The run itself goes on.
+let homeArmed = null;
+$('homeBtn').addEventListener('click', () => {
+  const n = nav.active;
+  if (!n || n.navigator.finished) return;
+  const btn = $('homeBtn');
+  if (!homeArmed) {
+    homeArmed = setTimeout(() => { homeArmed = null; btn.textContent = 'Take me back to the start'; }, 4000);
+    btn.textContent = 'Tap again to head back now';
+    return;
+  }
+  clearTimeout(homeArmed);
+  homeArmed = null;
+  btn.textContent = 'Take me back to the start';
+  const area = engine.area;
+  if (!n.lastFix || !area) { toast('Waiting for your position…'); return; }
+  let fresh = null;
+  try { fresh = homeRoute(area.graph, area.proj, { lat: n.lastFix.lat, lon: n.lastFix.lon }, n.route, { start: n.origin }); } catch (err) { console.warn('Take me back failed:', err); }
+  if (!fresh) { toast('No way back was found from here. Keep following the route, or end the run.'); return; }
+  n.route = fresh;
+  render(n.navigator.reroute(fresh, { say: false }));
+  followNewLine(n, fresh);
+  n.doneLine?.setLatLngs([]);
+  const d = fresh.cues?.[0];
+  voice.say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
+  toast('The route now leads back to the start by the shortest safe way.');
+});
 
 // The runner turned around on a loop (no return leg to switch to): the rest of the run is
 // the way back to the start along what they have already run.
@@ -1273,11 +1379,7 @@ function turnedAroundOnLoop({ seg }) {
   if (!fresh) return false;
   n.route = fresh;
   render(n.navigator.reroute(fresh, { say: false }));
-  n.lines?.forEach((l) => l.remove());
-  n.lines = [
-    glPolyline(fresh.latlngs, { color: '#fff', weight: 11, opacity: 0.95, lineJoin: 'round' }).addTo(navLayer),
-    glPolyline(fresh.latlngs, { color: n.color, weight: 7, opacity: 1, lineJoin: 'round' }).addTo(navLayer),
-  ];
+  followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
   voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
   toast('Turned around: the route now leads back to the start the way you came.');
@@ -1449,6 +1551,7 @@ async function saveRun(n, { finished }) {
     await journal.save(run);
     n.savedRun = run;
     refreshRailUser();
+    refreshPace();
     toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
   } catch {
     toast('Could not save this run on the phone.');
@@ -1690,6 +1793,23 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-nav]');
   if (b) navigate(b.dataset.nav);
 });
+// A link that carries a start point, e.g. the QR code at a hotel's front desk:
+// index.html?start=32.0795,34.8345&name=Hotel%20Name&km=5&mode=run — straight to the
+// planner with that start (and distance), in Free-flow run or Explorer tour (mode=tour).
+function openFromLink() {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch { return false; }
+  const at = (q.get('start') || '').split(',');
+  const lat = Number(at[0]), lon = Number(at[1]);
+  if (at.length !== 2 || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
+  const km = Number(q.get('km'));
+  const name = (q.get('name') || '').trim().slice(0, 80) || 'Start';
+  state.linkStart = true; // the start comes from the link, not from the phone's GPS
+  navigate(q.get('mode') === 'tour' ? 'tour' : 'run');
+  if (Number.isFinite(km) && km >= MIN_KM && km <= MAX_DISTANCE_KM) setDistanceKm(km);
+  setStart(lat, lon, name);
+  return true;
+}
 $('homeMenu').addEventListener('click', () => openDrawer(true));
 $('appMenu').addEventListener('click', () => openDrawer(true));
 $('drawerBackdrop').addEventListener('click', () => openDrawer(false));
@@ -1919,8 +2039,7 @@ $('runAgain').addEventListener('click', async () => {
   if (state.routes.length) showPrefs();
   setStart(r.start.lat, r.start.lon, r.start.label || 'Saved start');
   const km = Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, (r.planned || r.distance) / 1000));
-  $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
-  readDistance();
+  setDistanceKm(km);
   highlightNav(state.mode);
   if (r.type === 'laps' && r.place) { setRunStyle('laps'); toast(`Pick ${r.place.name} in the list to plan the laps again.`); return; }
   setRunStyle('streets');
@@ -1978,11 +2097,12 @@ $('runsExport').addEventListener('click', async () => {
 });
 refreshRailUser();
 // First open of the app: the profile page, once (Skip is remembered too).
+openFromLink();
 if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture };
+window.__rtt = { state, engine, map, setStart, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
-locate({ quiet: true });
+if (!state.linkStart) locate({ quiet: true });

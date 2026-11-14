@@ -159,7 +159,8 @@ export class Navigator {
       .map((c) => ({ ...c, at: c.idx != null && c.idx < pts.length ? this.along[c.idx] : c.at, pre: false, now: false }));
     this.sights = (route.sights || []).map((s) => {
       const [x, y] = this.proj.toXY(s.lat, s.lon);
-      return { ...s, at: this.snap(x, y, (s.at || 0) - 300, (s.at || 0) + 300, 0).at, said: false };
+      // `src` is the route's own sight: its story (from Wikipedia) may still be on its way when the run starts.
+      return { ...s, src: s, at: this.snap(x, y, (s.at || 0) - 300, (s.at || 0) + 300, 0).at, said: false };
     });
     this.offRoute = false;
     this.farCount = 0;
@@ -495,6 +496,8 @@ export class Navigator {
       const side = s.side === 'left' ? 'On your left' : s.side === 'right' ? 'On your right' : 'Just ahead';
       const kind = s.kind && !s.name.toLowerCase().includes(s.kind) ? `, a ${s.kind}` : '';
       this.speak(msg(`${side}: `, s.name, kind ? `${kind}.` : '.'), { priority: 0 });
+      const story = s.src?.story || s.story;
+      if (story) this.speak(msg(story), { priority: 0 });
     }
   }
 
