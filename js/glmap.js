@@ -15,6 +15,21 @@ const OFM_STYLES = {
 };
 const ZOOM_SHIFT = 1; // Leaflet zoom = MapLibre zoom + 1
 
+// The style without its low-zoom shaded relief (a second tile server, slow to answer at
+// times, that a snapshot at zoom 14+ never draws). Fetched once per theme.
+const snapshotStyles = {};
+async function snapshotStyle(theme) {
+  if (!snapshotStyles[theme]) {
+    snapshotStyles[theme] = fetch(OFM_STYLES[theme]).then((r) => r.json()).then((st) => {
+      const drop = Object.keys(st.sources || {}).filter((id) => /^ne2|natural_earth/i.test(id) || /natural_earth/i.test(st.sources[id]?.url || ''));
+      for (const id of drop) delete st.sources[id];
+      st.layers = (st.layers || []).filter((l) => !drop.includes(l.source));
+      return st;
+    }).catch(() => { delete snapshotStyles[theme]; return null; });
+  }
+  return snapshotStyles[theme];
+}
+
 let lineSeq = 0;
 const gl = () => globalThis.maplibregl;
 
@@ -178,7 +193,7 @@ export function glCircleMarker(latlng, { radius = 7, color = '#fff', weight = 3,
  * The map in `id`. Options: `zoomControl` (buttons, top right), `attributionControl`,
  * `dark` (start with the night style), `interactive` (false for a snapshot map).
  */
-export function glCreateMap(id, { zoomControl = false, attributionControl = true, dark = false, interactive = true, container = null } = {}) {
+export function glCreateMap(id, { zoomControl = false, attributionControl = true, dark = false, interactive = true, container = null, style = null } = {}) {
   const { Map: GLMap, NavigationControl, AttributionControl } = gl();
   const el = container || document.getElementById(id);
   const m = {
@@ -287,7 +302,7 @@ export function glCreateMap(id, { zoomControl = false, attributionControl = true
   };
   m._gl = new GLMap({
     container: el,
-    style: OFM_STYLES[m._theme],
+    style: style || OFM_STYLES[m._theme],
     center: [0, 0],
     zoom: 1,
     attributionControl: false,
@@ -322,15 +337,17 @@ export function glCreateMap(id, { zoomControl = false, attributionControl = true
  * Resolves to null when WebGL or the tiles are not available (offline).
  */
 export function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = false, timeoutMs = 12000 } = {}) {
-  return new Promise((resolve) => {
-    let box = null, m = null;
-    const done = (v, released = false) => { clearTimeout(timer); try { m?.remove(); } catch { /* already gone */ } box?.remove(); if (!released) resolve(v); };
+  return new Promise(async (resolve) => {
+    let box = null, m = null, poll = null;
+    const done = (v, released = false) => { clearTimeout(timer); clearInterval(poll); try { m?.remove(); } catch { /* already gone */ } box?.remove(); if (!released) resolve(v); };
     const timer = setTimeout(() => done(null), timeoutMs);
+    const style = await snapshotStyle(dark ? 'dark' : 'light');
+    if (!style) return done(null);
     try {
       box = document.createElement('div');
       box.style.cssText = `position:fixed;left:-${width + 20}px;top:0;width:${width}px;height:${height}px;visibility:hidden`;
       document.body.appendChild(box);
-      m = glCreateMap(null, { container: box, interactive: false, attributionControl: false, dark });
+      m = glCreateMap(null, { container: box, interactive: false, attributionControl: false, dark, style });
       m._gl.jumpTo({ center: [0, 0], zoom: 1 });
       m._whenReady(() => {
         const b = glBounds(pts);
@@ -342,6 +359,7 @@ export function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = fa
           if (taken) return;
           taken = true;
           clearInterval(poll);
+          poll = null;
           // The picture is copied out now; project() needs the map, so it stays until release().
           const c = document.createElement('canvas');
           c.width = width; c.height = height;
@@ -350,7 +368,7 @@ export function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = fa
           resolve({ canvas: c, project: (lat, lon) => { const q = m._gl.project([lon, lat]); return [q.x, q.y]; }, release: () => done(null, true) });
         };
         m._gl.once('idle', take);
-        const poll = setInterval(() => { if (m._gl.loaded() && m._gl.areTilesLoaded() && !m._gl.isMoving()) { m._gl.once('render', take); m._gl.triggerRepaint(); } }, 500);
+        poll = setInterval(() => { if (m._gl.loaded() && m._gl.areTilesLoaded() && !m._gl.isMoving()) { m._gl.once('render', take); m._gl.triggerRepaint(); } }, 500);
       });
       m._gl.on('error', (e) => { if (/style|tile|source/i.test(String(e?.error?.message || ''))) done(null); });
     } catch {
