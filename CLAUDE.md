@@ -97,7 +97,8 @@ and `tour` (and "sightseeing"). Do not rename the code.
 ## Conventions
 
 - Plain JavaScript, no framework, no TypeScript, no bundler other than `build.mjs`. MapLibre GL
-  5.24.1 and the Capacitor runtime are vendored in `js/vendor/`; the app must work with no CDN.
+  5.24.1, its right-to-left text plugin (`mapbox-gl-rtl-text.js`, so Hebrew labels are not
+  mirrored) and the Capacitor runtime are vendored in `js/vendor/`; the app must work with no CDN.
   The map is OpenFreeMap's vector tiles (styles `liberty` by day, `dark` at night); the app
   never talks to MapLibre directly, only through `js/glmap.js`.
 - Comments explain why, in full sentences, above the code they describe. Match the style around.

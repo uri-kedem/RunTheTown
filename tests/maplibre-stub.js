@@ -161,5 +161,5 @@
 
   class NavigationControl { }
   class AttributionControl { }
-  window.maplibregl = { Map, Marker, Popup, NavigationControl, AttributionControl };
+  window.maplibregl = { Map, Marker, Popup, NavigationControl, AttributionControl, setRTLTextPlugin() {} };
 })();

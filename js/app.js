@@ -35,7 +35,8 @@ const state = {
   distanceKm: 5,
   planBy: 'km', // 'km' (the distance typed) or 'min' (minutes, turned into a distance at the runner's usual pace)
   minutes: 30,
-  pace: 360, // the runner's usual pace, s/km, from the journal
+  pace: 360, // the runner's usual pace, s/km, from the journal (null until the journal has a run)
+  paceRange: null, // [slow, fast] s/km: the pace the runner picked for a run by time; nothing is assumed
   prefs: { green: false, water: false, quiet: false, sights: false },
   terrain: 'any',
   routes: [],
@@ -129,11 +130,16 @@ function sheetPos() { return $('sheet').dataset.pos || 'half'; }
 function showSearch(show) {
   document.querySelector('.topbar').classList.toggle('start-set', !show);
 }
-$('mapBack').addEventListener('click', () => {
+// The "Start point" button and the "Starting from …" line both bring the search back.
+function openStartSearch() {
   showSearch(true);
   setSheet('half');
   setTimeout(() => $('searchInput').focus(), 50);
-});
+}
+$('mapBack').addEventListener('click', openStartSearch);
+$('startLine').addEventListener('click', () => { if (state.start && !nav.active && !busy) openStartSearch(); });
+// Likewise the "Finishing at …" line puts the cursor in the finish search.
+$('destLine').addEventListener('click', () => { if (!nav.active && !busy) $('destInput').focus(); });
 function renderRouteStrip() {
   const strip = $('routeStrip');
   strip.innerHTML = '';
@@ -501,16 +507,20 @@ function readDistance() {
   const msg = $('distanceMsg');
   let ok;
   if (state.planBy === 'min') {
-    // So many minutes at the runner's usual pace (their journal's median; 6:00 min/km before any run).
-    ok = raw !== '' && Number.isFinite(v) && v >= MIN_MIN && v <= MAX_MIN;
-    if (ok) {
-      state.minutes = Math.round(v);
-      state.distanceKm = Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, Math.round(((v * 60) / state.pace) * 10) / 10));
-    }
+    // So many minutes at the pace the runner picked (a range: the routes are planned for its
+    // middle, the message gives both ends). No pace is assumed: without a pick, no search.
+    const timeOk = raw !== '' && Number.isFinite(v) && v >= MIN_MIN && v <= MAX_MIN;
+    const range = state.paceRange;
+    ok = timeOk && !!range;
+    if (timeOk) state.minutes = Math.round(v);
+    const km = (sPerKm) => Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, Math.round(((v * 60) / sPerKm) * 10) / 10));
+    if (ok) state.distanceKm = km((range[0] + range[1]) / 2);
     state.distanceValid = ok;
     msg.classList.toggle('error', !ok);
-    if (!ok) msg.textContent = raw === '' ? 'Type how many minutes you want to run' : `Enter a time between ${MIN_MIN} and ${MAX_MIN} minutes`;
-    else msg.textContent = `About ${U.len(state.distanceKm * 1000)} at your usual pace of ${U.pace(state.pace)} ${U.paceLabel()}${state.distanceKm > LONG_RUN_KM ? '. Long run: the first map download takes a few seconds longer' : ''}`;
+    if (!timeOk) msg.textContent = raw === '' ? 'Type how many minutes you want to run' : `Enter a time between ${MIN_MIN} and ${MAX_MIN} minutes`;
+    else if (!range) msg.textContent = 'Pick the pace you want to run at';
+    else if (range[0] === range[1]) msg.textContent = `About ${U.len(state.distanceKm * 1000)} at ${U.pace(range[0])} ${U.paceLabel()}${state.distanceKm > LONG_RUN_KM ? '. Long run: the first map download takes a few seconds longer' : ''}`;
+    else msg.textContent = `About ${U.num(km(range[0]) * 1000)}–${U.len(km(range[1]) * 1000)} at that pace; routes are planned for ${U.len(state.distanceKm * 1000)}${state.distanceKm > LONG_RUN_KM ? '. Long run: the first map download takes a few seconds longer' : ''}`;
   } else {
     const { min, max } = limits();
     ok = raw !== '' && Number.isFinite(v) && v >= min && v <= max;
@@ -529,6 +539,7 @@ function setPlanBy(by) {
   state.planBy = by;
   setSegment('planBy', by);
   const input = $('distanceInput');
+  $('paceChips').hidden = by !== 'min';
   if (by === 'min') {
     input.value = String(state.minutes);
     input.placeholder = '30';
@@ -557,10 +568,41 @@ function setDistanceKm(km) {
   $('distanceInput').value = String(Math.round(U.fromKm(km) * 10) / 10);
   readDistance();
 }
-// The runner's usual pace, for runs planned by time: from the journal, again after every saved run.
-function refreshPace() {
-  journal.list().then((runs) => { state.pace = usualPace(runs); if (state.planBy === 'min') readDistance(); }).catch(() => {});
+// The paces on offer for a run by time, s/km from the slow end to the fast end. Nothing is
+// picked in advance: the runner says how they mean to run today. Once the journal has a
+// run, their own usual pace (the median of the last ten) is offered as one more choice.
+const PACE_RANGES = [
+  { id: 'easy', name: 'Easy', slow: 480, fast: 420 },
+  { id: 'steady', name: 'Steady', slow: 420, fast: 360 },
+  { id: 'brisk', name: 'Brisk', slow: 360, fast: 300 },
+  { id: 'fast', name: 'Fast', slow: 300, fast: 240 },
+];
+function renderPaceChips() {
+  const box = $('paceChips');
+  const chosen = state.paceRange;
+  const chips = PACE_RANGES.map((p) => ({ ...p, label: `${U.pace(p.slow)}–${U.pace(p.fast)} ${U.paceLabel()}` }));
+  if (state.pace) chips.push({ id: 'usual', name: 'My usual pace', slow: state.pace, fast: state.pace, label: `${U.pace(state.pace)} ${U.paceLabel()}` });
+  box.innerHTML = '';
+  for (const p of chips) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.pace = p.id;
+    b.setAttribute('aria-pressed', String(!!chosen && chosen[0] === p.slow && chosen[1] === p.fast));
+    b.innerHTML = `${escapeHtml(p.name)}<small>${escapeHtml(p.label)}</small>`;
+    b.addEventListener('click', () => { state.paceRange = [p.slow, p.fast]; renderPaceChips(); readDistance(); });
+    box.appendChild(b);
+  }
 }
+// The runner's usual pace, offered as a choice for runs by time: from the journal, again
+// after every saved run; none before the first run is logged.
+function refreshPace() {
+  journal.list().then((runs) => {
+    state.pace = runs.some((r) => r.pace > 0 && r.distance >= 1000) ? usualPace(runs) : null;
+    renderPaceChips();
+    if (state.planBy === 'min') readDistance();
+  }).catch(() => {});
+}
+renderPaceChips();
 refreshPace();
 $('distanceInput').addEventListener('input', readDistance);
 $('distanceInput').addEventListener('keydown', (e) => e.key === 'Enter' && e.target.blur());
@@ -1080,6 +1122,7 @@ function applyUnits() {
   $('statDistLabel').textContent = `${U.unit} run`;
   $('statPaceLabel').textContent = U.paceLabel();
   $('statLeftLabel').textContent = `${U.unit} to go`;
+  renderPaceChips(); // the pace choices in the new unit
   // The typed distance keeps its meaning: shown in the new unit (minutes stay minutes).
   if (state.planBy === 'min') readDistance(); else { if (state.distanceValid) $('distanceInput').value = String(Math.round(U.fromKm(state.distanceKm) * 10) / 10); $('distanceUnit').textContent = U.unit; readDistance(); }
   if (state.routes.length) showRoutes(state.routes, { keep: true });

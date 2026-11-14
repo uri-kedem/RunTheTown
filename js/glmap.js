@@ -193,8 +193,23 @@ export function glCircleMarker(latlng, { radius = 7, color = '#fff', weight = 3,
  * The map in `id`. Options: `zoomControl` (buttons, top right), `attributionControl`,
  * `dark` (start with the night style), `interactive` (false for a snapshot map).
  */
+// Hebrew and Arabic labels come out mirrored unless MapLibre's right-to-left text plugin is
+// loaded (it shapes the letters in a worker). It is vendored with the app (no CDN) and
+// registered once, lazily: fetched the first time a right-to-left label is drawn.
+let rtlRegistered = false;
+function registerRtlText() {
+  if (rtlRegistered || typeof document === 'undefined') return;
+  rtlRegistered = true;
+  try {
+    gl().setRTLTextPlugin?.(new URL('js/vendor/mapbox-gl-rtl-text.js', document.baseURI).href, true);
+  } catch (err) {
+    console.warn('Right-to-left text plugin not loaded:', err);
+  }
+}
+
 export function glCreateMap(id, { zoomControl = false, attributionControl = true, dark = false, interactive = true, container = null, style = null } = {}) {
   const { Map: GLMap, NavigationControl, AttributionControl } = gl();
+  registerRtlText();
   const el = container || document.getElementById(id);
   const m = {
     _gl: null,

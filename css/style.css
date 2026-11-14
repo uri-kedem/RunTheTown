@@ -124,6 +124,9 @@ body.heading-up .maplibregl-ctrl-attrib { display: none; }
 body.navigating .map-back { display: none; }
 .start-line { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .start-line b { color: var(--ink); font-weight: 600; }
+/* The place name is a link to the search: tap it to pick another start (or finish). */
+.start-line { cursor: pointer; }
+.start-line b { text-decoration: underline; text-decoration-color: var(--ink-3); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
 .field { margin-bottom: 16px; }
 .field-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
@@ -155,6 +158,11 @@ input[type='range'] { width: 100%; accent-color: var(--brand); height: 28px; mar
   transition: background 0.15s, border-color 0.15s;
 }
 .chips.quick button { padding: 5px 11px; font-size: 13px; }
+/* The pace choices under the minutes: a name with the pace range beneath it. */
+.pace-chips { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; }
+.pace-chips button { display: block; padding: 7px 12px; text-align: center; line-height: 1.25; }
+.pace-chips button:nth-child(5) { grid-column: 1 / -1; } /* the runner's own pace, once the journal has one, across the row */
+.pace-chips button small { display: block; font-size: 11px; font-weight: 500; opacity: 0.8; }
 .chips button.on, .chips button[aria-pressed='true'] { border-color: var(--ink); background: var(--ink); color: #fff; }
 /* Sightseeing is a mode of its own, not a landscape option: Running mode hides it, the tour shows only it (locked on). */
 body[data-mode='run'] #landscape [data-pref='sights'] { display: none; }
@@ -405,25 +413,25 @@ body[data-view='app'] .home { display: none; }
    the picture, two glass cards. On wide screens a stylised night map with a glowing route
    fills the right third, split from the hero by a diagonal orange edge. */
 .home { position: fixed; inset: 0; z-index: 1300; overflow: auto; background: #0f172a; color: #fff; -webkit-overflow-scrolling: touch; }
-.home-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px 8px; background: linear-gradient(#0f172a, rgba(15, 23, 42, 0.6) 70%, transparent); }
+.home-bar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px 8px; background: linear-gradient(rgba(15, 23, 42, 0.55), transparent); }
 .home-bar .logo { height: 48px; }
 .home-bar .menu-btn { background: rgba(255, 255, 255, 0.12); }
 .hero { --photo-top: min(34vh, 300px); position: relative; z-index: 1; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; padding: 0 0 calc(22px + var(--safe-b)); }
 /* The picture fills the page from below the headline to the bottom: the headline sits in the
    dark above the runners, the two cards lie over the promenade in front of them. */
 .hero-copy { order: 0; } .hero-photo { order: 1; } .modes { order: 2; } .perks { order: 3; } .home-foot { order: 4; } /* the picture is first in the markup (it is the backdrop on wide screens) */
-.hero-photo { position: relative; height: min(58vh, 480px); margin-top: -56px; overflow: hidden; z-index: 0; } /* on a phone the picture sits in the flow under the headline; the cards lie over its lower part */
-.hero-photo img, .hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; display: block; }
+.hero-photo { position: absolute; left: 0; right: 0; top: calc(-68px - env(safe-area-inset-top, 0px)); bottom: 0; overflow: hidden; z-index: 0; } /* the picture is the whole opening page: from behind the top bar to the bottom, the words and the card on it */
+.hero-photo img, .hero-video { position: absolute; left: 0; right: 0; bottom: 0; top: auto; width: 100%; height: 76%; object-fit: cover; object-position: 50% 50%; display: block; }
 .hero-video { opacity: 0; transition: opacity 0.8s; } /* the photo shows until the clip is playing; both are the same scene */
 .hero-video.playing { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .hero-video { display: none; } }
-.hero-photo::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, #0f172a 0%, rgba(15, 23, 42, 0.6) 14%, rgba(15, 23, 42, 0) 32%, rgba(15, 23, 42, 0) 62%, rgba(15, 23, 42, 0.55) 85%, rgba(15, 23, 42, 0.92) 100%); }
-.hero-copy { position: relative; z-index: 1; padding: 6px 20px 0; }
+.hero-photo::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, #0f172a 0%, #0f172a 22%, rgba(15, 23, 42, 0.85) 32%, rgba(15, 23, 42, 0.35) 44%, rgba(15, 23, 42, 0) 56%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a light veil at the top for the words, darker at the foot for the perks */
+.hero-copy { position: relative; z-index: 1; padding: 6px 20px 0; } /* the words at the top of the page, on the darkened top of the picture */
 .hero h1 { font-size: clamp(38px, 10.5vw, 76px); line-height: 0.96; letter-spacing: -0.035em; font-weight: 900; text-transform: uppercase; margin: 0 0 14px; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35); }
 .hero h1 span { display: block; }
 .hero h1 .h1-b { color: var(--brand); }
 .lede { font-size: clamp(15px, 2.4vw, 19px); line-height: 1.5; color: #e2e8f0; max-width: 560px; margin: 0; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5); }
-.modes { position: relative; z-index: 1; display: grid; gap: 12px; padding: 0 16px; margin: -150px 0 18px; }
+.modes { position: relative; z-index: 1; display: grid; gap: 12px; padding: 0 16px; margin: auto 0 18px; padding-top: 30vh; }
 .mode-card {
   text-align: left; color: #fff; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(15, 23, 42, 0.62); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
   border-radius: 18px; padding: 18px 18px 16px; display: grid; gap: 8px; cursor: pointer; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35); transition: transform 0.15s, border-color 0.15s;
@@ -464,8 +472,10 @@ body[data-view='app'] .home { display: none; }
   .home-bar { display: none; }
   .home, .page { left: 220px; }
   .home { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 28vw, 460px); }
-  .hero { --photo-top: 150px; padding: 0 0 28px; min-height: 100%; }
+  .hero { --photo-top: 0px; padding: 0 0 28px; min-height: 100%; }
   .hero-photo { position: absolute; left: 0; right: 0; top: var(--photo-top); bottom: 0; height: auto; margin: 0; }
+  .hero-photo img, .hero-video { top: 0; height: 100%; } /* on a wide screen the picture fills its panel */
+  .hero-photo::before { background: linear-gradient(180deg, rgba(15, 23, 42, 0.75) 0%, rgba(15, 23, 42, 0.3) 26%, rgba(15, 23, 42, 0) 44%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a lighter veil: the faces show beside the headline */
   .hero-copy { padding: 44px 48px 0; }
   .hero h1 { font-size: clamp(36px, 3.9vw, 58px); }
   .modes { grid-template-columns: minmax(0, 560px); gap: 16px; padding: 0 48px; margin: auto 0 16px; padding-top: 24vh; }

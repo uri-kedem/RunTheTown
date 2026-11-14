@@ -80,6 +80,6 @@ console.log('build', h, '| artwork:', [...fingerprint.values()].sort().join(', '
 const dist = at('dist');
 if (existsSync(dist)) rmSync(dist, { recursive: true });
 for (const d of ['js/vendor', 'css', 'img']) mkdirSync(join(dist, d), { recursive: true });
-for (const f of ['index.html', 'manifest.webmanifest', 'sw.js', 'js/bundle.js', 'js/vendor/capacitor.js', 'js/vendor/maplibre-gl.js', 'js/vendor/maplibre-gl.css', 'css/style.css']) copyFileSync(at(f), join(dist, f));
+for (const f of ['index.html', 'manifest.webmanifest', 'sw.js', 'js/bundle.js', 'js/vendor/capacitor.js', 'js/vendor/maplibre-gl.js', 'js/vendor/maplibre-gl.css', 'js/vendor/mapbox-gl-rtl-text.js', 'css/style.css']) copyFileSync(at(f), join(dist, f));
 for (const pub of fingerprint.values()) copyFileSync(at('img', pub), join(dist, 'img', pub));
 console.log('dist/ ready for the native shell');

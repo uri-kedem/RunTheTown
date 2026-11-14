@@ -113,7 +113,10 @@ with sync_playwright() as p:
     print('streets style: spots list hidden:', pg.is_hidden('#spotsPrefs'), '| distance shown:', pg.is_visible('#distanceInput'))
     # Plan by time: minutes at the runner's usual pace (6:00 min/km before any run is logged).
     pg.click('#planBy [data-v="min"]'); pg.fill('#distanceInput', '30'); pg.wait_for_timeout(100)
-    print('BY TIME: unit:', pg.text_content('#distanceUnit'), '| hint:', pg.text_content('#distanceHint'), '| msg:', pg.text_content('#distanceMsg'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'), '| go enabled:', not pg.is_disabled('#goBtn'))
+    # No pace is assumed: the search waits for the runner to pick one (no usual pace before the first logged run).
+    print('BY TIME: unit:', pg.text_content('#distanceUnit'), '| hint:', pg.text_content('#distanceHint'), '| msg:', pg.text_content('#distanceMsg'), '| go disabled without a pace:', pg.is_disabled('#goBtn'), '| chips:', pg.eval_on_selector_all('#paceChips button', 'e=>e.map(b=>b.innerText.replace(/\\n/g," "))'))
+    pg.click('#paceChips [data-pace="steady"]'); pg.wait_for_timeout(100)
+    print('pace picked: msg:', pg.text_content('#distanceMsg'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'), '| go enabled:', not pg.is_disabled('#goBtn'), '| pressed:', pg.eval_on_selector_all('#paceChips [aria-pressed="true"]', 'e=>e.map(b=>b.dataset.pace)'))
     pg.fill('#distanceInput', '5'); print('too short:', pg.text_content('#distanceMsg'))
     pg.click('#planBy [data-v="km"]'); pg.wait_for_timeout(100)
     print('back to distance:', pg.input_value('#distanceInput'), pg.text_content('#distanceUnit'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'))
@@ -206,6 +209,10 @@ with sync_playwright() as p:
     print('strip selects:', pg.evaluate('window.__rtt.state.selected'))
     pg.click('#sheetGrab'); pg.wait_for_timeout(400); print('back to half:', pg.get_attribute('#sheet','data-pos'))
     pg.click('#mapBack'); pg.wait_for_timeout(200); print('search back:', pg.is_visible('#searchForm'))
+    # The "Starting from …" line is a shortcut to the same search.
+    pg.click('#backBtn'); pg.wait_for_timeout(200); pg.click('#startLine b'); pg.wait_for_timeout(200)
+    print('start line opens the search:', pg.is_visible('#searchForm'), '| focused:', pg.evaluate('document.activeElement.id'))
+    pg.click('#goBtn'); pg.wait_for_selector('#resultsView:not([hidden]) .card', timeout=30000); pg.wait_for_timeout(300)
     for c in pg.eval_on_selector_all('.card','els=>els.map(e=>e.innerText.replace(/\\n+/g," | "))'): print('CARD:', c)
     print('exactly 3 routes:', pg.eval_on_selector_all('.card','e=>e.length')==3, '| start buttons on the sheet:', pg.eval_on_selector_all('#resultsView .primary','e=>e.length'))
     print('sight pins on map:', pg.eval_on_selector_all('.sight-pin','e=>e.length'))
