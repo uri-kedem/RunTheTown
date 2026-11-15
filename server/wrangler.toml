@@ -4,7 +4,8 @@ main = "worker.js"
 compatibility_date = "2026-10-01"
 
 [vars]
-# Sent to Nominatim with every request, as its usage policy asks. Set to Uri's address.
-CONTACT_EMAIL = ""
+# Sent to Nominatim with every request, as its usage policy asks, and to no other service.
+# Uri chose this address on Nov 15, 2026.
+CONTACT_EMAIL = "uri.kedem1@gmail.com"
 # Who may call the proxy from a browser (comma-separated). Empty: anyone (testing).
 ALLOWED_ORIGINS = "https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"

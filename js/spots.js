@@ -82,9 +82,14 @@ export function lapFromGeojson(geojson) {
  */
 export async function scanSpots(lat, lon, { fetchImpl = (...a) => fetch(...a), pauseMs = 1050 } = {}) {
   try {
-    const dLat = SCAN_KM / 110.574;
-    const dLon = SCAN_KM / (111.32 * Math.cos((lat * Math.PI) / 180));
-    const vb = `&viewbox=${(lon - dLon).toFixed(5)},${(lat + dLat).toFixed(5)},${(lon + dLon).toFixed(5)},${(lat - dLat).toFixed(5)}&bounded=1`;
+    // The box is centred on a 0.01-degree grid (about a kilometre) and its sides are whole
+    // hundredths, so runners who start near each other ask the same question and the proxy
+    // answers the second one from its cache.
+    const cLat = Math.round(lat * 100) / 100;
+    const cLon = Math.round(lon * 100) / 100;
+    const dLat = Math.ceil((SCAN_KM / 110.574) * 100) / 100;
+    const dLon = Math.ceil((SCAN_KM / (111.32 * Math.cos((cLat * Math.PI) / 180))) * 100) / 100;
+    const vb = `&viewbox=${(cLon - dLon).toFixed(2)},${(cLat + dLat).toFixed(2)},${(cLon + dLon).toFixed(2)},${(cLat - dLat).toFixed(2)}&bounded=1`;
     const q = (text) => `${NOMINATIM_SCAN}/search?format=jsonv2&limit=40&extratags=1&namedetails=1&q=${encodeURIComponent(text)}${vb}`;
     const stadiums = (await scanGetJson(q('stadium'), fetchImpl)) || [];
     await scanWait(pauseMs); // Nominatim allows one request per second

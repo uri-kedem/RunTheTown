@@ -44,17 +44,19 @@ def route(r):
         q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query)
         n=len(q['latitude'][0].split(','))
         return r.fulfill(body=json.dumps({'elevation':[10]*n}), content_type='application/json')
-    if 'nominatim.openstreetmap.org/lookup' in u:
+    # Nominatim and the search box: at the public servers, or through our proxy.
+    nomi=re.search(r'(?:nominatim\.openstreetmap\.org|workers\.dev/nominatim)/(\w+)', u); nomi=nomi.group(1) if nomi else ''
+    if nomi=='lookup':
         ids=urllib.parse.parse_qs(urllib.parse.urlparse(u).query).get('osm_ids',[''])[0]
         return r.fulfill(body=json.dumps(SCAN_LOOKUP if 'W777' in ids else []), content_type='application/json')
-    if 'nominatim.openstreetmap.org/search' in u and 'viewbox' in u:
+    if nomi=='search' and 'viewbox' in u:
         q=urllib.parse.unquote(urllib.parse.parse_qs(urllib.parse.urlparse(u).query)['q'][0])
         if q in SCAN: return r.fulfill(body=json.dumps(SCAN[q]), content_type='application/json')
         hits={'Central Stadium':[{'name':'Central Stadium','class':'leisure','type':'stadium','osm_type':'way','osm_id':1,'extratags':{'sport':'athletics','website':'https://example.org/central-stadium','opening_hours':'Mo-Su 06:00-22:00','fee':'no'}}],
               'Central Park':[{'name':'Central Park','class':'leisure','type':'park','osm_type':'relation','osm_id':2,'extratags':{'wikipedia':'en:Central Park (Testville)'}}]}
         return r.fulfill(body=json.dumps(hits.get(q,[])), content_type='application/json')
-    if 'nominatim.openstreetmap.org/reverse' in u: return r.fulfill(body=json.dumps({'error':'none'}), content_type='application/json')
-    if 'photon.komoot.io' in u:
+    if nomi=='reverse': return r.fulfill(body=json.dumps({'error':'none'}), content_type='application/json')
+    if 'photon.komoot.io' in u or 'workers.dev/search' in u:
         # The search box (Photon): the synthetic stadium answers to its name, nothing else is known.
         q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query).get('q',[''])[0]; st=SCAN['stadium'][0]
         feats=[{'type':'Feature','geometry':{'type':'Point','coordinates':[float(st['lon']),float(st['lat'])]},'properties':{'name':'Central Stadium','osm_key':'leisure','osm_value':'stadium','city':'Testville','country':'Testland'}}] if 'stadium' in q.lower() else []

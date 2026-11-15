@@ -4,7 +4,7 @@
 // Public Overpass servers differ a lot in speed and rate limits. Map data is
 // downloaded in tiles on a fixed grid, spread over two main servers with
 // fallbacks, and each tile is cached on the device (see cache.js).
-import { overpassEndpoints } from './services.js';
+import { overpassEndpoints, OVERPASS_HOMES } from './services.js';
 
 export const ENDPOINTS = overpassEndpoints();
 const ATTEMPT_TIMEOUT_MS = 75000;
@@ -168,7 +168,8 @@ export async function fetchTiles(tiles, mode, { cache = null, onProgress = () =>
   const worker = async (home) => {
     while (queue.length) {
       const t = queue.shift();
-      const base = [ENDPOINTS[home], ENDPOINTS[1 - home], ...ENDPOINTS.slice(2)];
+      // This worker's own server first, then the others in their order.
+      const base = [...new Set([ENDPOINTS[home % OVERPASS_HOMES], ...ENDPOINTS])];
       const order = [...base.filter((u) => !isCool(u)), ...base.filter(isCool)];
       let json = null;
       for (let i = 0; i < order.length && !json; i++) {
@@ -394,7 +395,7 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
     }
   };
   try {
-    const json = await Promise.any(ENDPOINTS.slice(0, 2).map(one));
+    const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
     ctrls.forEach((c) => c.abort());
     const out = [];
     const docks = [];

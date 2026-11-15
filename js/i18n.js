@@ -651,6 +651,8 @@ export const HE_TEXT = {
   'Run finished. {a} in {n} minute. Average pace {p}.': 'הריצה הסתיימה. {a} בדקה אחת. קצב ממוצע {p}.',
   'Run finished. {a} in {n} minutes. Average pace {p}.': 'הריצה הסתיימה. {a} ב-{n} דקות. קצב ממוצע {p}.',
   '{n} kilometers': '{n} קילומטר',
+  '{n} kilometer': 'קילומטר אחד',
+  '{n} mile': 'מייל אחד',
   '{n} meters': '{n} מטר',
   '{n} miles': '{n} מייל',
   'one mile': 'מייל אחד',

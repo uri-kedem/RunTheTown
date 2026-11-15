@@ -171,20 +171,21 @@ export function makeMockMapBackend(dataset, { seaX = null, vtFailRate = 0, vtDow
   };
   const fetchImpl = async (url, opts = {}) => {
     await new Promise((r) => setTimeout(r, 1));
-    if (url.startsWith('https://nominatim.openstreetmap.org/lookup')) {
+    const nominatim = (url.match(/^https:\/\/nominatim\.openstreetmap\.org\/(\w+)/) || url.match(/^https:\/\/[^/]+\.workers\.dev\/nominatim\/(\w+)/) || [])[1]; // the public server, or our proxy
+    if (nominatim === 'lookup') {
       calls.scan = (calls.scan || 0) + 1;
       const ids = new URL(url).searchParams.get('osm_ids') || '';
       const hit = ids.includes('W777') && trackWay ? [{ ...SCAN['running track'][0], geojson: { type: 'Polygon', coordinates: [trackWay.geometry.map((p) => [p.lon, p.lat])] } }] : [];
       return { ok: true, status: 200, json: async () => hit };
     }
-    if (url.startsWith('https://nominatim.openstreetmap.org/search')) {
+    if (nominatim === 'search') {
       const q = decodeURIComponent(new URL(url).searchParams.get('q') || '');
       if (SCAN[q]) { calls.scan = (calls.scan || 0) + 1; return { ok: true, status: 200, json: async () => SCAN[q] }; }
       calls.details = (calls.details || 0) + 1;
       const hit = PLACE_INFO[q];
       return { ok: true, status: 200, json: async () => (hit ? [hit] : []) };
     }
-    if (url.startsWith('https://nominatim.openstreetmap.org/reverse')) return { ok: true, status: 200, json: async () => ({ error: 'Unable to geocode' }) };
+    if (nominatim === 'reverse') return { ok: true, status: 200, json: async () => ({ error: 'Unable to geocode' }) };
     if (url.startsWith('https://www.wikidata.org/')) {
       return { ok: true, status: 200, json: async () => ({ entities: { Q1: { labels: { en: { value: 'Central Stadium' } }, claims: { P856: [{ mainsnak: { datavalue: { value: 'https://example.org/official' } } }] }, sitelinks: { enwiki: { title: 'Central Stadium' }, hewiki: { title: 'אצטדיון מרכזי' } } } } }) };
     }

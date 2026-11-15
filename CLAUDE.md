@@ -71,8 +71,8 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
 | `js/i18n.js` | The Hebrew interface: the English → Hebrew table (fixed texts and templates), `tr()`, and the page translator (`applyLanguage`, `watchLanguage`) that turns every text the app writes into Hebrew and the page right to left |
 | `js/offline.js` | Offline: `offlineFetch` answers the map's requests from the phone when it can (through a MapLibre protocol set up in `glmap.js`), `downloadPack` saves an area (planner data, map tiles of every zoom, styles, fonts, icons) for 14 days |
-| `js/services.js` | Where search, Nominatim and Overpass live: the public servers, or our proxy when `PROXY` is set |
-| `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it |
+| `js/services.js` | Where search, Nominatim and Overpass live: our proxy (`PROXY`, the Cloudflare Worker at `runthetown-proxy.runthetown.workers.dev`), with the public Overpass servers behind it; the public servers alone when `PROXY` is empty |
+| `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it (`cd server && npx wrangler deploy`; it is not part of `node build.mjs`) |
 | `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look, the offline cache |
 | `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |

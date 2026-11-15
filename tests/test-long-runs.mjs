@@ -6,6 +6,8 @@ import { vtTilesFor } from '../js/vectortiles.js';
 import { ElevationGrid } from '../js/elevation.js';
 import { syntheticOverpass, hillElevation, CENTER } from './synthetic-city.mjs';
 import { makeMockMapBackend } from './mock-vectortiles.mjs';
+import { ENDPOINTS } from '../js/osm.js';
+import { OVERPASS_HOMES } from '../js/services.js';
 
 const fakeElev = async (proj, radius) => {
   const n = 24;
@@ -31,11 +33,14 @@ const cities = {
 };
 console.log(`built cities in ${Date.now() - t0} ms (${cities.inland.elements.length} / ${cities.coastal.elements.length} elements)`);
 
+// The servers the app asks first (our proxy, or the two main public ones): with the first
+// one down the others must carry the backup map; with all of them down there is no light data.
+const firstServers = ENDPOINTS.slice(0, OVERPASS_HOMES).map((u) => new URL(u).host);
 const conditions = {
   healthy: {},
   'tiles flaky (30%)': { vtFailRate: 0.3 },
-  'tiles down -> backup': { vtDown: true, overpass: { deadServers: ['maps.mail.ru'] } },
-  'no light data': { overpass: { deadServers: ['maps.mail.ru', 'overpass-api.de'] } },
+  'tiles down -> backup': { vtDown: true, overpass: { deadServers: [firstServers[0]] } },
+  'no light data': { overpass: { deadServers: firstServers } },
 };
 
 const distances = [15, 21.1, 25, 30, 42.2];

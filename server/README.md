@@ -7,30 +7,42 @@ passes through it: only the search text, a position and the map query.
 
 Cost: Cloudflare's free plan allows 100,000 requests a day, far more than the app needs.
 
-## Deploy (once, from this folder)
+## Where it runs
 
-1. Create a free Cloudflare account at https://dash.cloudflare.com/sign-up.
-2. In a terminal:
+Deployed on Nov 15, 2026 at `https://runthetown-proxy.runthetown.workers.dev` (Cloudflare
+account of Uri, workers.dev subdomain `runthetown`). The app uses it: `PROXY` in
+`js/services.js` holds this address.
+
+## Deploy again after a change (from this folder)
 
 ```
 cd ~/RunTheTown/server
-npx wrangler login
 npx wrangler deploy
 ```
 
-   `wrangler deploy` prints the worker's address, like
-   `https://runthetown-proxy.<your-account>.workers.dev`.
-3. Put Uri's e-mail address in `wrangler.toml` (`CONTACT_EMAIL`) and deploy again.
-4. In `js/services.js` set `PROXY` to that address, run `node build.mjs`, commit and push.
-   From then on every search and street download goes through the proxy.
+`npx wrangler login` first if Wrangler says it is not logged in. `package.json` here exists
+for its `name`: when an assistant runs Wrangler it does not ask questions and names a new
+workers.dev subdomain after the project.
+
+`CONTACT_EMAIL` in `wrangler.toml` is the contact address Nominatim's usage policy asks for.
+It is sent with Nominatim requests only; Photon and the Overpass servers get the proxy's
+name alone.
 
 ## Check it works
 
 ```
-curl "https://runthetown-proxy.<your-account>.workers.dev/search?q=tel%20aviv&limit=3"
+curl "https://runthetown-proxy.runthetown.workers.dev/search?q=tel%20aviv&limit=3"
 ```
 
 The answer is Photon's JSON; a second call answers from the cache (header `X-Cache: HIT`).
+A street-data answer names the server it came from (`X-Upstream`); when no server answered,
+the error lists what each one said.
+
+## What the app does when the proxy is down
+
+Street data falls back to the public Overpass servers, which the app keeps behind the proxy
+in its list. Search and place lookups have no second way: the search box says suggestions
+are unavailable, and the map tap still sets a start.
 
 ## Limits worth setting in the dashboard (optional)
 

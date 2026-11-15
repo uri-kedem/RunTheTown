@@ -50,6 +50,14 @@ export function distText(m, units = 'km') {
   const r = roundDist(m);
   return r >= 1000 ? `${(r / 1000).toFixed(1).replace(/\.0$/, '')} kilometers` : `${r} meters`;
 }
+// A spoken number of kilometres or miles: one decimal, and none for a whole number
+// ("5", "5.2", never "5.0").
+export const spokenNumber = (v) => v.toFixed(1).replace(/\.0$/, '');
+/** A spoken distance in whole units: "1 kilometer", "5 kilometers", "5.2 kilometers" (or miles). */
+export function spokenLength(m, units = 'km') {
+  const v = spokenNumber(units === 'mi' ? m / MILE : m / 1000);
+  return `${v} ${units === 'mi' ? 'mile' : 'kilometer'}${v === '1' ? '' : 's'}`;
+}
 export function paceText(secPerKm, units = 'km') {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0) return '';
   const per = units === 'mi' ? secPerKm * (MILE / 1000) : secPerKm;
@@ -224,7 +232,7 @@ export class Navigator {
     const d = this.route.cues?.[0];
     this.speak(
       msg(
-        `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
+        `Starting your ${this.units === 'mi' ? `${spokenNumber(this.total / MILE)} mile` : `${spokenNumber(this.total / 1000)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
         ((this.localNames && d?.local) || d?.street) ? ' on ' : null,
         (this.localNames && d?.local) || d?.street || null,
@@ -562,7 +570,7 @@ export class Navigator {
     this.finished = true;
     const mins = Math.round(this.elapsed / 60000);
     const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
-    const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
+    const ran = spokenLength(this.odometer, this.units);
     this.speak(msg(`Run finished. ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 

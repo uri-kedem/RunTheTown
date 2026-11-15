@@ -8,7 +8,7 @@
 // street data go through it: one well-behaved caller with a cache, which is what those
 // services' usage rules ask of an app on many phones, and a provider can then be changed
 // without an app update. Map tiles, elevation, land cover and Wikipedia are unaffected.
-const PROXY = '';
+const PROXY = 'https://runthetown-proxy.runthetown.workers.dev';
 
 const PUBLIC_OVERPASS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
@@ -21,8 +21,16 @@ const PUBLIC_OVERPASS = [
 const searchUrl = (query) => (PROXY ? `${PROXY}/search${query}` : `https://photon.komoot.io/api/${query}`);
 /** A Nominatim call: `nominatimUrl('/search?format=jsonv2&q=…')`. */
 const nominatimUrl = (path) => (PROXY ? `${PROXY}/nominatim${path}` : `https://nominatim.openstreetmap.org${path}`);
-/** The Overpass servers to try in turn (through the proxy there is only one). */
-const overpassEndpoints = () => (PROXY ? [`${PROXY}/overpass`] : PUBLIC_OVERPASS);
+/**
+ * The Overpass servers to try in turn. With the proxy it comes first and the public servers
+ * stay behind it, so a day the proxy is down does not leave the app without its backup map.
+ */
+const overpassEndpoints = () => (PROXY ? [`${PROXY}/overpass`, ...PUBLIC_OVERPASS] : PUBLIC_OVERPASS);
+/**
+ * How many of those servers share the first try: the two main public ones take turns;
+ * the proxy takes every request (it spreads them over the public servers itself).
+ */
+const OVERPASS_HOMES = PROXY ? 1 : 2;
 
 // ---- contact.js ----
 // Where "Report a problem" sends its e-mail. Kept in a file of its own so the rest of the
@@ -683,6 +691,8 @@ const HE_TEXT = {
   'Run finished. {a} in {n} minute. Average pace {p}.': 'הריצה הסתיימה. {a} בדקה אחת. קצב ממוצע {p}.',
   'Run finished. {a} in {n} minutes. Average pace {p}.': 'הריצה הסתיימה. {a} ב-{n} דקות. קצב ממוצע {p}.',
   '{n} kilometers': '{n} קילומטר',
+  '{n} kilometer': 'קילומטר אחד',
+  '{n} mile': 'מייל אחד',
   '{n} meters': '{n} מטר',
   '{n} miles': '{n} מייל',
   'one mile': 'מייל אחד',
@@ -1039,7 +1049,8 @@ async function fetchTiles(tiles, mode, { cache = null, onProgress = () => {}, si
   const worker = async (home) => {
     while (queue.length) {
       const t = queue.shift();
-      const base = [ENDPOINTS[home], ENDPOINTS[1 - home], ...ENDPOINTS.slice(2)];
+      // This worker's own server first, then the others in their order.
+      const base = [...new Set([ENDPOINTS[home % OVERPASS_HOMES], ...ENDPOINTS])];
       const order = [...base.filter((u) => !isCool(u)), ...base.filter(isCool)];
       let json = null;
       for (let i = 0; i < order.length && !json; i++) {
@@ -1265,7 +1276,7 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
     }
   };
   try {
-    const json = await Promise.any(ENDPOINTS.slice(0, 2).map(one));
+    const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
     ctrls.forEach((c) => c.abort());
     const out = [];
     const docks = [];
@@ -5264,9 +5275,14 @@ function lapFromGeojson(geojson) {
  */
 async function scanSpots(lat, lon, { fetchImpl = (...a) => fetch(...a), pauseMs = 1050 } = {}) {
   try {
-    const dLat = SCAN_KM / 110.574;
-    const dLon = SCAN_KM / (111.32 * Math.cos((lat * Math.PI) / 180));
-    const vb = `&viewbox=${(lon - dLon).toFixed(5)},${(lat + dLat).toFixed(5)},${(lon + dLon).toFixed(5)},${(lat - dLat).toFixed(5)}&bounded=1`;
+    // The box is centred on a 0.01-degree grid (about a kilometre) and its sides are whole
+    // hundredths, so runners who start near each other ask the same question and the proxy
+    // answers the second one from its cache.
+    const cLat = Math.round(lat * 100) / 100;
+    const cLon = Math.round(lon * 100) / 100;
+    const dLat = Math.ceil((SCAN_KM / 110.574) * 100) / 100;
+    const dLon = Math.ceil((SCAN_KM / (111.32 * Math.cos((cLat * Math.PI) / 180))) * 100) / 100;
+    const vb = `&viewbox=${(cLon - dLon).toFixed(2)},${(cLat + dLat).toFixed(2)},${(cLon + dLon).toFixed(2)},${(cLat - dLat).toFixed(2)}&bounded=1`;
     const q = (text) => `${NOMINATIM_SCAN}/search?format=jsonv2&limit=40&extratags=1&namedetails=1&q=${encodeURIComponent(text)}${vb}`;
     const stadiums = (await scanGetJson(q('stadium'), fetchImpl)) || [];
     await scanWait(pauseMs); // Nominatim allows one request per second
@@ -6109,6 +6125,14 @@ function distText(m, units = 'km') {
   const r = roundDist(m);
   return r >= 1000 ? `${(r / 1000).toFixed(1).replace(/\.0$/, '')} kilometers` : `${r} meters`;
 }
+// A spoken number of kilometres or miles: one decimal, and none for a whole number
+// ("5", "5.2", never "5.0").
+const spokenNumber = (v) => v.toFixed(1).replace(/\.0$/, '');
+/** A spoken distance in whole units: "1 kilometer", "5 kilometers", "5.2 kilometers" (or miles). */
+function spokenLength(m, units = 'km') {
+  const v = spokenNumber(units === 'mi' ? m / MILE : m / 1000);
+  return `${v} ${units === 'mi' ? 'mile' : 'kilometer'}${v === '1' ? '' : 's'}`;
+}
 function paceText(secPerKm, units = 'km') {
   if (!Number.isFinite(secPerKm) || secPerKm <= 0) return '';
   const per = units === 'mi' ? secPerKm * (MILE / 1000) : secPerKm;
@@ -6283,7 +6307,7 @@ class Navigator {
     const d = this.route.cues?.[0];
     this.speak(
       msg(
-        `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
+        `Starting your ${this.units === 'mi' ? `${spokenNumber(this.total / MILE)} mile` : `${spokenNumber(this.total / 1000)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
         ((this.localNames && d?.local) || d?.street) ? ' on ' : null,
         (this.localNames && d?.local) || d?.street || null,
@@ -6621,7 +6645,7 @@ class Navigator {
     this.finished = true;
     const mins = Math.round(this.elapsed / 60000);
     const pace = this.odometer > 500 ? ` Average pace ${paceText(this.elapsed / 1000 / (this.odometer / 1000), this.units)}.` : '';
-    const ran = this.units === 'mi' ? `${(this.odometer / MILE).toFixed(1)} miles` : `${(this.odometer / 1000).toFixed(1)} kilometers`;
+    const ran = spokenLength(this.odometer, this.units);
     this.speak(msg(`Run finished. ${ran} in ${mins} minute${mins === 1 ? '' : 's'}.${pace}`), { priority: 3 });
   }
 
@@ -8026,7 +8050,9 @@ const state = {
   dest: null, // { lat, lon, label }: where a one-way run ends
 };
 
-const engine = new RouteEngine();
+// The city-wide look for tracks and stadiums asks Nominatim, whose rules do not allow an
+// app's phones to do that themselves: it runs only through our own proxy.
+const engine = new RouteEngine({ cityScan: !!PROXY });
 let busy = false; // a route search is running
 const isDesktop = () => window.matchMedia('(min-width: 900px)').matches;
 
@@ -9576,7 +9602,7 @@ $('homeBtn').addEventListener('click', () => {
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
   const d = fresh.cues?.[0];
-  say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
+  say([{ text: `Taking you back to the start: ${spokenLength(fresh.distance, settings.units)} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
   toast('The route now leads back to the start by the shortest safe way.');
 });
 
@@ -9592,7 +9618,7 @@ function turnedAroundOnLoop({ seg }) {
   render(n.navigator.reroute(fresh, { say: false }));
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
-  say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  say([{ text: `Turned around? Heading back the way you came. ${spokenLength(fresh.distance, settings.units)} to the start.` }], { priority: 3 });
   toast('Turned around: the route now leads back to the start the way you came.');
   return true;
 }

@@ -4,13 +4,13 @@ import { RouteEngine, MAX_DISTANCE_KM, packRadius } from './engine.js';
 import { downloadPack, offlinePackAt } from './offline.js';
 import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
 import { haversine } from './geo.js';
-import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue } from './navigation.js';
+import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue, spokenLength } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
 import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch } from './native.js';
 import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
 import { fallbackLinks, findStory } from './details.js';
-import { searchUrl, nominatimUrl } from './services.js';
+import { searchUrl, nominatimUrl, PROXY } from './services.js';
 import { REPORT_TO } from './contact.js';
 import { tr, setLanguage, applyLanguage, watchLanguage, isHebrew } from './i18n.js';
 
@@ -51,7 +51,9 @@ const state = {
   dest: null, // { lat, lon, label }: where a one-way run ends
 };
 
-const engine = new RouteEngine();
+// The city-wide look for tracks and stadiums asks Nominatim, whose rules do not allow an
+// app's phones to do that themselves: it runs only through our own proxy.
+const engine = new RouteEngine({ cityScan: !!PROXY });
 let busy = false; // a route search is running
 const isDesktop = () => window.matchMedia('(min-width: 900px)').matches;
 
@@ -1601,7 +1603,7 @@ $('homeBtn').addEventListener('click', () => {
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
   const d = fresh.cues?.[0];
-  say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
+  say([{ text: `Taking you back to the start: ${spokenLength(fresh.distance, settings.units)} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
   toast('The route now leads back to the start by the shortest safe way.');
 });
 
@@ -1617,7 +1619,7 @@ function turnedAroundOnLoop({ seg }) {
   render(n.navigator.reroute(fresh, { say: false }));
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
-  say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  say([{ text: `Turned around? Heading back the way you came. ${spokenLength(fresh.distance, settings.units)} to the start.` }], { priority: 3 });
   toast('Turned around: the route now leads back to the start the way you came.');
   return true;
 }

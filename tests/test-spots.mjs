@@ -66,6 +66,17 @@ const oval = (clat, clon, half = 84.39, r = 36.5, n = 40) => {
   check(!spots.some((s) => /Velodrome|טוטו/.test(s.name)), 'velodrome and basketball hall are left out');
   check(spots.some((s) => s.kind === 'track' && s.name === 'Athletics track' && s.lapM), 'an unnamed track is listed as an athletics track');
   check(spots.every((s, i) => !i || s.fromStart >= spots[i - 1].fromStart), 'nearest first');
+  // Two runners a few hundred metres apart ask exactly the same question, so the proxy
+  // answers the second from its cache and Nominatim hears it once.
+  const boxes = [];
+  for (const [la, lo] of [[32.0632, 34.7706], [32.0611, 34.7689]]) {
+    await scanSpots(la, lo, { fetchImpl: async (url) => { boxes.push(url.match(/viewbox=[^&]+/)?.[0] + '|' + url.match(/[?&]q=[^&]+/)?.[0]); return json([]); }, pauseMs: 0 });
+  }
+  check(boxes.length === 4 && boxes[0] === boxes[2] && boxes[1] === boxes[3], 'starts near each other scan the same box');
+  {
+    const [w, n, e, s] = boxes[0].match(/viewbox=([^|]+)/)[1].split(',').map(Number);
+    check(w <= 34.7706 - 0.08 && e >= 34.7706 + 0.08 && s <= 32.0632 - 0.07 && n >= 32.0632 + 0.07, 'the box still reaches 8 km each way');
+  }
   const offline = await scanSpots(32.06, 34.77, { fetchImpl: async () => { throw new Error('offline'); }, pauseMs: 0 });
   check(offline.length === 0, 'offline: empty, no exception');
 }

@@ -1,11 +1,24 @@
 // Live-guidance tests with simulated GPS. Run: node tests/test-navigation.mjs
 import { RouteEngine } from '../js/engine.js';
 import { homeRoute } from '../js/planner.js';
-import { Navigator, SimulatedRun, Voice, roundDist, paceShort, distText, paceText, lenText, MILE, wristCue } from '../js/navigation.js';
+import { Navigator, SimulatedRun, Voice, roundDist, paceShort, distText, paceText, lenText, MILE, wristCue, spokenLength, spokenNumber } from '../js/navigation.js';
 import { loadSettings, saveSettings, houseVoices, DEFAULTS } from '../js/settings.js';
 import { syntheticOverpass, CENTER } from './synthetic-city.mjs';
 import { makeMockMapBackend } from './mock-vectortiles.mjs';
 import { makeProjection } from '../js/geo.js';
+
+// The simulated GPS noise comes from Math.random. A fixed seed makes every run of this suite
+// the same run: a check that sits near its limit (jitter while standing still) then passes
+// or fails for a reason, not by the luck of the draw, here and on GitHub alike.
+{
+  let seed = 20261115;
+  Math.random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
@@ -14,6 +27,9 @@ const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass
 check(roundDist(147) === 150 && roundDist(42) === 40 && roundDist(1234) === 1200, 'distance rounding');
 check(DEFAULTS.health === true && DEFAULTS.lockScreen === true && loadSettings({ getItem: () => '{"health":false}' }).health === false, 'Apple Health and Lock Screen settings: on by default, remembered when off');
 check(paceShort(332) === '5:32', 'pace format');
+// Spoken distances: a whole number is said without ".0", and exactly one is singular.
+check(spokenLength(1000) === '1 kilometer' && spokenLength(5000) === '5 kilometers' && spokenLength(5230) === '5.2 kilometers' && spokenLength(960) === '1 kilometer' && spokenLength(400) === '0.4 kilometers', 'kilometers are spoken as 1, 5, 5.2: never 1.0 or 5.0');
+check(spokenLength(MILE, 'mi') === '1 mile' && spokenLength(3 * MILE, 'mi') === '3 miles' && spokenLength(2.5 * MILE, 'mi') === '2.5 miles' && spokenNumber(10) === '10' && spokenNumber(10.04) === '10', 'and so are miles');
 check(DEFAULTS.watch === true, 'Apple Watch setting: on by default');
 
 // The wrist: one tap ahead of a turn, one at the turn (left and right feel different), one
@@ -295,11 +311,11 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   nav.start();
   const sim = new SimulatedRun(r, { speed: 3, noise: 0 });
   let steps = 0; while (!nav.routeDone && steps++ < 5000) { t += 2; nav.update(sim.step(2)); }
-  check(/Starting your \d\.\d mile run/.test(said[0]), 'run summary in miles');
+  check(/Starting your \d+(\.\d)? mile run/.test(said[0]) && !/\.0 mile/.test(said[0]), 'run summary in miles');
   check(said.some((x) => /^1 mile\. Last mile \d+ minutes/.test(x)) && said.some((x) => /^2 miles\./.test(x)) && !said.some((x) => /kilometer/.test(x)), 'splits every mile, nothing in kilometres');
   check(said.some((x) => /^In (\d+ feet|a quarter mile), turn/.test(x)), 'turns announced in feet');
   nav.finish();
-  check(said.some((x) => /Run finished\. \d\.\d miles in/.test(x)) && nav.finished, 'finish in miles, on End run');
+  check(said.some((x) => /Run finished\. \d+(\.\d)? miles? in/.test(x)) && !said.some((x) => /\.0 (mile|kilometer)/.test(x)) && nav.finished, 'finish in miles, on End run');
   const quiet = []; t = 0;
   const nq = new Navigator(r, { speak: (p) => quiet.push(p.map((x) => x.text).join('')), now: () => t * 1000, quiet: true });
   nq.start(); const s2 = new SimulatedRun(r, { speed: 3, noise: 0 }); steps = 0; while (!nq.routeDone && steps++ < 5000) { t += 2; nq.update(s2.step(2)); }

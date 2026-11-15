@@ -1,0 +1,6 @@
+{
+  "name": "runthetown",
+  "private": true,
+  "type": "module",
+  "description": "RunTheTown's proxy on Cloudflare Workers. Deploy with: npx wrangler deploy"
+}
