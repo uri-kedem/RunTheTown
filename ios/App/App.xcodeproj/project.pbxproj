@@ -7,9 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		06313BA86504DE3BDB6B89A5 /* RunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ACBA72BCC0ED0C8ADB13C5E /* RunView.swift */; };
 		185AFA2AD57556BBE8589143 /* RTTViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4F0B74877777A3628E7973 /* RTTViewController.swift */; };
 		2FABCEF47C2A7B95944E6172 /* HealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0127491060B8FF9D717D5118 /* HealthPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		2FE4B224291783DC6E524A89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CB001BDB94700CEA980F601C /* Assets.xcassets */; };
+		30CCBD60822636061036F112 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F342A3CF324B65093DFEDC9 /* Foundation.framework */; };
+		3FB69ED5A7AB086DA67968C0 /* WatchPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912B9C5964BECFBDF0C0A11F /* WatchPlugin.swift */; };
+		42307B087D4994230F438BCD /* RunTheTownWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4BC18DE50FCA596C23A89A98 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C3B92DDBFC3F39540E4FDDDA /* Foundation.framework */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -18,12 +23,14 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		62BF4EDE206FD470E64F0EB7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B281CB97086E4D783A57E2DF /* WidgetKit.framework */; };
+		7324987DB09312A0311A7100 /* RunTheTownWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDC7B3FE4C38897DEDFCFB8 /* RunTheTownWatchApp.swift */; };
 		738033CEA53DE8B5B1D7A388 /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79122385025A786F30F4B6AC /* RunActivityAttributes.swift */; };
 		7C680EB33DE8B7C2F7392277 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B1DD2AE2222F0DD03E8447 /* SceneDelegate.swift */; };
 		80C431E4E3D431FCF0593CDC /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79122385025A786F30F4B6AC /* RunActivityAttributes.swift */; };
 		817C0375EDFCE9B3BCA3A4DC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 544F3CD5245D9543760A374C /* SwiftUI.framework */; };
 		90B1B1F97E3617B68A277F85 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9863A6ED0EC32D088B36D4A /* LiveActivityPlugin.swift */; };
 		957180CD062B6A41C41DFA39 /* RunActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0586E07A36AA8CF349D90F65 /* RunActivityWidget.swift */; };
+		9A24A59BCDEE5D8EE7ED8860 /* RunSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9B93F3136269855BF6A10A /* RunSession.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A861FCA178B6C217AA450D47 /* RunActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BBF51E1CFBBBA6E69CF867D5 /* RunActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D07E5E362C8894F0EE1028AC /* ChimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6FBFA8307E728DFD5A981A /* ChimePlugin.swift */; };
@@ -36,6 +43,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 1A26B3AAA4A74136154ECE34;
 			remoteInfo = RunActivity;
+		};
+		9BADD04ACC3DF36AACA153CB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B30B3D1ACBBA996B259A9702;
+			remoteInfo = RunTheTownWatch;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -51,6 +65,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AAADF0FA7C1B23D6B8ECC19B /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				42307B087D4994230F438BCD /* RunTheTownWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +84,7 @@
 		07AF5103B8D422BF32058C76 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		2D4F0B74877777A3628E7973 /* RTTViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RTTViewController.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		4FDC7B3FE4C38897DEDFCFB8 /* RunTheTownWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunTheTownWatchApp.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -68,7 +94,12 @@
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		544F3CD5245D9543760A374C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
+		6E9B93F3136269855BF6A10A /* RunSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunSession.swift; sourceTree = "<group>"; };
 		79122385025A786F30F4B6AC /* RunActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunActivityAttributes.swift; sourceTree = "<group>"; };
+		912B9C5964BECFBDF0C0A11F /* WatchPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchPlugin.swift; sourceTree = "<group>"; };
+		9ACBA72BCC0ED0C8ADB13C5E /* RunView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunView.swift; sourceTree = "<group>"; };
+		9F342A3CF324B65093DFEDC9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		A14D39F82908B992AAD97F09 /* RunTheTownWatch.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = RunTheTownWatch.entitlements; sourceTree = "<group>"; };
 		A9863A6ED0EC32D088B36D4A /* LiveActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityPlugin.swift; sourceTree = "<group>"; };
 		AE6FBFA8307E728DFD5A981A /* ChimePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChimePlugin.swift; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -76,6 +107,8 @@
 		B281CB97086E4D783A57E2DF /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
 		BBF51E1CFBBBA6E69CF867D5 /* RunActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RunActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3B92DDBFC3F39540E4FDDDA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		CB001BDB94700CEA980F601C /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunTheTownWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9B1DD2AE2222F0DD03E8447 /* SceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FD3C780814E4057D084512B7 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -87,6 +120,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		77F407BB7645AAD031A9DAA7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30CCBD60822636061036F112 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +149,7 @@
 			children = (
 				AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */,
 				CC7134AF3528F56B25BD89B2 /* iOS */,
+				FFD40C59F04122F2CD70D4BA /* watchOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -120,6 +162,7 @@
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
 				DD025CF4F53205EA52B83231 /* RunActivity */,
+				DF599E5C8219248B0FC5F556 /* RunTheTownWatch */,
 			);
 			sourceTree = "<group>";
 		};
@@ -128,6 +171,7 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				BBF51E1CFBBBA6E69CF867D5 /* RunActivity.appex */,
+				D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -158,6 +202,7 @@
 				AE6FBFA8307E728DFD5A981A /* ChimePlugin.swift */,
 				A9863A6ED0EC32D088B36D4A /* LiveActivityPlugin.swift */,
 				79122385025A786F30F4B6AC /* RunActivityAttributes.swift */,
+				912B9C5964BECFBDF0C0A11F /* WatchPlugin.swift */,
 			);
 			name = Plugins;
 			path = Plugins;
@@ -192,6 +237,27 @@
 			path = RunActivity;
 			sourceTree = "<group>";
 		};
+		DF599E5C8219248B0FC5F556 /* RunTheTownWatch */ = {
+			isa = PBXGroup;
+			children = (
+				4FDC7B3FE4C38897DEDFCFB8 /* RunTheTownWatchApp.swift */,
+				6E9B93F3136269855BF6A10A /* RunSession.swift */,
+				9ACBA72BCC0ED0C8ADB13C5E /* RunView.swift */,
+				CB001BDB94700CEA980F601C /* Assets.xcassets */,
+				A14D39F82908B992AAD97F09 /* RunTheTownWatch.entitlements */,
+			);
+			name = RunTheTownWatch;
+			path = RunTheTownWatch;
+			sourceTree = "<group>";
+		};
+		FFD40C59F04122F2CD70D4BA /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+				9F342A3CF324B65093DFEDC9 /* Foundation.framework */,
+			);
+			name = watchOS;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -222,15 +288,34 @@
 				504EC3021FED79650016851F /* Resources */,
 				9592DBEFFC6D2A0C8D5DEB22 /* [CP] Embed Pods Frameworks */,
 				A5AD7D29467C19C7B37433A1 /* Embed Foundation Extensions */,
+				AAADF0FA7C1B23D6B8ECC19B /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				0F3EB53A64EFB33BA2B00AF8 /* PBXTargetDependency */,
+				D918C68CB23A3378F29DB805 /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B30B3D1ACBBA996B259A9702 /* RunTheTownWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 554D97D14EB11789E0703508 /* Build configuration list for PBXNativeTarget "RunTheTownWatch" */;
+			buildPhases = (
+				008392E2B1B03F25A3F601E2 /* Sources */,
+				77F407BB7645AAD031A9DAA7 /* Frameworks */,
+				D23F5ACC65D2683DE58B7689 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RunTheTownWatch;
+			productName = RunTheTownWatch;
+			productReference = D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -246,6 +331,13 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.HealthKit = {
+								enabled = 1;
+							};
+						};
+					};
+					B30B3D1ACBBA996B259A9702 = {
 						SystemCapabilities = {
 							com.apple.HealthKit = {
 								enabled = 1;
@@ -269,6 +361,7 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				1A26B3AAA4A74136154ECE34 /* RunActivity */,
+				B30B3D1ACBBA996B259A9702 /* RunTheTownWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -291,6 +384,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D23F5ACC65D2683DE58B7689 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2FE4B224291783DC6E524A89 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -333,6 +434,16 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		008392E2B1B03F25A3F601E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7324987DB09312A0311A7100 /* RunTheTownWatchApp.swift in Sources */,
+				9A24A59BCDEE5D8EE7ED8860 /* RunSession.swift in Sources */,
+				06313BA86504DE3BDB6B89A5 /* RunView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3001FED79650016851F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -344,6 +455,7 @@
 				90B1B1F97E3617B68A277F85 /* LiveActivityPlugin.swift in Sources */,
 				80C431E4E3D431FCF0593CDC /* RunActivityAttributes.swift in Sources */,
 				7C680EB33DE8B7C2F7392277 /* SceneDelegate.swift in Sources */,
+				3FB69ED5A7AB086DA67968C0 /* WatchPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,6 +476,12 @@
 			name = RunActivity;
 			target = 1A26B3AAA4A74136154ECE34 /* RunActivity */;
 			targetProxy = 5031D7B087CF21FF98ADEEE7 /* PBXContainerItemProxy */;
+		};
+		D918C68CB23A3378F29DB805 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = RunTheTownWatch;
+			target = B30B3D1ACBBA996B259A9702 /* RunTheTownWatch */;
+			targetProxy = 9BADD04ACC3DF36AACA153CB /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -563,6 +681,35 @@
 			};
 			name = Release;
 		};
+		9477B4B696E21F5F55292024 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RunTheTownWatch/RunTheTownWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9R5MGBMQU;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunTheTownWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunTheTown;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "RunTheTown reads nothing from Health; a workout session keeps the run on your wrist.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "To keep the run on your wrist and tap you at turns while your arm is down.";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.urikedem.runthetown;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.urikedem.runthetown.watchkitapp;
+				PRODUCT_NAME = RunTheTownWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
 		D54D2CA1FF7744FBC235CD84 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -587,6 +734,36 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		E3687A83DC58AE92EE44544B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RunTheTownWatch/RunTheTownWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9R5MGBMQU;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunTheTownWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RunTheTown;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "RunTheTown reads nothing from Health; a workout session keeps the run on your wrist.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "To keep the run on your wrist and tap you at turns while your arm is down.";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.urikedem.runthetown;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.urikedem.runthetown.watchkitapp;
+				PRODUCT_NAME = RunTheTownWatch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -614,6 +791,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		554D97D14EB11789E0703508 /* Build configuration list for PBXNativeTarget "RunTheTownWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E3687A83DC58AE92EE44544B /* Release */,
+				9477B4B696E21F5F55292024 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

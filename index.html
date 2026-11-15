@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=f10314d0" />
+    <link rel="manifest" href="manifest.webmanifest?v=3e2faeab" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=f10314d0" />
+    <link rel="stylesheet" href="css/style.css?v=3e2faeab" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="f10314d0">f10314d0</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3e2faeab">3e2faeab</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -265,8 +265,9 @@
         <h2>Language</h2>
         <div class="segmented" id="setLang" role="radiogroup">
           <button type="button" data-v="en" role="radio" aria-checked="true" class="on">English</button>
-          <button type="button" data-v="he" role="radio" aria-checked="false" disabled>עברית · soon</button>
+          <button type="button" data-v="he" role="radio" aria-checked="false">עברית</button>
         </div>
+        <p class="set-hint" id="langHint" hidden>No Hebrew voice was found on this device, so directions are spoken in English. On iPhone: Settings → Accessibility → Spoken Content → Voices → Hebrew.</p>
 
         <h2>Map during the run</h2>
         <label class="set-row"><span><b>Follow me</b><small>The map moves with you; drag it to look around, tap Re-center to come back</small></span><input type="checkbox" id="setFollow" class="switch" /></label>
@@ -275,6 +276,7 @@
         <label class="set-row"><span><b>Keep the screen on</b><small>Directions stop if the phone locks</small></span><input type="checkbox" id="setAwake" class="switch" /></label>
         <label class="set-row native-only"><span><b>Save runs to Apple Health</b><small>Every run you keep becomes a workout in Health: distance, time and the route</small></span><input type="checkbox" id="setHealth" class="switch" /></label>
         <label class="set-row native-only"><span><b>Run on the Lock Screen</b><small>The next turn, your distance and pace on the locked screen (iOS 16.1 and later)</small></span><input type="checkbox" id="setLockScreen" class="switch" /></label>
+        <label class="set-row native-only"><span><b>Apple Watch</b><small>The run shows on your watch, and each turn taps your wrist</small></span><input type="checkbox" id="setWatch" class="switch" /></label>
 
         <h2>About</h2>
         <div class="set-row"><span><b>RunTheTown</b><small>Version <span id="settingsBuild"></span> · Map data © OpenStreetMap contributors</small></span><button type="button" class="ghost" id="setUpdate">Check for update</button></div>
@@ -552,6 +554,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=f10314d0"></script>
+    <script src="js/bundle.js?v=3e2faeab"></script>
   </body>
 </html>

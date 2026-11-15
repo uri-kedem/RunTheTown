@@ -220,3 +220,30 @@ export class NativeLiveActivity {
     this.la.end(state).catch(() => {});
   }
 }
+
+/**
+ * The run on a paired Apple Watch: the same figures as the Lock Screen card, plus the name
+ * of a tap ('pre', 'left', 'right', 'turn', 'offroute', 'done') when there is one to feel.
+ * Plain updates go out every two seconds at most; an update with a tap goes at once.
+ */
+export class NativeWatch {
+  constructor() { this.w = plugin('Watch'); this.on = false; this.lastAt = 0; }
+  get available() { return !!this.w; }
+  async start(routeName, state) {
+    if (!this.w) return false;
+    try { const r = await this.w.start({ routeName, ...state }); this.on = !!r?.started; } catch { this.on = false; }
+    return this.on;
+  }
+  update(state, haptic = null, { minIntervalMs = 2000 } = {}) {
+    if (!this.on) return;
+    const now = Date.now();
+    if (!haptic && now - this.lastAt < minIntervalMs) return;
+    this.lastAt = now;
+    this.w.update(haptic ? { ...state, haptic } : state).catch(() => {});
+  }
+  end(state) {
+    if (!this.on) return;
+    this.on = false;
+    this.w.end(state).catch(() => {});
+  }
+}

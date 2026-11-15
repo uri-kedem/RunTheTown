@@ -29,6 +29,779 @@ const overpassEndpoints = () => (PROXY ? [`${PROXY}/overpass`] : PUBLIC_OVERPASS
 // code carries no address (tools that guard personal data then leave the other files alone).
 const REPORT_TO = 'uri.kedem1@gmail.com';
 
+// ---- i18n.js ----
+// The interface in Hebrew. The code keeps writing English; `tr(text)` gives the Hebrew for
+// it when Hebrew is on, from the table below. Fixed texts are looked up as they are; texts
+// with numbers or names in them match a template ("{n} running spots nearby") and the
+// pieces caught are put into the Hebrew template (translated again on their own, so
+// "300 meters" inside "In 300 meters, turn left" becomes Hebrew too). Anything missing from
+// the table stays English, so a gap is never a crash, only an untranslated line.
+//
+// The page is translated in place: `applyLanguage()` goes over the text on the page (and the
+// placeholder, aria-label and title attributes), and `watchLanguage()` does the same for
+// every text the app writes later, so the rest of the code needs no change to speak Hebrew.
+// The English is kept on each node, so switching back is exact.
+
+let uiLang = 'en';
+const LANGUAGES = ['en', 'he'];
+
+function currentLanguage() { return uiLang; }
+function setLanguage(l) { uiLang = LANGUAGES.includes(l) ? l : 'en'; }
+const isHebrew = () => uiLang === 'he';
+
+// ---- The table: English → Hebrew. Templates use {a}, {b}, {d}… as placeholders for any text,
+// and {n}, {m}, {s} for numbers only. A template is matched without the spaces around it. ----
+const HE_TEXT = {
+  // Menu and cover
+  'Set up your profile': 'הגדר את הפרופיל שלך',
+  'name, photo': 'שם, תמונה',
+  'My runs': 'הריצות שלי',
+  'Free-flow run': 'ריצה חופשית',
+  'Explorer tour': 'סיור מגלה',
+  'Install on your phone': 'התקנה בטלפון',
+  'Settings': 'הגדרות',
+  'Terms & policy': 'תנאים ומדיניות',
+  'Map data © OpenStreetMap': 'נתוני מפה © OpenStreetMap',
+  'Version': 'גרסה',
+  'Explore every corner.': 'לגלות כל פינה.',
+  'Run the town.': 'לרוץ את העיר.',
+  'Set your distance, we’ll map the perfect run through parks, waterfronts, and hidden gems.': 'בחרו מרחק, ואנחנו נתכנן את הריצה המושלמת דרך פארקים, טיילות ופינות חמד נסתרות.',
+  'Custom routes on pedestrian-friendly paths, parks, and natural urban routes with turn-by-turn voice guidance': 'מסלולים מותאמים בשבילים ידידותיים להולכי רגל, פארקים ונתיבים עירוניים טבעיים, עם הנחיה קולית פנייה אחר פנייה',
+  'A scenic journey through iconic landmarks, historical spots, and viewpoint, each called out by voice as you pass': 'מסע נופי בין ציוני דרך, אתרים היסטוריים ותצפיות, כשכל אחד מהם מוכרז בקול כשעוברים לידו',
+  'Start Run': 'התחל ריצה',
+  'Plan Tour': 'תכנן סיור',
+  'No sign-up required': 'ללא הרשמה',
+  'Any city worldwide': 'בכל עיר בעולם',
+  'Free voice guidance': 'הנחיה קולית חינם',
+  '· Map data © OpenStreetMap contributors': '· נתוני מפה © תורמי OpenStreetMap',
+  'Main menu': 'תפריט ראשי',
+  'RunTheTown home': 'דף הבית של RunTheTown',
+  'Menu': 'תפריט',
+  'Back': 'חזרה',
+
+  // Terms
+  'What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page:': 'מה RunTheTown עושה עם המידע שלך ולמה אתה מסכים בשימוש באפליקציה. מדיניות הפרטיות המלאה ודף התמיכה:',
+  'privacy policy': 'מדיניות הפרטיות',
+  'support': 'תמיכה',
+  'Run at your own risk': 'הריצה על אחריותך',
+  'Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.': 'המסלולים נבנים אוטומטית מנתוני OpenStreetMap, שעלולים להיות שגויים או לא מעודכנים. שביל עשוי להיות סגור, לא מואר, לא בטוח או פרטי, ומסלול ריצה או אצטדיון עשויים להיות סגורים לקהל. בדוק שהמסלול הגיוני לפני היציאה, ציית לחוקי התנועה ולרמזורים והפעל שיקול דעת בכל עת. ההנחיה הקולית היא נוחות, לא תחליף להסתכלות לאן אתה רץ. השימוש ב-RunTheTown הוא על אחריותך בלבד, ללא כל אחריות מצדנו.',
+  'Your location': 'המיקום שלך',
+  'Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never sent to a RunTheTown server (there is none) and never stored by us. To fetch map data and look up places, the app sends coordinates to the public services below; they receive the area you are looking at, not your identity.': 'המיקום שלך משמש במכשיר בלבד כדי לקבוע את נקודת ההתחלה, לעקוב אחריך לאורך המסלול ולמצוא מקומות ריצה סביבך. הוא לעולם לא נשלח לשרת של RunTheTown (אין כזה) ולא נשמר אצלנו. כדי להביא נתוני מפה ולחפש מקומות, האפליקציה שולחת קואורדינטות לשירותים הציבוריים שלמטה; הם מקבלים את האזור שאתה מסתכל עליו, לא את זהותך.',
+  'Your profile and your runs stay on the device': 'הפרופיל והריצות שלך נשארים במכשיר',
+  'Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. Nothing is sent to us: there is no server and no account. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.': 'השם והתמונה שלך, וכל ריצה ביומן (מרחק, זמן, המסלול, מסלול ה-GPS ותמונה שלו) נשמרים במכשיר הזה בלבד. שום דבר לא נשלח אלינו: אין שרת ואין חשבון. מחק ריצה מהדף שלה, ייצא את כולן כקובץ, או מחק את האפליקציה כדי להסיר הכול. חלקי מפה, נתוני גובה ופרטי מקומות שהורדו נשמרים עד 14 יום כדי שעיר תיטען מהר יותר בפעם הבאה.',
+  'No tracking': 'ללא מעקב',
+  'No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.': 'ללא אנליטיקה, ללא פרסום וללא מעקב מכל סוג. "דווח על בעיה" פותח את אפליקציית הדוא"ל שלך עם הודעה אלינו; היא נשלחת רק אם תלחץ שלח.',
+  'Services used': 'שירותים בשימוש',
+  'for the street and park data,': 'לנתוני הרחובות והפארקים,',
+  'and': 'וגם',
+  'for the background map pictures.': 'לתמונות מפת הרקע.',
+  '(ESA WorldCover) for land cover,': '(ESA WorldCover) לכיסוי הקרקע,',
+  'for elevation.': 'לגבהים.',
+  'for traffic lights and crossings (best effort).': 'לרמזורים ולמעברי חצייה (כמיטב היכולת).',
+  'for address search and for finding tracks, stadiums and parks.': 'לחיפוש כתובות ולמציאת מסלולי ריצה, אצטדיונים ופארקים.',
+  "for a place's website and article.": 'לאתר ולערך של מקום.',
+  'Each of these has its own terms and privacy policy. Map data ©': 'לכל אחד מהם תנאים ומדיניות פרטיות משלו. נתוני מפה ©',
+  'OpenStreetMap contributors': 'תורמי OpenStreetMap',
+  ', available under the Open Database License.': ', זמינים תחת רישיון Open Database.',
+  'Fair use': 'שימוש הוגן',
+  'These are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.': 'אלה שירותים ציבוריים חינמיים עם מגבלות שימוש. אנא השתמש באפליקציה כפי שרץ היה משתמש, לא להורדות המוניות או לשאילתות אוטומטיות.',
+  'Changes': 'שינויים',
+  'This page may change as the app grows. Continued use after a change means you accept the new version.': 'דף זה עשוי להשתנות ככל שהאפליקציה גדלה. המשך שימוש אחרי שינוי פירושו הסכמה לגרסה החדשה.',
+
+  // Install page
+  'You are running the installed app. Nothing more to do.': 'אתה משתמש באפליקציה המותקנת. אין מה לעשות עוד.',
+  'RunTheTown installs straight from the browser, with no app store: it gets its own icon on your home screen, opens full screen, keeps the map pieces you downloaded, and voice guidance and GPS work as in any app.': 'RunTheTown מותקנת ישירות מהדפדפן, בלי חנות אפליקציות: היא מקבלת סמל משלה במסך הבית, נפתחת במסך מלא, שומרת את חלקי המפה שהורדת, וההנחיה הקולית וה-GPS עובדים כמו בכל אפליקציה.',
+  'iPhone and iPad (Safari)': 'iPhone ו-iPad (Safari)',
+  'Open this page in': 'פתח דף זה ב-',
+  '(other browsers on iPhone cannot install apps).': '(דפדפנים אחרים ב-iPhone לא יכולים להתקין אפליקציות).',
+  'Tap the': 'הקש על',
+  'Share': 'שיתוף',
+  'button': 'כפתור',
+  'at the bottom of the screen.': 'בתחתית המסך.',
+  'Scroll down and tap': 'גלול למטה והקש',
+  'Add to Home Screen': 'הוסף למסך הבית',
+  ', then': ', ואז',
+  '), then': '), ואז',
+  'Map': 'מפה',
+  'Add': 'הוסף',
+  'Keep the screen on while you run: an installed web app on iPhone stops receiving GPS when the phone is locked. The app asks the phone to keep the screen awake during a run.': 'השאר את המסך דולק בזמן הריצה: אפליקציית אינטרנט מותקנת ב-iPhone מפסיקה לקבל GPS כשהטלפון נעול. האפליקציה מבקשת מהטלפון להשאיר את המסך ער בזמן ריצה.',
+  'Android (Chrome)': 'Android (Chrome)',
+  'Install RunTheTown': 'התקן את RunTheTown',
+  'menu at the top right of Chrome.': 'בתפריט בפינה הימנית העליונה של Chrome.',
+  'Tap': 'הקש',
+  'Add to Home screen': 'הוסף למסך הבית',
+  '(or': '(או',
+  'Install app': 'התקן אפליקציה',
+  'Install': 'התקן',
+  'On a computer': 'במחשב',
+  'Chrome and Edge show an install icon at the right end of the address bar; the app then opens in its own window.': 'Chrome ו-Edge מציגים סמל התקנה בקצה שורת הכתובת; האפליקציה נפתחת אז בחלון משלה.',
+
+  // Profile and journal
+  'Your profile': 'הפרופיל שלך',
+  'Welcome to RunTheTown': 'ברוכים הבאים ל-RunTheTown',
+  'Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.': 'ספר ל-RunTheTown מי אתה. הכול נשאר בטלפון הזה: הריצות שלך נרשמות ביומן שלך, שום דבר לא נשלח לשום מקום.',
+  'Photo': 'תמונה',
+  'Tap to pick one from your photos (optional)': 'הקש כדי לבחור מהתמונות שלך (לא חובה)',
+  'Name': 'שם',
+  'Your name': 'השם שלך',
+  'Your photo': 'התמונה שלך',
+  'Pick a photo': 'בחר תמונה',
+  'Save': 'שמור',
+  'Start running': 'צא לרוץ',
+  'Skip for now': 'דלג בינתיים',
+  'Please type your name.': 'אנא הקלד את שמך.',
+  'Welcome, {a}. Your runs will be saved to your journal.': 'ברוך הבא, {a}. הריצות שלך יישמרו ביומן.',
+  'runs': 'ריצות',
+  'time': 'זמן',
+  'No runs yet': 'עדיין אין ריצות',
+  '{n} run · {d}': '{n} ריצה · {d}',
+  '{n} runs · {d}': '{n} ריצות · {d}',
+  'Export': 'ייצוא',
+  'No runs yet. Every run you finish (or stop after 500 m) is saved here with its route.': 'עדיין אין ריצות. כל ריצה שתסיים (או תעצור אחרי 500 מ׳) נשמרת כאן עם המסלול שלה.',
+  'Run': 'ריצה',
+  'Tap to explore the route': 'הקש כדי לחקור את המסלול',
+  'See the route on the map': 'הצג את המסלול על המפה',
+  'Run this route again': 'רוץ את המסלול הזה שוב',
+  'Export GPX': 'ייצוא GPX',
+  'Delete this run': 'מחק ריצה זו',
+  'Tap again to delete': 'הקש שוב כדי למחוק',
+  'Route': 'מסלול',
+  'stopped early': 'הופסקה מוקדם',
+  'From {a}': 'יציאה: {a}',
+  'One way to {a}': 'כיוון אחד, יעד: {a}',
+  'the finish': 'הסיום',
+  'Planned {d}, completed': 'תוכנן {d}, הושלם',
+  'Planned {d}, stopped early': 'תוכנן {d}, הופסק מוקדם',
+  '{n}% of the run on the planned line; the picture shows where you actually went': '{n}% מהריצה על הקו המתוכנן; התמונה מראה לאן רצת בפועל',
+  'Laps at {a}': 'הקפות: {a}',
+  'Loop in {a}': 'סיבוב: {a}',
+  'Rerouted or turned around on the way': 'ניתוב מחדש או סיבוב פרסה בדרך',
+  'Country run (unpaved lanes and tracks)': 'ריצה כפרית (דרכי עפר ושבילים לא סלולים)',
+  'This run has no start point saved.': 'לריצה הזו אין נקודת התחלה שמורה.',
+  'Saved start': 'התחלה שמורה',
+  'Saved finish': 'סיום שמור',
+  'Pick {a} in the list to plan the laps again.': 'בחר את {a} ברשימה כדי לתכנן את ההקפות שוב.',
+  'Could not export the journal.': 'לא ניתן לייצא את היומן.',
+  'Could not export this run.': 'לא ניתן לייצא את הריצה.',
+  'Could not share this run.': 'לא ניתן לשתף את הריצה.',
+  '· orange: where you ran': '· כתום: היכן שרצת',
+  '· grey: the planned route (no GPS track)': '· אפור: המסלול המתוכנן (ללא מסלול GPS)',
+  '{a}: {b} in {c} with RunTheTown': '{a}: {b} ב-{c} עם RunTheTown',
+  'No photo came through. Please try again.': 'לא התקבלה תמונה. נסה שוב.',
+  'Opening {a} ({n} KB)…': 'פותח {a} ({n} KB)…',
+  'Could not open that photo ({a}). Try a JPEG from your camera roll.': 'לא ניתן לפתוח את התמונה ({a}). נסה JPEG מגלריית המצלמה.',
+  'View photo': 'הצג תמונה',
+  'Choose another photo': 'בחר תמונה אחרת',
+  'Remove photo': 'הסר תמונה',
+  'Tap to close': 'הקש כדי לסגור',
+  'Drag to move, slide to zoom. Only the circle is kept.': 'גרור כדי להזיז, החלק כדי להגדיל. רק העיגול נשמר.',
+  'Use this photo': 'השתמש בתמונה זו',
+  'Cancel': 'ביטול',
+  'Zoom': 'הגדלה',
+
+  // Settings
+  'Voice': 'קול',
+  'Who reads your directions. Tap Play to hear a sample.': 'מי מקריא לך את ההנחיות. הקש על נגן כדי לשמוע דוגמה.',
+  'More voices on this phone': 'עוד קולות בטלפון הזה',
+  'Fewer voices': 'פחות קולות',
+  'What this phone reports': 'מה הטלפון מדווח',
+  'Female': 'אישה',
+  'Male': 'גבר',
+  'not offered by this browser': 'לא מוצע בדפדפן זה',
+  'standard': 'רגיל', 'enhanced': 'משופר', 'premium': 'פרימיום',
+  '{a} English': 'אנגלית {a}',
+  'American': 'אמריקאית', 'British': 'בריטית', 'Australian': 'אוסטרלית', 'Irish': 'אירית', 'South African': 'דרום-אפריקאית', 'Indian': 'הודית', 'Canadian': 'קנדית', 'New Zealand': 'ניו-זילנדית',
+  'Play {a}': 'נגן {a}',
+  '{a} are not on this device. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → {b}.': '{a} אינם במכשיר הזה. ב-iPhone: הגדרות ← נגישות ← תוכן מוקרא ← קולות ← אנגלית ← {b}.',
+  '{a} is not on this device. On iPhone: Settings → Accessibility → Spoken Content → Voices → English → {b}.': '{a} אינו במכשיר הזה. ב-iPhone: הגדרות ← נגישות ← תוכן מוקרא ← קולות ← אנגלית ← {b}.',
+  "{a} are not available here: on iPhone, Safari and home-screen apps only get the built-in voices, not the ones you download (Apple's rule). They will read your directions in the App Store version. Until then pick one of the voices below.": '{a} אינם זמינים כאן: ב-iPhone, Safari ואפליקציות ממסך הבית מקבלים רק את הקולות המובנים, לא את אלה שהורדת (כלל של Apple). הם יקריאו את ההנחיות בגרסת ה-App Store. עד אז בחר אחד מהקולות שלמטה.',
+  "{a} is not available here: on iPhone, Safari and home-screen apps only get the built-in voices, not the ones you download (Apple's rule). They will read your directions in the App Store version. Until then pick one of the voices below.": '{a} אינו זמין כאן: ב-iPhone, Safari ואפליקציות ממסך הבית מקבלים רק את הקולות המובנים, לא את אלה שהורדת (כלל של Apple). הוא יקריא את ההנחיות בגרסת ה-App Store. עד אז בחר אחד מהקולות שלמטה.',
+  'Directions are read in Hebrew by {a}. The voice chosen above reads names that are written in English.': 'ההנחיות מוקראות בעברית על ידי {a}. הקול שנבחר למעלה מקריא שמות שכתובים באנגלית.',
+  'Voice: {a}': 'קול: {a}',
+  'default': 'ברירת מחדל',
+  'Units': 'יחידות',
+  'Kilometers': 'קילומטרים',
+  'Miles': 'מיילים',
+  'Announcements': 'הכרזות',
+  'Splits': 'מקטעים',
+  'Every kilometer or mile: time, pace, distance to go': 'כל קילומטר או מייל: זמן, קצב, מרחק שנותר',
+  'Landmarks': 'ציוני דרך',
+  'Sights called out as you pass them on a tour, with a line or two about each from Wikipedia': 'אתרים מוכרזים כשעוברים לידם בסיור, עם שורה או שתיים על כל אחד מוויקיפדיה',
+  'Quiet mode': 'מצב שקט',
+  'Only turns and off-route warnings': 'רק פניות ואזהרות סטייה מהמסלול',
+  'Warn before a turn': 'התראה לפני פנייה',
+  'How far ahead the next turn is announced': 'כמה מראש מוכרזת הפנייה הבאה',
+  'Language': 'שפה',
+  'English': 'English',
+  'No Hebrew voice was found on this device, so directions are spoken in English. On iPhone: Settings → Accessibility → Spoken Content → Voices → Hebrew.': 'לא נמצא קול עברי במכשיר, ולכן ההנחיות נאמרות באנגלית. ב-iPhone: הגדרות ← נגישות ← תוכן מוקרא ← קולות ← עברית.',
+  'Map during the run': 'המפה בזמן הריצה',
+  'Follow me': 'עקוב אחריי',
+  'The map moves with you; drag it to look around, tap Re-center to come back': 'המפה זזה איתך; גרור כדי להסתכל סביב, הקש על מרכז כדי לחזור',
+  'Map turns with you': 'המפה מסתובבת איתך',
+  'The way ahead is always up, like a car navigator. Off: north stays up': 'הדרך קדימה תמיד למעלה, כמו בניווט ברכב. כבוי: הצפון נשאר למעלה',
+  'Dark map at night': 'מפה כהה בלילה',
+  'Between 7 pm and 6 am the map goes dark, easier on the eyes': 'בין 19:00 ל-6:00 המפה מחשיכה, נוח יותר לעיניים',
+  'Keep the screen on': 'השאר את המסך דולק',
+  'Directions stop if the phone locks': 'ההנחיות נפסקות אם הטלפון ננעל',
+  'Save runs to Apple Health': 'שמור ריצות ב-Apple Health',
+  'Every run you keep becomes a workout in Health: distance, time and the route': 'כל ריצה שתשמור הופכת לאימון ב-Health: מרחק, זמן והמסלול',
+  'Run on the Lock Screen': 'הריצה במסך הנעילה',
+  'The next turn, your distance and pace on the locked screen (iOS 16.1 and later)': 'הפנייה הבאה, המרחק והקצב שלך על המסך הנעול (iOS 16.1 ומעלה)',
+  'Apple Watch': 'Apple Watch',
+  'The run shows on your watch, and each turn taps your wrist': 'הריצה מוצגת בשעון, וכל פנייה מורגשת בנקישה על פרק היד',
+  'About': 'אודות',
+  'Check for update': 'בדוק עדכון',
+  'Checking for a new version…': 'בודק אם יש גרסה חדשה…',
+  'Version {a} is out. It loads the next time you open the app (or reload now).': 'גרסה {a} יצאה. היא תיטען בפתיחה הבאה של האפליקציה (או רענן עכשיו).',
+  'You have the latest version ({a}).': 'יש לך את הגרסה האחרונה ({a}).',
+  'Could not check right now.': 'לא ניתן לבדוק כרגע.',
+
+  // Planner
+  'Start point': 'נקודת התחלה',
+  'Tap the map or search to set your start point': 'הקש על המפה או חפש כדי לקבוע את נקודת ההתחלה',
+  'Search hotel, address or place': 'חפש מלון, כתובת או מקום',
+  'Search for a start point': 'חפש נקודת התחלה',
+  'Clear search': 'נקה חיפוש',
+  'Use my location': 'השתמש במיקום שלי',
+  'Change the start point': 'שנה את נקודת ההתחלה',
+  'Put north up': 'צפון למעלה',
+  'Use GPS': 'השתמש ב-GPS',
+  'Dropped pin': 'סיכה שהונחה',
+  'Starting from': 'נקודת התחלה:',
+  'Finishing at': 'נקודת סיום:',
+  'Unnamed place': 'מקום ללא שם',
+  'No matching places': 'אין מקומות מתאימים',
+  'Suggestions unavailable. Press Enter to search.': 'אין הצעות כרגע. לחץ Enter כדי לחפש.',
+  'Search by Photon · © OpenStreetMap': 'חיפוש על ידי Photon · © OpenStreetMap',
+  'No places found for that search.': 'לא נמצאו מקומות לחיפוש הזה.',
+  'Search is unavailable right now. Tap the map instead.': 'החיפוש לא זמין כרגע. הקש על המפה במקום.',
+  'Location is not available in this browser.': 'מיקום לא זמין בדפדפן זה.',
+  "Couldn't get your location. Search for a place or tap the map instead.": 'לא ניתן לקבל את מיקומך. חפש מקום או הקש על המפה במקום.',
+  'How do you want to run?': 'איך תרצה לרוץ?',
+  'Run the streets': 'ריצה ברחובות',
+  'Loops from here on promenades, parks and quiet streets': 'סיבובים מכאן על טיילות, פארקים ורחובות שקטים',
+  'Run in laps': 'ריצה בהקפות',
+  'A track, stadium or park loop nearby, with the way there and back': 'מסלול ריצה, אצטדיון או סיבוב בפארק קרוב, עם הדרך לשם וחזרה',
+  'Run one way': 'ריצה בכיוון אחד',
+  'From here to a place you choose: a landmark, the beach, your hotel': 'מכאן למקום שתבחר: ציון דרך, הים, המלון שלך',
+  'Where to?': 'לאן?',
+  'the distance is only a wish': 'המרחק הוא רק משאלה',
+  'Search a place, or tap the map': 'חפש מקום, או הקש על המפה',
+  'Search for the finish': 'חפש את הסיום',
+  'Clear the finish': 'נקה את הסיום',
+  'Tap the map to drop the finish pin, or search above': 'הקש על המפה כדי להניח את סיכת הסיום, או חפש למעלה',
+  'Looking for running tracks and parks nearby…': 'מחפש מסלולי ריצה ופארקים בסביבה…',
+  '{n} running spot nearby · tap one to plan your laps': 'מקום ריצה אחד בסביבה · הקש עליו כדי לתכנן הקפות',
+  '{n} running spots nearby · tap one to plan your laps': '{n} מקומות ריצה בסביבה · הקש על אחד כדי לתכנן הקפות',
+  'No athletics tracks or stadiums near here': 'אין מסלולי אתלטיקה או אצטדיונים בסביבה',
+  'No athletics track, stadium or park loop was found within 8 km of this start. Try another start, or run the streets.': 'לא נמצאו מסלול אתלטיקה, אצטדיון או סיבוב בפארק במרחק 8 ק"מ מנקודת ההתחלה. נסה התחלה אחרת, או רוץ ברחובות.',
+  'Distance': 'מרחק',
+  'Time': 'זמן',
+  'Plan by distance or by time': 'תכנון לפי מרחק או לפי זמן',
+  'Distance in kilometers': 'מרחק בקילומטרים',
+  'Distance in miles': 'מרחק במיילים',
+  'Time in minutes': 'זמן בדקות',
+  'km': 'ק"מ',
+  'mi': 'מייל',
+  'min': 'דק׳',
+  'min/km': 'דק׳/ק"מ',
+  'min/mi': 'דק׳/מייל',
+  '{n} km': '{n} ק"מ',
+  '{n} m': '{n} מ׳',
+  '{n} mi': '{n} מייל',
+  '{n} ft': '{n} רגל',
+  // A range of numbers is kept left to right inside the Hebrew line (\u2066…\u2069 isolates it).
+  '{a}–{b} km': '\u2066{a}–{b}\u2069 ק"מ',
+  '{a}–{b} mi': '\u2066{a}–{b}\u2069 מייל',
+  '{a}–{b} min': '\u2066{a}–{b}\u2069 דק׳',
+  '{a}–{b} min/km': '\u2066{a}–{b}\u2069 דק׳/ק"מ',
+  '{a}–{b} min/mi': '\u2066{a}–{b}\u2069 דק׳/מייל',
+  '{a} min/km': '{a} דק׳/ק"מ',
+  '{a} min/mi': '{a} דק׳/מייל',
+  'Type how many kilometers you want to run': 'הקלד כמה קילומטרים אתה רוצה לרוץ',
+  'Type how many miles you want to run': 'הקלד כמה מיילים אתה רוצה לרוץ',
+  'Enter a distance between {a} and {b} {c}': 'הזן מרחק בין {a} ל-{b} {c}',
+  'Long run: the first map download for this area takes a few seconds longer.': 'ריצה ארוכה: הורדת המפה הראשונה לאזור הזה לוקחת כמה שניות יותר.',
+  'Type how many minutes you want to run': 'הקלד כמה דקות אתה רוצה לרוץ',
+  'Enter a time between {a} and {b} minutes': 'הזן זמן בין {a} ל-{b} דקות',
+  'Pick the pace you want to run at': 'בחר את הקצב שבו תרצה לרוץ',
+  'About {d} at {p} {u}': 'בערך {d} בקצב {p} {u}',
+  'About {d} at {p} {u}. Long run: the first map download takes a few seconds longer': 'בערך {d} בקצב {p} {u}. ריצה ארוכה: הורדת המפה הראשונה לוקחת כמה שניות יותר',
+  'About {a}–{b} at that pace; routes are planned for {d}': 'בערך \u2066{a}–{b}\u2069 בקצב הזה; המסלולים מתוכננים ל-{d}',
+  'About {a}–{b} at that pace; routes are planned for {d}. Long run: the first map download takes a few seconds longer': 'בערך \u2066{a}–{b}\u2069 בקצב הזה; המסלולים מתוכננים ל-{d}. ריצה ארוכה: הורדת המפה הראשונה לוקחת כמה שניות יותר',
+  'Pace': 'קצב',
+  'Easy': 'קל',
+  'Steady': 'יציב',
+  'Brisk': 'נמרץ',
+  'Fast': 'מהיר',
+  'My usual pace': 'הקצב הרגיל שלי',
+  'Landscape': 'נוף',
+  'Mode': 'מצב',
+  'pick any': 'בחר כרצונך',
+  'landmarks on the way': 'ציוני דרך בדרך',
+  'Parks & green': 'פארקים וירוק',
+  'Waterfront': 'חוף ומים',
+  'Quiet streets': 'רחובות שקטים',
+  'Sightseeing': 'סיור',
+  'Routes pass the city’s monumental landmarks, named on the map and announced on the run.': 'המסלולים עוברים ליד ציוני הדרך של העיר, מסומנים במפה ומוכרזים בריצה.',
+  'Terrain': 'שטח',
+  'Flat': 'שטוח',
+  'Any': 'כל',
+  'Hilly': 'הררי',
+  'Find my routes': 'מצא לי מסלולים',
+  'Find my sightseeing routes': 'מצא לי מסלולי סיור',
+  'Getting ready…': 'מתכונן…',
+  'Designing routes…': 'מתכנן מסלולים…',
+  'Designing routes… {n}%': 'מתכנן מסלולים… {n}%',
+  'Designing the way there…': 'מתכנן את הדרך לשם…',
+  'Looking for running tracks and parks…': 'מחפש מסלולי ריצה ופארקים…',
+  'Map tiles unavailable, trying backup map servers…': 'אריחי המפה אינם זמינים, מנסה שרתי מפה חלופיים…',
+  'Reading the landscape…': 'קורא את הנוף…',
+  'Downloading map… {n} of {m} pieces': 'מוריד מפה… {n} מתוך {m} חלקים',
+  'Downloading map (backup)… {n} of {m} pieces': 'מוריד מפה (גיבוי)… {n} מתוך {m} חלקים',
+  "Couldn't build a route here. Try a shorter distance or another start point.": 'לא הצלחנו לבנות כאן מסלול. נסה מרחק קצר יותר או נקודת התחלה אחרת.',
+  "Couldn't find a way from the start to the finish on the map. Try another finish.": 'לא נמצאה במפה דרך מההתחלה לסיום. נסה נקודת סיום אחרת.',
+  'No runnable paths found near the start point. Try moving the pin onto a street.': 'לא נמצאו שבילים לריצה ליד נקודת ההתחלה. נסה להזיז את הסיכה אל רחוב.',
+  'No runnable way reaches the finish from this start. Try moving the finish pin onto a street.': 'אין דרך לריצה שמגיעה לסיום מנקודת ההתחלה הזו. נסה להזיז את סיכת הסיום אל רחוב.',
+  'The map servers are overloaded ({n} of {m} map pieces loaded). Press "Find my routes" again: pieces that loaded are saved, so the next try is faster.': 'שרתי המפה עמוסים ({n} מתוך {m} חלקי מפה נטענו). לחץ שוב על "מצא לי מסלולים": החלקים שנטענו נשמרו, כך שהניסיון הבא יהיה מהיר יותר.',
+  'No streets or paths found around here.': 'לא נמצאו כאן רחובות או שבילים.',
+  'The finish is right at the start. Pick a place further away.': 'הסיום נמצא ממש בנקודת ההתחלה. בחר מקום רחוק יותר.',
+  'The finish is {n} km away, further than the longest run ({m} km). Pick a nearer one.': 'הסיום נמצא במרחק {n} ק"מ, רחוק יותר מהריצה הארוכה ביותר ({m} ק"מ). בחר סיום קרוב יותר.',
+  'Working…': 'עובד…',
+  'Pick where the run should end: search a place or tap the map.': 'בחר היכן הריצה תסתיים: חפש מקום או הקש על המפה.',
+  'A few edge pieces of the map didn’t load, so routes stay within the part that did.': 'כמה חלקי מפה בשוליים לא נטענו, ולכן המסלולים נשארים בחלק שנטען.',
+  'Country run: there is no paved network here, so unpaved lanes and tracks are included. Watch your footing.': 'ריצה כפרית: אין כאן רשת סלולה, ולכן נכללו דרכי עפר ושבילים. שים לב לדריכה.',
+  'Something went wrong. Please try again.': 'משהו השתבש. נסה שוב.',
+  'Still working on the last search — one moment.': 'עדיין עובד על החיפוש הקודם — רגע.',
+  'Loading the map to the track…': 'טוען את המפה עד למסלול…',
+  'The map could not be loaded. Please try again.': 'לא ניתן לטעון את המפה. נסה שוב.',
+  'The map around this spot isn’t loaded yet. Set your start closer to it and try again.': 'המפה סביב המקום הזה עדיין לא נטענה. קבע התחלה קרובה יותר ונסה שוב.',
+
+  // Results
+  'Your routes': 'המסלולים שלך',
+  'One way': 'כיוון אחד',
+  'parks': 'פארקים',
+  'waterfront': 'חוף ומים',
+  'quiet': 'שקט',
+  'sightseeing': 'סיור',
+  'flat': 'שטוח',
+  'hilly': 'הררי',
+  '{a} · from {b}': '{a} · יציאה: {b}',
+  '{a} · from {b} to {c}': '{a} · יציאה: {b} · יעד: {c}',
+  'Tap a route to see it on the map, tap it again to start.': 'הקש על מסלול כדי לראות אותו במפה, הקש שוב כדי להתחיל.',
+  'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. Tap a route to see it on the map, tap it again to start.': 'מוצגות רק ריצות הנוף: שבילי פארק, טיילות ורציפים לרוב הדרך. הקש על מסלול כדי לראות אותו במפה, הקש שוב כדי להתחיל.',
+  'Out & back': 'הלוך ושוב',
+  'Laps': 'הקפות',
+  'Start run with voice guidance': 'התחל ריצה עם הנחיה קולית',
+  'Back to the routes': 'חזרה למסלולים',
+  'Report a problem': 'דווח על בעיה',
+  'Demo run (no GPS)': 'ריצת הדגמה (ללא GPS)',
+  'Back to preferences': 'חזרה להעדפות',
+  'Finish': 'סיום',
+  'Turn around': 'סיבוב פרסה',
+  'Elevation profile, {a}–{b} m': 'פרופיל גבהים, \u2066{a}–{b}\u2069 מ׳',
+  '{a} into the run': '{a} אל תוך הריצה',
+
+  // Route names (planner) and their card lines
+  'City loop': 'סיבוב עירוני',
+  'Seaside loop': 'סיבוב לחוף הים',
+  'Waterfront loop': 'סיבוב לאורך המים',
+  'Park loop': 'סיבוב בפארק',
+  'Promenade loop': 'סיבוב בטיילת',
+  'Quiet streets loop': 'סיבוב ברחובות שקטים',
+  'Country loop': 'סיבוב כפרי',
+  'Sightseeing loop': 'סיבוב סיור',
+  'Sightseeing out & back': 'הלוך ושוב עם סיור',
+  'Out & back along the sea': 'הלוך ושוב לאורך הים',
+  'Out & back along the water': 'הלוך ושוב לאורך המים',
+  'Out & back through the green': 'הלוך ושוב דרך הירוק',
+  'Hilly city loop': 'סיבוב עירוני הררי',
+  'Hilly seaside loop': 'סיבוב הררי לחוף הים',
+  'Hilly waterfront loop': 'סיבוב הררי לאורך המים',
+  'Hilly park loop': 'סיבוב הררי בפארק',
+  'Hilly promenade loop': 'סיבוב הררי בטיילת',
+  'Hilly quiet streets loop': 'סיבוב הררי ברחובות שקטים',
+  'Hilly country loop': 'סיבוב כפרי הררי',
+  'Best way to {a}': 'הדרך הטובה ביותר אל {a}',
+  'Shortest safe way to {a}': 'הדרך הבטוחה הקצרה ביותר אל {a}',
+  'Scenic way to {a}': 'הדרך הנופית אל {a}',
+  'Best way': 'הדרך הטובה ביותר',
+  'Shortest safe way': 'הדרך הבטוחה הקצרה ביותר',
+  'Scenic way': 'הדרך הנופית',
+  'north': 'צפון', 'south': 'דרום', 'east': 'מזרח', 'west': 'מערב',
+  'northeast': 'צפון-מזרח', 'northwest': 'צפון-מערב', 'southeast': 'דרום-מזרח', 'southwest': 'דרום-מערב',
+  'north-northeast': 'צפון-צפון-מזרח', 'east-northeast': 'מזרח-צפון-מזרח', 'east-southeast': 'מזרח-דרום-מזרח', 'south-southeast': 'דרום-דרום-מזרח',
+  'south-southwest': 'דרום-דרום-מערב', 'west-southwest': 'מערב-דרום-מערב', 'west-northwest': 'מערב-צפון-מערב', 'north-northwest': 'צפון-צפון-מערב',
+  '{a} to the north': '{a} לכיוון צפון',
+  '{a} to the south': '{a} לכיוון דרום',
+  '{a} to the east': '{a} לכיוון מזרח',
+  '{a} to the west': '{a} לכיוון מערב',
+  '{a} to the northeast': '{a} לכיוון צפון-מזרח',
+  '{a} to the northwest': '{a} לכיוון צפון-מערב',
+  '{a} to the southeast': '{a} לכיוון דרום-מזרח',
+  '{a} to the southwest': '{a} לכיוון דרום-מערב',
+  '{a} to the north-northeast': '{a} לכיוון צפון-צפון-מזרח',
+  '{a} to the east-northeast': '{a} לכיוון מזרח-צפון-מזרח',
+  '{a} to the east-southeast': '{a} לכיוון מזרח-דרום-מזרח',
+  '{a} to the south-southeast': '{a} לכיוון דרום-דרום-מזרח',
+  '{a} to the south-southwest': '{a} לכיוון דרום-דרום-מערב',
+  '{a} to the west-southwest': '{a} לכיוון מערב-דרום-מערב',
+  '{a} to the west-northwest': '{a} לכיוון מערב-צפון-מערב',
+  '{a} to the north-northwest': '{a} לכיוון צפון-צפון-מערב',
+  '{a} loops': 'סיבובים: {a}',
+  '{a} loop': 'סיבוב: {a}',
+  'Same way there and back': 'אותה דרך לשם וחזרה',
+  'One way: finishes at {a}, not back at the start': 'כיוון אחד: הסיום ביעד ({a}), לא בנקודת ההתחלה',
+  'your destination': 'היעד שלך',
+  'Takes the long way round for your distance: the direct way is {d}': 'הולך בדרך הארוכה בשביל המרחק שביקשת: הדרך הישירה היא {d}',
+  '{a} climb · {b} descent': '{a} עלייה · {b} ירידה',
+  'No road crossings': 'ללא חציות כביש',
+  '{n} road crossing': 'חציית כביש אחת',
+  '{n} road crossings': '{n} חציות כביש',
+  '{n} traffic light': 'רמזור אחד',
+  '{n} traffic lights': '{n} רמזורים',
+  '{a} · {b}': '{a} · {b}',
+  'no traffic lights': 'ללא רמזורים',
+  'no road crossings': 'ללא חציות כביש',
+  '{n}% on {a}, {m}% on {b}': '{n}% על {a}, {m}% על {b}',
+  '{n}% on {a}, the rest on {b}': '{n}% על {a}, השאר על {b}',
+  'All of it on {a}': 'כולו על {a}',
+  'park paths': 'שבילי פארק',
+  'waterfront paths': 'שבילי חוף',
+  'the seafront promenade': 'טיילת החוף',
+  'car-free paths': 'שבילים ללא מכוניות',
+  'quiet streets': 'רחובות שקטים',
+  'streets': 'רחובות',
+  'City streets': 'רחובות העיר',
+  'Mostly quiet streets': 'בעיקר רחובות שקטים',
+  'City streets near the green': 'רחובות העיר ליד הירוק',
+  'City streets near the water': 'רחובות העיר ליד המים',
+  'Mostly quiet streets near the green': 'בעיקר רחובות שקטים ליד הירוק',
+  'Mostly quiet streets near the water': 'בעיקר רחובות שקטים ליד המים',
+  '{n}% on unpaved lanes and tracks': '{n}% על דרכי עפר ושבילים',
+  '{d} on unpaved lanes and tracks': '{d} על דרכי עפר ושבילים',
+  '{d} on a road with no sidewalk': '{d} על כביש ללא מדרכה',
+  'Passes {n} sight: {a}': 'עובר ליד אתר אחד: {a}',
+  'Passes {n} sights: {a}': 'עובר ליד {n} אתרים: {a}',
+  ' +{n} more': ' +{n} נוספים',
+  'Longer than asked: the way there alone is {d}': 'ארוך מהמבוקש: הדרך לשם לבדה היא {d}',
+  'No street found near your start: starts at the track': 'לא נמצא רחוב ליד נקודת ההתחלה: מתחיל במסלול הריצה',
+  'No way in found on the map: starts at {a}': 'לא נמצאה כניסה במפה: נקודת הפתיחה היא {a}',
+  'Starts at {a}': 'נקודת פתיחה: {a}',
+  'Car-free and flat': 'ללא מכוניות ושטוח',
+  'Passes {n} sight': 'עובר ליד אתר אחד',
+  'Passes {n} sights': 'עובר ליד {n} אתרים',
+  'Laps done. Head back the same way': 'ההקפות הסתיימו. חזור באותה הדרך',
+  'Head back the same way': 'חזור באותה הדרך',
+  'In {d}, laps done. Head back the same way': 'בעוד {d}, ההקפות מסתיימות. חזור באותה הדרך',
+  'In {d}, head back the same way': 'בעוד {d}, חזור באותה הדרך',
+  '{n} laps of the {a} track': '{n} הקפות של מסלול {a}',
+  '{n} lap of the {a} track': 'הקפה אחת של מסלול {a}',
+  '{n} loops of {a} inside the park': '{n} סיבובים של {a} בתוך הפארק',
+  '{n} loop of {a} inside the park': 'סיבוב אחד של {a} בתוך הפארק',
+  '{d} to get there and back the same way': '{d} להגיע לשם ובחזרה באותה הדרך',
+  '{d} to get there and back': '{d} להגיע לשם ובחזרה',
+  'Laps plus the way there and back from your start': 'הקפות ועוד הדרך לשם ובחזרה מנקודת ההתחלה',
+  '{a} · {b} · {d} in total': '{a} · {b} · {d} בסך הכול',
+  'One lap is {d}': 'הקפה אחת היא {d}',
+  'One loop is {d}': 'סיבוב אחד הוא {d}',
+  'How many kilometers do you want to run?': 'כמה קילומטרים תרצה לרוץ?',
+  'How many miles do you want to run?': 'כמה מיילים תרצה לרוץ?',
+  'Plan laps': 'תכנן הקפות',
+  'Loops in {a}': 'סיבובים: {a}',
+  'Run loops here': 'רוץ סיבובים כאן',
+  'Run laps here': 'רוץ הקפות כאן',
+  'No running track outline on the map for this stadium': 'אין קו מתאר של מסלול ריצה במפה לאצטדיון הזה',
+  '{a} athletics track': 'מסלול אתלטיקה של {a}',
+  '{a} stadium': 'אצטדיון {a}',
+  'stadium': 'אצטדיון',
+  'park loop of {a}': 'סיבוב בפארק של {a}',
+  '{a} · {b} away': '{a} · במרחק {b}',
+  '{a} · {b} from your start': '{a} · {b} מנקודת ההתחלה',
+  'Looking up its website…': 'מחפש את האתר שלו…',
+  'Website · {a}': 'אתר · {a}',
+  'Wikipedia': 'ויקיפדיה',
+  'Search the web': 'חפש ברשת',
+  'Google Maps': 'מפות Google',
+  'Hours: {a}': 'שעות: {a}',
+  'Free entry': 'כניסה חופשית',
+  'Entry fee': 'כניסה בתשלום',
+  'Members only': 'לחברים בלבד',
+
+  // Run screen
+  'Starting…': 'מתחילים…',
+  'To the route': 'אל המסלול',
+  'Your run starts where you meet the line': 'הריצה מתחילה כשתפגוש את הקו',
+  'Off route': 'מחוץ למסלול',
+  'Head back to the colored line': 'חזור אל הקו הצבעוני',
+  'Route complete': 'המסלול הושלם',
+  'Keep going if you like. End run when you’re done.': 'המשך אם תרצה. סיים ריצה כשתסיים.',
+  'Keep going, or end the run': 'המשך, או סיים את הריצה',
+  'Run ended': 'הריצה הסתיימה',
+  '{d} away': 'במרחק {d}',
+  'Re-center': 'מרכז',
+  'km run': 'ק"מ שרצת',
+  'mi run': 'מייל שרצת',
+  'km to go': 'ק"מ נותרו',
+  'mi to go': 'מייל נותרו',
+  'Mute': 'השתק',
+  'Unmute': 'בטל השתקה',
+  'Pause': 'השהה',
+  'Resume': 'המשך',
+  'End run': 'סיים ריצה',
+  'Tap again to end': 'הקש שוב לסיום',
+  'Take me back to the start': 'קח אותי חזרה להתחלה',
+  'Tap again to head back now': 'הקש שוב כדי לחזור עכשיו',
+  'Something wrong here? Report it': 'משהו לא בסדר כאן? דווח',
+  'Tap to change the demo speed': 'הקש כדי לשנות את מהירות ההדגמה',
+  'Waiting for your position…': 'ממתין למיקום שלך…',
+  'No way back was found from here. Keep following the route, or end the run.': 'לא נמצאה דרך חזרה מכאן. המשך לעקוב אחרי המסלול, או סיים את הריצה.',
+  'The route now leads back to the start by the shortest safe way.': 'המסלול מוביל עכשיו חזרה להתחלה בדרך הבטוחה הקצרה ביותר.',
+  'New route from here. The way back now follows the way you ran out.': 'מסלול חדש מכאן. הדרך חזרה עוקבת עכשיו אחרי הדרך שרצת החוצה.',
+  'New route from here: it joins your run a little further on.': 'מסלול חדש מכאן: הוא מתחבר לריצה שלך קצת יותר הלאה.',
+  'Turned around: the route now leads back to the start the way you came.': 'סיבוב פרסה: המסלול מוביל עכשיו חזרה להתחלה בדרך שבה באת.',
+  'Directions keep coming with the screen locked or the phone in your pocket.': 'ההנחיות ממשיכות גם כשהמסך נעול או שהטלפון בכיס.',
+  'Screen stays on during the run. Keep this page open; directions stop if you lock the phone or switch apps.': 'המסך נשאר דולק בזמן הריצה. השאר את הדף פתוח; ההנחיות נפסקות אם תנעל את הטלפון או תחליף אפליקציה.',
+  'Keep the screen on and this page open, or directions stop. Turn off auto-lock for the run if you can.': 'השאר את המסך דולק ואת הדף פתוח, אחרת ההנחיות נפסקות. כבה נעילה אוטומטית לזמן הריצה אם אפשר.',
+  'This browser can’t speak, so directions are shown on screen only.': 'הדפדפן הזה לא יכול לדבר, ולכן ההנחיות מוצגות על המסך בלבד.',
+  'Location access is needed for live directions. Allow it in your browser settings, or try the demo run.': 'נדרשת גישה למיקום בשביל הנחיות חיות. אפשר אותה בהגדרות הדפדפן, או נסה את ריצת ההדגמה.',
+  'Waiting for GPS… Go outside with a clear view of the sky.': 'ממתין ל-GPS… צא החוצה למקום עם שמיים פתוחים.',
+  'Run complete': 'הריצה הושלמה',
+  'Keep this run in your journal?': 'לשמור את הריצה ביומן?',
+  'Demo runs are not kept.': 'ריצות הדגמה לא נשמרות.',
+  'Save run': 'שמור ריצה',
+  'Delete run': 'מחק ריצה',
+  'Done': 'סיום',
+  'Share this run': 'שתף את הריצה',
+  'Saved to My runs.': 'נשמר בריצות שלי.',
+  'The run could not be saved.': 'לא ניתן לשמור את הריצה.',
+  'Run saved to your journal.': 'הריצה נשמרה ביומן שלך.',
+  'Run saved to your journal (no map picture this time).': 'הריצה נשמרה ביומן שלך (ללא תמונת מפה הפעם).',
+  'Could not save this run on the phone.': 'לא ניתן לשמור את הריצה בטלפון.',
+  'Saved to Apple Health too.': 'נשמר גם ב-Apple Health.',
+  'Run discarded.': 'הריצה נמחקה.',
+
+  // Report
+  'What went wrong with this route?': 'מה השתבש במסלול הזה?',
+  'What went wrong with “{a}”?': 'מה השתבש ב״{a}״?',
+  'What is wrong here? Your position is included.': 'מה לא בסדר כאן? המיקום שלך מצורף.',
+  'Closed or private': 'סגור או פרטי',
+  'Road with no sidewalk': 'כביש ללא מדרכה',
+  'Felt unsafe': 'הרגיש לא בטוח',
+  'Wrong directions': 'הנחיות שגויות',
+  'Not the scenery promised': 'לא הנוף שהובטח',
+  'Something else': 'משהו אחר',
+  'Where exactly, and what did you see? (optional)': 'איפה בדיוק, ומה ראית? (לא חובה)',
+  'Opens your e-mail app with the report filled in. The route and your position go with it, nothing else.': 'פותח את אפליקציית הדוא"ל שלך עם הדיווח מוכן. המסלול והמיקום שלך מצורפים, ותו לא.',
+  'Send report': 'שלח דיווח',
+  'Thanks. Your e-mail app opens with the report; just send it.': 'תודה. אפליקציית הדוא"ל נפתחת עם הדיווח; רק שלח אותו.',
+
+  // Spoken directions (navigation.js builds these in English; they are translated piece by piece)
+  'In {d}, turn left': 'בעוד {d}, פנה שמאלה',
+  'In {d}, turn right': 'בעוד {d}, פנה ימינה',
+  'Turn left': 'פנה שמאלה',
+  'Turn right': 'פנה ימינה',
+  'In {d}, bear left': 'בעוד {d}, פנה קלות שמאלה',
+  'In {d}, bear right': 'בעוד {d}, פנה קלות ימינה',
+  'Bear left': 'פנה קלות שמאלה',
+  'Bear right': 'פנה קלות ימינה',
+  'In {d}, make a sharp left': 'בעוד {d}, פנה בחדות שמאלה',
+  'In {d}, make a sharp right': 'בעוד {d}, פנה בחדות ימינה',
+  'Make a sharp left': 'פנה בחדות שמאלה',
+  'Make a sharp right': 'פנה בחדות ימינה',
+  'Sharp left': 'חד שמאלה',
+  'Sharp right': 'חד ימינה',
+  'In {d}, turn around': 'בעוד {d}, סובב פרסה',
+  'Turn around and head back the same way': 'סובב פרסה וחזור באותה הדרך',
+  "In {d}, you'll be back at the start": 'בעוד {d} תחזור לנקודת ההתחלה',
+  'You have arrived back at the start': 'הגעת חזרה לנקודת ההתחלה',
+  "In {d}, you'll reach your destination": 'בעוד {d} תגיע ליעד',
+  'You have arrived at your destination': 'הגעת ליעד',
+  ' onto ': ' לרחוב ',
+  ' on ': ' ברחוב ',
+  'Lap {n} of {m}.': 'הקפה {n} מתוך {m}.',
+  'Lap {n} of {m}': 'הקפה {n} מתוך {m}',
+  'In {d}, onto the track': 'בעוד {d}, אל מסלול הריצה',
+  'Onto the track': 'אל מסלול הריצה',
+  'In {d}, into {a}': 'בעוד {d}, אל {a}',
+  'Into {a}': 'אל {a}',
+  'Head north': 'המשך צפונה', 'Head south': 'המשך דרומה', 'Head east': 'המשך מזרחה', 'Head west': 'המשך מערבה',
+  'Head northeast': 'המשך צפון-מזרחה', 'Head northwest': 'המשך צפון-מערבה', 'Head southeast': 'המשך דרום-מזרחה', 'Head southwest': 'המשך דרום-מערבה',
+  'Head out': 'צא לדרך',
+  'Follow the new route': 'עקוב אחרי המסלול החדש',
+  'Starting your {a} kilometer run.': 'מתחילים ריצה של {a} קילומטר.',
+  'Starting your {a} mile run.': 'מתחילים ריצה של {a} מייל.',
+  'Run paused.': 'הריצה הושהתה.',
+  'Resuming.': 'ממשיכים.',
+  'Back on route.': 'חזרת למסלול.',
+  "Turned around? Following the route back from here. {d} to go.": 'סובבת פרסה? עוקבים אחרי המסלול חזרה מכאן. נותרו {d}.',
+  "Head to the start of the route. It's {d} ahead of you.": 'לך לתחילת המסלול. הוא {d} לפניך.',
+  "Head to the start of the route. It's {d} behind you.": 'לך לתחילת המסלול. הוא {d} מאחוריך.',
+  "Head to the start of the route. It's {d} to your right.": 'לך לתחילת המסלול. הוא {d} מימינך.',
+  "Head to the start of the route. It's {d} to your left.": 'לך לתחילת המסלול. הוא {d} משמאלך.',
+  "Head to the start of the route. It's {d} to the {a}.": 'לך לתחילת המסלול. הוא {d} לכיוון {a}.',
+  "You're off the route. It's {d} ahead of you.": 'אתה מחוץ למסלול. הוא {d} לפניך.',
+  "You're off the route. It's {d} behind you.": 'אתה מחוץ למסלול. הוא {d} מאחוריך.',
+  "You're off the route. It's {d} to your right.": 'אתה מחוץ למסלול. הוא {d} מימינך.',
+  "You're off the route. It's {d} to your left.": 'אתה מחוץ למסלול. הוא {d} משמאלך.',
+  "You're off the route. It's {d} to the {a}.": 'אתה מחוץ למסלול. הוא {d} לכיוון {a}.',
+  'On your left: ': 'משמאלך: ',
+  'On your right: ': 'מימינך: ',
+  'Just ahead: ': 'ממש לפניך: ',
+  ', a {a}.': ', {a}.',
+  'museum': 'מוזיאון', 'castle': 'טירה', 'palace': 'ארמון', 'fort': 'מבצר', 'city gate': 'שער העיר', 'monument': 'אנדרטה',
+  'historic site': 'אתר היסטורי', 'cathedral': 'קתדרלה', 'ruins': 'חורבות', 'attraction': 'אטרקציה', 'lighthouse': 'מגדלור',
+  'viewpoint': 'תצפית', 'theatre': 'תיאטרון', 'memorial': 'אנדרטת זיכרון', 'aquarium': 'אקווריום', 'zoo': 'גן חיות',
+  'clock tower': 'מגדל שעון', 'town hall': 'בית העירייה', 'artwork': 'יצירת אמנות',
+  '{n} kilometer.': '{n} קילומטר.',
+  '{n} kilometers.': '{n} קילומטרים.',
+  '{n} mile.': '{n} מייל.',
+  '{n} miles.': '{n} מייל.',
+  '{a}. Last kilometer {p}.': '{a}. הקילומטר האחרון {p}.',
+  '{a}. Last mile {p}.': '{a}. המייל האחרון {p}.',
+  '{m} minutes {s} seconds per kilometer': '{m} דקות ו-{s} שניות לקילומטר',
+  '{m} minutes per kilometer': '{m} דקות לקילומטר',
+  '{m} minutes {s} seconds per mile': '{m} דקות ו-{s} שניות למייל',
+  '{m} minutes per mile': '{m} דקות למייל',
+  "Route complete, you're back at the start. Keep going if you like; press End run when you're done.": 'המסלול הושלם, חזרת לנקודת ההתחלה. המשך אם תרצה; לחץ על סיים ריצה כשתסיים.',
+  "Route complete, you're at your destination. Keep going if you like; press End run when you're done.": 'המסלול הושלם, הגעת ליעד. המשך אם תרצה; לחץ על סיים ריצה כשתסיים.',
+  'Run finished. {a} in {n} minute.': 'הריצה הסתיימה. {a} בדקה אחת.',
+  'Run finished. {a} in {n} minutes.': 'הריצה הסתיימה. {a} ב-{n} דקות.',
+  'Run finished. {a} in {n} minute. Average pace {p}.': 'הריצה הסתיימה. {a} בדקה אחת. קצב ממוצע {p}.',
+  'Run finished. {a} in {n} minutes. Average pace {p}.': 'הריצה הסתיימה. {a} ב-{n} דקות. קצב ממוצע {p}.',
+  '{n} kilometers': '{n} קילומטר',
+  '{n} meters': '{n} מטר',
+  '{n} miles': '{n} מייל',
+  'one mile': 'מייל אחד',
+  'three quarters of a mile': 'שלושה רבעי מייל',
+  'half a mile': 'חצי מייל',
+  'a quarter mile': 'רבע מייל',
+  '{n} feet': '{n} רגל',
+  'Taking you back to the start: {d} to go.': 'לוקח אותך חזרה להתחלה: נותרו {d}.',
+  'Taking you back to the start: {d} to go. Head {a}.': 'לוקח אותך חזרה להתחלה: נותרו {d}. המשך לכיוון {a}.',
+  'Taking you back to the start: {d} to go. Head {a} on {b}.': 'לוקח אותך חזרה להתחלה: נותרו {d}. המשך לכיוון {a} ברחוב {b}.',
+  'Turned around? Heading back the way you came. {d} to the start.': 'סובבת פרסה? חוזרים בדרך שבה באת. {d} עד ההתחלה.',
+};
+
+// ---- Lookup ----
+let i18nTemplates = null; // [{ re, out, names }], built on first use
+const i18nEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function i18nCompile() {
+  i18nTemplates = [];
+  for (const [en, he] of Object.entries(HE_TEXT)) {
+    if (!/\{[a-z]+\}/.test(en)) continue;
+    const names = [];
+    const re = new RegExp('^' + i18nEsc(en).replace(/\\\{([a-z]+)\\\}/g, (_, k) => { names.push(k); return /^[nms]$/.test(k) ? '(\\d[\\d.,]*)' : '(.+?)'; }) + '$', 's');
+    i18nTemplates.push({ re, out: he, names, fixed: en.replace(/\{[a-z]+\}/g, '').length });
+  }
+  // The template with the most fixed text first: "{a} · {b} · {d} in total" before "{a} · {b}".
+  i18nTemplates.sort((p, q) => q.fixed - p.fixed);
+}
+
+/** Puts `vars` into the {name} placeholders of `text` (no translation). */
+function fillText(text, vars) {
+  return vars ? String(text).replace(/\{([a-z]+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : String(text);
+}
+
+/**
+ * The text in the current language. `tr('No runs yet')`; a finished English sentence is
+ * matched against the templates, so tr(`Welcome, ${name}.`) works too. Unknown text comes
+ * back unchanged.
+ */
+function tr(text, depth = 0) {
+  if (text == null || uiLang === 'en') return text;
+  const s = String(text);
+  if (Object.hasOwn(HE_TEXT, s)) return HE_TEXT[s];
+  // The page's own texts carry line breaks and indentation: matched without them.
+  const norm = s.replace(/\s+/g, ' ').trim();
+  if (!norm || !/[A-Za-z]/.test(norm)) return s;
+  const keepEdges = (he) => s.replace(/^(\s*)[\s\S]*?(\s*)$/, (_, a, b) => a + he + b);
+  if (Object.hasOwn(HE_TEXT, norm)) return keepEdges(HE_TEXT[norm]);
+  if (depth > 6) return s;
+  if (!i18nTemplates) i18nCompile();
+  for (const { re, out, names } of i18nTemplates) {
+    const m = norm.match(re);
+    if (!m) continue;
+    const got = {};
+    names.forEach((k, i) => { got[k] = tr(m[i + 1], depth + 1); });
+    return keepEdges(fillText(out, got));
+  }
+  return s;
+}
+
+// ---- The page ----
+const I18N_SKIP = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE']);
+const I18N_ATTRS = ['placeholder', 'aria-label', 'title'];
+const i18nSkipped = (el) => !el || I18N_SKIP.has(el.tagName) || !!el.closest?.('[data-no-i18n]');
+
+// One text node: Hebrew on → remember the English and show the Hebrew; off → put the English back.
+function translateTextNode(n) {
+  if (i18nSkipped(n.parentElement)) return;
+  if (uiLang === 'he') {
+    if (n.__he === n.nodeValue) return; // already ours
+    if (!/[A-Za-z]/.test(n.nodeValue)) return;
+    n.__en = n.nodeValue;
+    n.__he = tr(n.__en);
+    if (n.__he !== n.nodeValue) n.nodeValue = n.__he;
+  } else if (n.__en != null) {
+    if (n.nodeValue === n.__he) n.nodeValue = n.__en;
+    n.__en = n.__he = null;
+  }
+}
+function translateAttrs(el) {
+  if (i18nSkipped(el)) return;
+  for (const attr of I18N_ATTRS) {
+    if (!el.hasAttribute(attr)) continue;
+    const en = `__en_${attr}`, he = `__he_${attr}`, now = el.getAttribute(attr);
+    if (uiLang === 'he') {
+      if (el[he] === now) continue;
+      el[en] = now;
+      el[he] = tr(now);
+      if (el[he] !== now) el.setAttribute(attr, el[he]);
+    } else if (el[en] != null) {
+      if (now === el[he]) el.setAttribute(attr, el[en]);
+      el[en] = el[he] = null;
+    }
+  }
+}
+function translateTree(root) {
+  if (root.nodeType === 3) return translateTextNode(root);
+  if (root.nodeType !== 1 || i18nSkipped(root)) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) translateTextNode(n);
+  translateAttrs(root);
+  for (const el of root.querySelectorAll(I18N_ATTRS.map((a) => `[${a}]`).join(','))) translateAttrs(el);
+}
+
+/**
+ * Puts the whole page into the current language and sets the writing direction
+ * (right to left for Hebrew). Call after setLanguage().
+ */
+function applyLanguage(root = globalThis.document?.body) {
+  if (!root) return;
+  document.documentElement.lang = uiLang;
+  document.documentElement.dir = uiLang === 'he' ? 'rtl' : 'ltr';
+  translateTree(root);
+}
+
+/** From now on, every text the app writes to the page is translated as it lands. Call once. */
+function watchLanguage(root = globalThis.document?.body) {
+  if (!root || typeof MutationObserver === 'undefined') return null;
+  const obs = new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'childList') { for (const n of r.addedNodes) translateTree(n); }
+      else if (r.type === 'characterData') {
+        // Rewritten in place: in English the remembered copy is stale; in Hebrew it is new English to translate.
+        if (uiLang === 'he') translateTextNode(r.target);
+        else if (r.target.__en != null && r.target.nodeValue !== r.target.__en) r.target.__en = r.target.__he = null;
+      } else if (r.type === 'attributes' && uiLang === 'he') translateAttrs(r.target);
+    }
+  });
+  obs.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
+  return obs;
+}
+
 // ---- geo.js ----
 // Geographic helpers: distances, bearings and a local flat projection (meters).
 
@@ -4320,8 +5093,9 @@ async function lookupPlace(place, { fetchImpl = (...a) => fetch(...a) } = {}) {
 // ---- Landmark stories: a sentence or two about a sight from English Wikipedia ----
 // The article is found by position (within 150 m of the sight) and name, so a street or a
 // neighbour's article is not read out as the sight's; without a match there is no story.
-const WIKIPEDIA_API = 'https://en.wikipedia.org/w/api.php';
-const WIKIPEDIA_SUMMARY = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+// `lang` picks the edition: English, or Hebrew when the directions are spoken in Hebrew.
+const wikipediaApi = (lang) => `https://${lang}.wikipedia.org/w/api.php`;
+const wikipediaSummary = (lang) => `https://${lang}.wikipedia.org/api/rest_v1/page/summary`;
 const STORY_MAX_CHARS = 260;
 
 /** The first sentence or two of an article extract, as spoken text; null when too thin. */
@@ -4363,18 +5137,18 @@ const storyMemo = new Map();
  * The story for a sight { name, local, lat, lon }: { title, url, story } or null.
  * Never throws; a failed lookup is tried again next time.
  */
-async function findStory(sight, { fetchImpl = (...a) => fetch(...a) } = {}) {
-  const key = `${sight.name}|${(+sight.lat).toFixed(4)},${(+sight.lon).toFixed(4)}`;
+async function findStory(sight, { fetchImpl = (...a) => fetch(...a), lang = 'en' } = {}) {
+  const key = `${lang}|${sight.name}|${(+sight.lat).toFixed(4)},${(+sight.lon).toFixed(4)}`;
   if (storyMemo.has(key)) return storyMemo.get(key);
   const p = (async () => {
     try {
-      const geo = await getJson(`${WIKIPEDIA_API}?action=query&list=geosearch&gscoord=${(+sight.lat).toFixed(6)}|${(+sight.lon).toFixed(6)}&gsradius=150&gslimit=8&format=json&origin=*`, fetchImpl);
+      const geo = await getJson(`${wikipediaApi(lang)}?action=query&list=geosearch&gscoord=${(+sight.lat).toFixed(6)}|${(+sight.lon).toFixed(6)}&gsradius=150&gslimit=8&format=json&origin=*`, fetchImpl);
       const page = pickArticle(geo?.query?.geosearch || [], sight);
       if (!page) return null;
-      const sum = await getJson(`${WIKIPEDIA_SUMMARY}/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, fetchImpl);
+      const sum = await getJson(`${wikipediaSummary(lang)}/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, fetchImpl);
       const story = storyFromSummary(sum?.extract);
       if (!story) return null;
-      return { title: page.title, url: sum?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, story };
+      return { title: page.title, url: sum?.content_urls?.desktop?.page || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, story };
     } catch {
       return null;
     }
@@ -5159,6 +5933,30 @@ function paceShort(secPerKm) {
 const part = (text) => ({ text, lang: HEBREW.test(text) ? 'he' : 'en' });
 const msg = (...bits) => bits.filter(Boolean).map((b) => (typeof b === 'string' ? part(b) : b));
 
+/**
+ * What the wrist should feel for this view of the run, once per event: 'pre' when the next
+ * turn comes within `warnM`, then 'left' / 'right' / 'turn' when it is 30 m away, 'offroute'
+ * when the runner leaves the line, 'done' when the route is complete. `memo` is an object
+ * the caller keeps between calls. Null when there is nothing new to feel.
+ */
+function wristCue(memo, v, warnM = 200) {
+  if (!v || v.finished) return null;
+  if (v.routeDone) { if (memo.done) return null; memo.done = true; return 'done'; }
+  if (v.offRoute) { if (memo.off) return null; memo.off = true; return 'offroute'; }
+  memo.off = false;
+  const next = v.next;
+  if (!next || v.joining) return null;
+  // The turn is told apart by where it is on the route (its distance from the start).
+  const key = `${next.type}|${next.dir || ''}|${Math.round((v.progress + next.in) / 10)}`;
+  if (memo.key !== key) { memo.key = key; memo.pre = memo.now = false; }
+  if (!memo.now && next.in <= 30) {
+    memo.now = memo.pre = true;
+    return next.type === 'arrive' ? null : next.dir === 'left' ? 'left' : next.dir === 'right' ? 'right' : 'turn';
+  }
+  if (!memo.pre && next.in <= warnM) { memo.pre = true; return 'pre'; }
+  return null;
+}
+
 /** Short instruction for a cue: { verb: 'Turn left', street } */
 function cueAction(c) {
   if (c.type === 'turn' && !c.dir && c.text) return c.text; // spoken in words: "Onto the track"
@@ -5200,8 +5998,9 @@ class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
+  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null, localNames = false } = {}) {
     this.speak = speak;
+    this.localNames = localNames; // say and show a street's local name (for directions in the local language)
     this.sound = sound; // short sounds: 'offroute' (the recalculating chime)
     this.now = now;
     this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
@@ -5239,7 +6038,7 @@ class Navigator {
     this.seg = 0; // segment index of progress
     this.cues = (route.cues || [])
       .filter((c) => c.type !== 'depart')
-      .map((c) => ({ ...c, at: c.idx != null && c.idx < pts.length ? this.along[c.idx] : c.at, pre: false, now: false }));
+      .map((c) => ({ ...c, street: (this.localNames && c.local) || c.street, at: c.idx != null && c.idx < pts.length ? this.along[c.idx] : c.at, pre: false, now: false }));
     this.sights = (route.sights || []).map((s) => {
       const [x, y] = this.proj.toXY(s.lat, s.lon);
       // `src` is the route's own sight: its story (from Wikipedia) may still be on its way when the run starts.
@@ -5267,7 +6066,8 @@ class Navigator {
     this.rerouted = (this.rerouted || 0) + 1;
     if (say) {
       const d = route.cues?.[0];
-      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
+      const street = (this.localNames && d?.local) || d?.street;
+      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', street ? ' on ' : null, street || null, '.'), { priority: 3 });
     }
     return this.view();
   }
@@ -5281,8 +6081,8 @@ class Navigator {
       msg(
         `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
-        d?.street ? ' on ' : null,
-        d?.street || null,
+        ((this.localNames && d?.local) || d?.street) ? ' on ' : null,
+        (this.localNames && d?.local) || d?.street || null,
         '.'
       ),
       { priority: 2 }
@@ -5917,6 +6717,7 @@ const DEFAULTS = Object.freeze({
   awake: true, // keep the screen on during a run
   health: true, // iPhone: save every run as a workout in Apple Health
   lockScreen: true, // iPhone: show the run on the Lock Screen (Live Activity, iOS 16.1+)
+  watch: true, // iPhone: show the run on a paired Apple Watch and tap the wrist at turns
   language: 'en', // 'en' for now; 'he' is coming
 });
 
@@ -6521,6 +7322,33 @@ class NativeLiveActivity {
   }
 }
 
+/**
+ * The run on a paired Apple Watch: the same figures as the Lock Screen card, plus the name
+ * of a tap ('pre', 'left', 'right', 'turn', 'offroute', 'done') when there is one to feel.
+ * Plain updates go out every two seconds at most; an update with a tap goes at once.
+ */
+class NativeWatch {
+  constructor() { this.w = plugin('Watch'); this.on = false; this.lastAt = 0; }
+  get available() { return !!this.w; }
+  async start(routeName, state) {
+    if (!this.w) return false;
+    try { const r = await this.w.start({ routeName, ...state }); this.on = !!r?.started; } catch { this.on = false; }
+    return this.on;
+  }
+  update(state, haptic = null, { minIntervalMs = 2000 } = {}) {
+    if (!this.on) return;
+    const now = Date.now();
+    if (!haptic && now - this.lastAt < minIntervalMs) return;
+    this.lastAt = now;
+    this.w.update(haptic ? { ...state, haptic } : state).catch(() => {});
+  }
+  end(state) {
+    if (!this.on) return;
+    this.on = false;
+    this.w.end(state).catch(() => {});
+  }
+}
+
 // ---- glmap.js ----
 // The map, drawn by MapLibre GL from OpenFreeMap's vector tiles (the same tiles the planner
 // reads streets from), behind a small Leaflet-shaped API: the app thinks in [lat, lon],
@@ -6940,12 +7768,14 @@ function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = false, ti
 
 
 
+
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
 const $ = (id) => document.getElementById(id);
 
 // ---------- Settings (kept on the phone) ----------
 const settings = loadSettings();
+setLanguage(settings.language); // the interface language: English, or Hebrew (right to left)
 // Units on screen: numbers in km or miles, short lengths in m or ft.
 const U = {
   get mi() { return settings.units === 'mi'; },
@@ -7957,6 +8787,13 @@ function escapeHtml(s) {
 }
 
 const voice = isNative() ? new NativeVoice() : new Voice();
+// Directions are spoken in the interface language: in Hebrew when it is on and the device has
+// a Hebrew voice. Without one they stay in English, which beats silence.
+const hebrewSpeech = () => isHebrew() && !!voice.voices?.he;
+function say(parts, opts) {
+  if (hebrewSpeech()) parts = parts.map((p) => { const he = tr(p.text); return he === p.text ? p : { text: he, lang: 'he' }; });
+  return voice.say(parts, opts);
+}
 
 // Short sounds (Web Audio, made on the spot, no files). The context is created inside the
 // Start tap, which browsers require before a page may make a sound.
@@ -8008,7 +8845,7 @@ async function loadStories(route) {
     for (const s of route.sights) {
       if (s.story !== undefined) continue;
       s.story = null;
-      const found = await findStory(s).catch(() => null);
+      const found = await findStory(s, { lang: hebrewSpeech() ? 'he' : 'en' }).catch(() => null);
       if (found) { s.story = found.story; s.wiki = found.url; }
     }
   } finally {
@@ -8129,6 +8966,11 @@ function renderSettings() {
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
   setSegment('setLang', settings.language);
+  // Hebrew: who reads the directions, or why they stay in English.
+  $('langHint').hidden = !(isHebrew() && voice.available);
+  if (isHebrew()) $('langHint').textContent = voice.voices?.he
+    ? `Directions are read in Hebrew by ${String(voice.voices.he.name || 'the Hebrew voice').replace(/\s*\((enhanced|premium|compact)\)/i, '')}. The voice chosen above reads names that are written in English.`
+    : 'No Hebrew voice was found on this device, so directions are spoken in English. On iPhone: Settings → Accessibility → Spoken Content → Voices → Hebrew.';
   $('setSplits').checked = settings.splits;
   $('setLandmarks').checked = settings.landmarks;
   $('setQuiet').checked = settings.quiet;
@@ -8139,6 +8981,7 @@ function renderSettings() {
   $('setAwake').checked = settings.awake;
   $('setHealth').checked = settings.health;
   $('setLockScreen').checked = settings.lockScreen;
+  $('setWatch').checked = settings.watch;
   $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
 }
 $('setUnits').addEventListener('click', (e) => {
@@ -8150,6 +8993,17 @@ $('setUnits').addEventListener('click', (e) => {
   applyUnits();
   renderSettings();
 });
+// The language: the whole page switches at once (and its direction: Hebrew reads right to left).
+$('setLang').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.language) return;
+  settings.language = b.dataset.v;
+  saveSettings(settings);
+  setLanguage(settings.language);
+  applyLanguage();
+  renderSettings();
+  map.invalidateSize?.();
+});
 $('setWarn').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
   if (!b) return;
@@ -8157,7 +9011,7 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
@@ -8311,7 +9165,8 @@ async function startRun({ demo }) {
   primeAudio();
   const clock = { t: Date.now(), advance(ms) { this.t += ms; } };
   const navigator_ = new Navigator(route, {
-    speak: (parts, opts) => voice.say(parts, opts),
+    speak: (parts, opts) => say(parts, opts),
+    localNames: hebrewSpeech(), // street names as written locally when the directions are in Hebrew
     // On the phone the chime goes through the app's own audio session (it plays with the
     // screen locked); in a browser through the page's.
     sound: (name) => { if (!voice.muted && !(isNative() && nativeChime(name))) chime(name); },
@@ -8362,6 +9217,12 @@ async function startRun({ demo }) {
     n.live = new NativeLiveActivity();
     n.live.start(route.name, liveState(navigator_.view()));
   }
+  // The run on a paired Apple Watch, with a tap on the wrist at each turn.
+  if (isNative() && settings.watch && !demo) {
+    n.watch = new NativeWatch();
+    n.wrist = {};
+    n.watch.start(route.name, liveState(navigator_.view()));
+  }
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
@@ -8390,7 +9251,7 @@ async function startRun({ demo }) {
     if (nav.active !== n) return;
     n.navigator.tick();
     $('statTime').textContent = fmtTime(n.navigator.elapsed);
-    n.live?.update(liveState(n.navigator.view())); // the Lock Screen clock runs even between GPS fixes
+    if (n.live || n.watch) { const ls = liveState(n.navigator.view()); n.live?.update(ls); n.watch?.update(ls); } // the clock runs even between GPS fixes
   }, 1000);
 }
 
@@ -8456,7 +9317,7 @@ $('homeBtn').addEventListener('click', () => {
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
   const d = fresh.cues?.[0];
-  voice.say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
+  say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
   toast('The route now leads back to the start by the shortest safe way.');
 });
 
@@ -8472,7 +9333,7 @@ function turnedAroundOnLoop({ seg }) {
   render(n.navigator.reroute(fresh, { say: false }));
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
-  voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
   toast('Turned around: the route now leads back to the start the way you came.');
   return true;
 }
@@ -8494,13 +9355,18 @@ function liveState(v) {
     const t = v.next.type, side = v.next.dir === 'left' ? 'left' : 'right';
     symbol = t === 'uturn' ? `arrow.uturn.${side}` : t === 'arrive' ? 'flag.checkered' : t === 'depart' || t === 'straight' || t === 'lap' ? 'arrow.up' : t === 'slight' ? `arrow.up.${side}` : `arrow.turn.up.${side}`;
   }
+  instruction = tr(instruction); street = tr(street); toTurn = tr(toTurn);
   return { instruction, street, toTurn, symbol, distance: `${U.num(v.odometer, 2)} ${U.unit}`, pace: `${U.pace(v.pace)} ${U.paceLabel()}`, elapsed: fmtTime(v.elapsed), offRoute: !!v.offRoute };
 }
 
 function render(v) {
   const n = nav.active;
   if (!n) return;
-  n.live?.update(liveState(v));
+  if (n.live || n.watch) {
+    const ls = liveState(v);
+    n.live?.update(ls);
+    n.watch?.update(ls, wristCue(n.wrist, v, settings.warnM));
+  }
   const banner = $('navBanner');
   banner.classList.toggle('off', v.offRoute);
   if (v.routeDone || v.finished) {
@@ -8675,6 +9541,7 @@ function endRun() {
   if (!n || n.navigator.finished) return;
   n.navigator.finish();
   n.live?.end(liveState(n.navigator.view()));
+  n.watch?.end(liveState(n.navigator.view()));
   showFinish();
 }
 
@@ -8684,6 +9551,7 @@ function closeRun() {
   if (!n) return;
   n.source?.stop();
   n.live?.end(liveState(n.navigator.view()));
+  n.watch?.end(liveState(n.navigator.view()));
   setMapRotation(null);
   clearInterval(n.timer);
   voice.stop();
@@ -9101,7 +9969,7 @@ $('profileSkip').addEventListener('click', () => {
 });
 $('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 
-const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(isHebrew() ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' }); };
 async function openRuns() {
   openDrawer(false);
   for (const id of ['terms', 'install', 'settings', 'profile', 'runPage']) $(id).hidden = true;
@@ -9223,7 +10091,10 @@ if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
+// The page in the chosen language, and every text written from now on.
+applyLanguage();
+watchLanguage();
+window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
 if (!state.linkStart) locate({ quiet: true });

@@ -26,7 +26,7 @@ end
 plugins = app_group['Plugins'] || app_group.new_group('Plugins', 'Plugins')
 add_file(app_group, app, File.join(root, 'App/RTTViewController.swift'), root)
 add_file(app_group, app, File.join(root, 'App/SceneDelegate.swift'), root)
-%w[HealthPlugin ChimePlugin LiveActivityPlugin RunActivityAttributes].each do |name|
+%w[HealthPlugin ChimePlugin LiveActivityPlugin RunActivityAttributes WatchPlugin].each do |name|
   add_file(plugins, app, File.join(root, "App/Plugins/#{name}.swift"), root)
 end
 
@@ -89,6 +89,57 @@ unless ext
   embed.symbol_dst_subfolder_spec = :plug_ins
   embed.add_file_reference(ext.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
   puts 'added the RunActivity extension target'
+end
+
+# ---- the Apple Watch app (shows the run, taps the wrist at turns) ----
+watch = project.targets.find { |t| t.name == 'RunTheTownWatch' }
+unless watch
+  watch = project.new_target(:application, 'RunTheTownWatch', :watchos, '10.0')
+  watch_group = project.main_group.new_group('RunTheTownWatch', 'RunTheTownWatch')
+  %w[RunTheTownWatchApp RunSession RunView].each do |name|
+    watch.add_file_references([watch_group.new_file(File.join(root, "RunTheTownWatch/#{name}.swift"))])
+  end
+  watch.add_resources([watch_group.new_file(File.join(root, 'RunTheTownWatch/Assets.xcassets'))])
+  watch_group.new_file(File.join(root, 'RunTheTownWatch/RunTheTownWatch.entitlements'))
+  watch.build_configurations.each do |c|
+    s = c.build_settings
+    s['SDKROOT'] = 'watchos'
+    s['TARGETED_DEVICE_FAMILY'] = '4'
+    s['WATCHOS_DEPLOYMENT_TARGET'] = '10.0'
+    s['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.urikedem.runthetown.watchkitapp'
+    s['PRODUCT_NAME'] = 'RunTheTownWatch'
+    s['GENERATE_INFOPLIST_FILE'] = 'YES'
+    s['INFOPLIST_KEY_CFBundleDisplayName'] = 'RunTheTown'
+    s['INFOPLIST_KEY_WKApplication'] = 'YES'
+    s['INFOPLIST_KEY_WKCompanionAppBundleIdentifier'] = 'com.urikedem.runthetown'
+    s['INFOPLIST_KEY_WKBackgroundModes'] = 'workout-processing'
+    s['INFOPLIST_KEY_NSHealthShareUsageDescription'] = 'RunTheTown reads nothing from Health; a workout session keeps the run on your wrist.'
+    s['INFOPLIST_KEY_NSHealthUpdateUsageDescription'] = 'To keep the run on your wrist and tap you at turns while your arm is down.'
+    s['CODE_SIGN_ENTITLEMENTS'] = 'RunTheTownWatch/RunTheTownWatch.entitlements'
+    s['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'AppIcon'
+    s['MARKETING_VERSION'] = '1.0'
+    s['CURRENT_PROJECT_VERSION'] = '1'
+    s['SWIFT_VERSION'] = '5.0'
+    s['CODE_SIGN_STYLE'] = 'Automatic'
+    s['DEVELOPMENT_TEAM'] = team if team
+    s['SKIP_INSTALL'] = 'YES'
+    s['ENABLE_PREVIEWS'] = 'NO'
+    s['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks']
+  end
+  app.add_dependency(watch)
+  embed_watch = app.new_copy_files_build_phase('Embed Watch Content')
+  embed_watch.dst_subfolder_spec = '16' # the products directory
+  embed_watch.dst_path = '$(CONTENTS_FOLDER_PATH)/Watch'
+  embed_watch.add_file_reference(watch.product_reference).settings = { 'ATTRIBUTES' => ['RemoveHeadersOnCopy'] }
+  (attrs[watch.uuid] ||= {})['SystemCapabilities'] = { 'com.apple.HealthKit' => { 'enabled' => 1 } }
+  puts 'added the RunTheTownWatch target'
+end
+
+# The watch app may keep running during a workout session: a key the generated Info.plist
+# cannot carry, so it comes from a small file that Xcode merges in.
+watch.build_configurations.each do |c|
+  c.build_settings['INFOPLIST_FILE'] = 'RunTheTownWatch/Info.plist'
+  c.build_settings.delete('INFOPLIST_KEY_WKBackgroundModes')
 end
 
 project.save

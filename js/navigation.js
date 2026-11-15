@@ -78,6 +78,30 @@ export function paceShort(secPerKm) {
 const part = (text) => ({ text, lang: HEBREW.test(text) ? 'he' : 'en' });
 const msg = (...bits) => bits.filter(Boolean).map((b) => (typeof b === 'string' ? part(b) : b));
 
+/**
+ * What the wrist should feel for this view of the run, once per event: 'pre' when the next
+ * turn comes within `warnM`, then 'left' / 'right' / 'turn' when it is 30 m away, 'offroute'
+ * when the runner leaves the line, 'done' when the route is complete. `memo` is an object
+ * the caller keeps between calls. Null when there is nothing new to feel.
+ */
+export function wristCue(memo, v, warnM = 200) {
+  if (!v || v.finished) return null;
+  if (v.routeDone) { if (memo.done) return null; memo.done = true; return 'done'; }
+  if (v.offRoute) { if (memo.off) return null; memo.off = true; return 'offroute'; }
+  memo.off = false;
+  const next = v.next;
+  if (!next || v.joining) return null;
+  // The turn is told apart by where it is on the route (its distance from the start).
+  const key = `${next.type}|${next.dir || ''}|${Math.round((v.progress + next.in) / 10)}`;
+  if (memo.key !== key) { memo.key = key; memo.pre = memo.now = false; }
+  if (!memo.now && next.in <= 30) {
+    memo.now = memo.pre = true;
+    return next.type === 'arrive' ? null : next.dir === 'left' ? 'left' : next.dir === 'right' ? 'right' : 'turn';
+  }
+  if (!memo.pre && next.in <= warnM) { memo.pre = true; return 'pre'; }
+  return null;
+}
+
 /** Short instruction for a cue: { verb: 'Turn left', street } */
 export function cueAction(c) {
   if (c.type === 'turn' && !c.dir && c.text) return c.text; // spoken in words: "Onto the track"
@@ -119,8 +143,9 @@ export class Navigator {
    * landmarks (sights called out), quiet (only turns and off-route warnings), warnM (how far
    * ahead a turn is announced, m).
    */
-  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null } = {}) {
+  constructor(route, { speak = () => {}, sound = () => {}, now = () => Date.now(), units = 'km', splits = true, landmarks = true, quiet = false, warnM = PRE_MAX, onTurnaround = null, localNames = false } = {}) {
     this.speak = speak;
+    this.localNames = localNames; // say and show a street's local name (for directions in the local language)
     this.sound = sound; // short sounds: 'offroute' (the recalculating chime)
     this.now = now;
     this.onTurnaround = onTurnaround; // called when the runner turned around on a loop (no return leg to switch to)
@@ -158,7 +183,7 @@ export class Navigator {
     this.seg = 0; // segment index of progress
     this.cues = (route.cues || [])
       .filter((c) => c.type !== 'depart')
-      .map((c) => ({ ...c, at: c.idx != null && c.idx < pts.length ? this.along[c.idx] : c.at, pre: false, now: false }));
+      .map((c) => ({ ...c, street: (this.localNames && c.local) || c.street, at: c.idx != null && c.idx < pts.length ? this.along[c.idx] : c.at, pre: false, now: false }));
     this.sights = (route.sights || []).map((s) => {
       const [x, y] = this.proj.toXY(s.lat, s.lon);
       // `src` is the route's own sight: its story (from Wikipedia) may still be on its way when the run starts.
@@ -186,7 +211,8 @@ export class Navigator {
     this.rerouted = (this.rerouted || 0) + 1;
     if (say) {
       const d = route.cues?.[0];
-      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', d?.street ? ' on ' : null, d?.street || null, '.'), { priority: 3 });
+      const street = (this.localNames && d?.local) || d?.street;
+      this.speak(msg(d?.compass ? `Head ${d.compass}` : 'Follow the new route', street ? ' on ' : null, street || null, '.'), { priority: 3 });
     }
     return this.view();
   }
@@ -200,8 +226,8 @@ export class Navigator {
       msg(
         `Starting your ${this.units === 'mi' ? `${(this.total / MILE).toFixed(1)} mile` : `${(this.total / 1000).toFixed(1)} kilometer`} run. `,
         d ? `Head ${d.compass}` : null,
-        d?.street ? ' on ' : null,
-        d?.street || null,
+        ((this.localNames && d?.local) || d?.street) ? ' on ' : null,
+        (this.localNames && d?.local) || d?.street || null,
         '.'
       ),
       { priority: 2 }

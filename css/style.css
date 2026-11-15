@@ -650,3 +650,19 @@ body.native .perks .native-only { display: inline-flex !important; }
 .plan-by button { padding: 5px 0; font-size: 13px; }
 /* The run screen's small links: take me back, report a problem. */
 .nav-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+
+/* ---------- Hebrew (right to left) ---------- */
+/* The page's direction does most of the work: rows, text and grids mirror by themselves.
+   What follows are the pieces that need a hand. */
+/* Back arrows point the other way. */
+[dir='rtl'] .back svg, [dir='rtl'] .map-back svg, [dir='rtl'] #backBtn svg { transform: scaleX(-1); }
+/* Numbers people type and read as numbers stay left to right. */
+[dir='rtl'] #distanceInput, [dir='rtl'] #lapsKm, [dir='rtl'] .card-dist, [dir='rtl'] .nav-stats b, [dir='rtl'] .finish-stats b, [dir='rtl'] .nav-dist { direction: ltr; unicode-bidi: isolate; }
+/* The map keeps its own left-to-right frame (controls, attribution). */
+[dir='rtl'] #map, [dir='rtl'] .run-map { direction: ltr; }
+/* Hebrew has no capitals: the cover's upper-case headlines keep their weight without the tracking. */
+[dir='rtl'] .hero-copy h1, [dir='rtl'] .mode-title { letter-spacing: 0; }
+[dir='rtl'] .route-pop-facts li::before { margin-right: 0; margin-left: 6px; }
+/* The cover keeps its frame (picture, then the night map with its slanted edge); only the words read right to left. */
+[dir='rtl'] .home { direction: ltr; }
+[dir='rtl'] .home .hero, [dir='rtl'] .home .home-top { direction: rtl; }

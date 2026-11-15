@@ -69,13 +69,14 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/cues.js` | A path becomes turn-by-turn cues |
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
+| `js/i18n.js` | The Hebrew interface: the English → Hebrew table (fixed texts and templates), `tr()`, and the page translator (`applyLanguage`, `watchLanguage`) that turns every text the app writes into Hebrew and the page right to left |
 | `js/services.js` | Where search, Nominatim and Overpass live: the public servers, or our proxy when `PROXY` is set |
 | `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it |
 | `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look, the offline cache |
 | `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |
 | `native/` | iOS notes (`README-ios.md`), the store listing (`APPSTORE.md`), the plugin patch, `configure-ios.mjs/.rb` (adds the app's own plugins, the HealthKit entitlement and the Lock Screen extension to the Xcode project; rerunnable) |
-| `ios/App/App/Plugins/`, `ios/App/RunActivity/` | The app's own Swift plugins (Apple Health, the chime, the Live Activity), registered in `RTTViewController.swift`; the Lock Screen widget extension |
+| `ios/App/App/Plugins/`, `ios/App/RunActivity/`, `ios/App/RunTheTownWatch/` | The app's own Swift plugins (Apple Health, the chime, the Live Activity, the Watch link), registered in `RTTViewController.swift`; the Lock Screen widget extension; the Apple Watch app (shows the run, taps the wrist at turns) |
 
 Mode names: the interface says **Free-flow run** and **Explorer tour**; the code says `run`
 and `tour` (and "sightseeing"). Do not rename the code.
@@ -106,6 +107,9 @@ and `tour` (and "sightseeing"). Do not rename the code.
   The map is OpenFreeMap's vector tiles (styles `liberty` by day, `dark` at night); the app
   never talks to MapLibre directly, only through `js/glmap.js`.
 - Comments explain why, in full sentences, above the code they describe. Match the style around.
+- The code writes English. Hebrew comes from the table in `js/i18n.js`: a new text on the page or in
+  the spoken directions needs an entry there (`tests/test-i18n.mjs` fails when a page text has none).
+  Never write Hebrew into `index.html` or `app.js`; never glue a Hebrew prefix to a name.
 - Every behaviour change gets a test in the matching `tests/test-*.mjs`; the navigation suite
   drives a `Navigator` with a `SimulatedRun`, the planner suites plan in the synthetic city.
 - After editing anything the page loads, run `node build.mjs` and the relevant suites before

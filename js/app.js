@@ -3,14 +3,15 @@
 import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
 import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
 import { haversine } from './geo.js';
-import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE } from './navigation.js';
+import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
-import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity } from './native.js';
+import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch } from './native.js';
 import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
 import { fallbackLinks, findStory } from './details.js';
 import { searchUrl, nominatimUrl } from './services.js';
 import { REPORT_TO } from './contact.js';
+import { tr, setLanguage, applyLanguage, watchLanguage, isHebrew } from './i18n.js';
 
 const COLORS = ['#2563eb', '#ea580c', '#9333ea', '#0891b2', '#16a34a', '#db2777'];
 const DEFAULT_VIEW = { center: [32.0853, 34.7818], zoom: 13 }; // Tel Aviv until we know better
@@ -18,6 +19,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- Settings (kept on the phone) ----------
 const settings = loadSettings();
+setLanguage(settings.language); // the interface language: English, or Hebrew (right to left)
 // Units on screen: numbers in km or miles, short lengths in m or ft.
 const U = {
   get mi() { return settings.units === 'mi'; },
@@ -1029,6 +1031,13 @@ function escapeHtml(s) {
 }
 
 const voice = isNative() ? new NativeVoice() : new Voice();
+// Directions are spoken in the interface language: in Hebrew when it is on and the device has
+// a Hebrew voice. Without one they stay in English, which beats silence.
+const hebrewSpeech = () => isHebrew() && !!voice.voices?.he;
+function say(parts, opts) {
+  if (hebrewSpeech()) parts = parts.map((p) => { const he = tr(p.text); return he === p.text ? p : { text: he, lang: 'he' }; });
+  return voice.say(parts, opts);
+}
 
 // Short sounds (Web Audio, made on the spot, no files). The context is created inside the
 // Start tap, which browsers require before a page may make a sound.
@@ -1080,7 +1089,7 @@ async function loadStories(route) {
     for (const s of route.sights) {
       if (s.story !== undefined) continue;
       s.story = null;
-      const found = await findStory(s).catch(() => null);
+      const found = await findStory(s, { lang: hebrewSpeech() ? 'he' : 'en' }).catch(() => null);
       if (found) { s.story = found.story; s.wiki = found.url; }
     }
   } finally {
@@ -1201,6 +1210,11 @@ function renderSettings() {
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
   setSegment('setLang', settings.language);
+  // Hebrew: who reads the directions, or why they stay in English.
+  $('langHint').hidden = !(isHebrew() && voice.available);
+  if (isHebrew()) $('langHint').textContent = voice.voices?.he
+    ? `Directions are read in Hebrew by ${String(voice.voices.he.name || 'the Hebrew voice').replace(/\s*\((enhanced|premium|compact)\)/i, '')}. The voice chosen above reads names that are written in English.`
+    : 'No Hebrew voice was found on this device, so directions are spoken in English. On iPhone: Settings → Accessibility → Spoken Content → Voices → Hebrew.';
   $('setSplits').checked = settings.splits;
   $('setLandmarks').checked = settings.landmarks;
   $('setQuiet').checked = settings.quiet;
@@ -1211,6 +1225,7 @@ function renderSettings() {
   $('setAwake').checked = settings.awake;
   $('setHealth').checked = settings.health;
   $('setLockScreen').checked = settings.lockScreen;
+  $('setWatch').checked = settings.watch;
   $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
 }
 $('setUnits').addEventListener('click', (e) => {
@@ -1222,6 +1237,17 @@ $('setUnits').addEventListener('click', (e) => {
   applyUnits();
   renderSettings();
 });
+// The language: the whole page switches at once (and its direction: Hebrew reads right to left).
+$('setLang').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.language) return;
+  settings.language = b.dataset.v;
+  saveSettings(settings);
+  setLanguage(settings.language);
+  applyLanguage();
+  renderSettings();
+  map.invalidateSize?.();
+});
 $('setWarn').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
   if (!b) return;
@@ -1229,7 +1255,7 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
@@ -1383,7 +1409,8 @@ async function startRun({ demo }) {
   primeAudio();
   const clock = { t: Date.now(), advance(ms) { this.t += ms; } };
   const navigator_ = new Navigator(route, {
-    speak: (parts, opts) => voice.say(parts, opts),
+    speak: (parts, opts) => say(parts, opts),
+    localNames: hebrewSpeech(), // street names as written locally when the directions are in Hebrew
     // On the phone the chime goes through the app's own audio session (it plays with the
     // screen locked); in a browser through the page's.
     sound: (name) => { if (!voice.muted && !(isNative() && nativeChime(name))) chime(name); },
@@ -1434,6 +1461,12 @@ async function startRun({ demo }) {
     n.live = new NativeLiveActivity();
     n.live.start(route.name, liveState(navigator_.view()));
   }
+  // The run on a paired Apple Watch, with a tap on the wrist at each turn.
+  if (isNative() && settings.watch && !demo) {
+    n.watch = new NativeWatch();
+    n.wrist = {};
+    n.watch.start(route.name, liveState(navigator_.view()));
+  }
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
@@ -1462,7 +1495,7 @@ async function startRun({ demo }) {
     if (nav.active !== n) return;
     n.navigator.tick();
     $('statTime').textContent = fmtTime(n.navigator.elapsed);
-    n.live?.update(liveState(n.navigator.view())); // the Lock Screen clock runs even between GPS fixes
+    if (n.live || n.watch) { const ls = liveState(n.navigator.view()); n.live?.update(ls); n.watch?.update(ls); } // the clock runs even between GPS fixes
   }, 1000);
 }
 
@@ -1528,7 +1561,7 @@ $('homeBtn').addEventListener('click', () => {
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
   const d = fresh.cues?.[0];
-  voice.say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
+  say([{ text: `Taking you back to the start: ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to go.${d?.compass ? ` Head ${d.compass}${d.street ? ' on ' + d.street : ''}.` : ''}` }], { priority: 3 });
   toast('The route now leads back to the start by the shortest safe way.');
 });
 
@@ -1544,7 +1577,7 @@ function turnedAroundOnLoop({ seg }) {
   render(n.navigator.reroute(fresh, { say: false }));
   followNewLine(n, fresh);
   n.doneLine?.setLatLngs([]);
-  voice.say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
+  say([{ text: `Turned around? Heading back the way you came. ${U.mi ? (fresh.distance / MILE).toFixed(1) + ' miles' : (fresh.distance / 1000).toFixed(1) + ' kilometers'} to the start.` }], { priority: 3 });
   toast('Turned around: the route now leads back to the start the way you came.');
   return true;
 }
@@ -1566,13 +1599,18 @@ function liveState(v) {
     const t = v.next.type, side = v.next.dir === 'left' ? 'left' : 'right';
     symbol = t === 'uturn' ? `arrow.uturn.${side}` : t === 'arrive' ? 'flag.checkered' : t === 'depart' || t === 'straight' || t === 'lap' ? 'arrow.up' : t === 'slight' ? `arrow.up.${side}` : `arrow.turn.up.${side}`;
   }
+  instruction = tr(instruction); street = tr(street); toTurn = tr(toTurn);
   return { instruction, street, toTurn, symbol, distance: `${U.num(v.odometer, 2)} ${U.unit}`, pace: `${U.pace(v.pace)} ${U.paceLabel()}`, elapsed: fmtTime(v.elapsed), offRoute: !!v.offRoute };
 }
 
 function render(v) {
   const n = nav.active;
   if (!n) return;
-  n.live?.update(liveState(v));
+  if (n.live || n.watch) {
+    const ls = liveState(v);
+    n.live?.update(ls);
+    n.watch?.update(ls, wristCue(n.wrist, v, settings.warnM));
+  }
   const banner = $('navBanner');
   banner.classList.toggle('off', v.offRoute);
   if (v.routeDone || v.finished) {
@@ -1747,6 +1785,7 @@ function endRun() {
   if (!n || n.navigator.finished) return;
   n.navigator.finish();
   n.live?.end(liveState(n.navigator.view()));
+  n.watch?.end(liveState(n.navigator.view()));
   showFinish();
 }
 
@@ -1756,6 +1795,7 @@ function closeRun() {
   if (!n) return;
   n.source?.stop();
   n.live?.end(liveState(n.navigator.view()));
+  n.watch?.end(liveState(n.navigator.view()));
   setMapRotation(null);
   clearInterval(n.timer);
   voice.stop();
@@ -2173,7 +2213,7 @@ $('profileSkip').addEventListener('click', () => {
 });
 $('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
 
-const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(isHebrew() ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' }); };
 async function openRuns() {
   openDrawer(false);
   for (const id of ['terms', 'install', 'settings', 'profile', 'runPage']) $(id).hidden = true;
@@ -2295,7 +2335,10 @@ if (!profile) setTimeout(() => openProfile({ first: true }), 400);
 
 // Expose for testing/debugging.
 applyUnits();
-window.__rtt = { state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
+// The page in the chosen language, and every text written from now on.
+applyLanguage();
+watchLanguage();
+window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
 if (!state.linkStart) locate({ quiet: true });

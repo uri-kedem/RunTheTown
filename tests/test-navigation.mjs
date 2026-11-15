@@ -1,7 +1,7 @@
 // Live-guidance tests with simulated GPS. Run: node tests/test-navigation.mjs
 import { RouteEngine } from '../js/engine.js';
 import { homeRoute } from '../js/planner.js';
-import { Navigator, SimulatedRun, Voice, roundDist, paceShort, distText, paceText, lenText, MILE } from '../js/navigation.js';
+import { Navigator, SimulatedRun, Voice, roundDist, paceShort, distText, paceText, lenText, MILE, wristCue } from '../js/navigation.js';
 import { loadSettings, saveSettings, houseVoices, DEFAULTS } from '../js/settings.js';
 import { syntheticOverpass, CENTER } from './synthetic-city.mjs';
 import { makeMockMapBackend } from './mock-vectortiles.mjs';
@@ -14,6 +14,23 @@ const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass
 check(roundDist(147) === 150 && roundDist(42) === 40 && roundDist(1234) === 1200, 'distance rounding');
 check(DEFAULTS.health === true && DEFAULTS.lockScreen === true && loadSettings({ getItem: () => '{"health":false}' }).health === false, 'Apple Health and Lock Screen settings: on by default, remembered when off');
 check(paceShort(332) === '5:32', 'pace format');
+check(DEFAULTS.watch === true, 'Apple Watch setting: on by default');
+
+// The wrist: one tap ahead of a turn, one at the turn (left and right feel different), one
+// when the runner leaves the route, one when the route is done; never the same tap twice.
+{
+  const memo = {};
+  const at = (progress, next, extra = {}) => wristCue(memo, { progress, next, ...extra }, 200);
+  const left = (progress) => ({ type: 'turn', dir: 'left', in: 1000 - progress });
+  const got = [at(500, left(500)), at(790, left(790)), at(805, left(805)), at(900, left(900)), at(975, left(975)), at(990, left(990))];
+  check(JSON.stringify(got) === JSON.stringify([null, null, 'pre', null, 'left', null]), `one tap ahead and one at a left turn (${got.join(',')})`);
+  const right = (progress) => ({ type: 'sharp', dir: 'right', in: 1400 - progress });
+  check(at(1010, right(1010)) === null && at(1250, right(1250)) === 'pre' && at(1380, right(1380)) === 'right', 'the next turn starts afresh; a right turn has its own tap');
+  check(at(1500, { type: 'uturn', in: 20 }) === 'turn', 'a turn with no side is a plain tap');
+  check(at(1600, null, { offRoute: true }) === 'offroute' && at(1610, null, { offRoute: true }) === null, 'off the route: once');
+  check(at(1700, { type: 'arrive', in: 150 }) === 'pre' && at(1840, { type: 'arrive', in: 10 }) === null, 'the finish is announced ahead, not tapped as a turn');
+  check(at(1850, null, { routeDone: true }) === 'done' && at(1850, null, { routeDone: true }) === null && at(1850, null, { finished: true }) === null, 'route complete: once; nothing after the run ended');
+}
 
 // An out-and-back: the way home runs over the way out, so the first fix is as near the end of
 // the route as its start. The run must begin at the start, whichever side the GPS jitter falls.

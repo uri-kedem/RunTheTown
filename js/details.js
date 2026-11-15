@@ -137,8 +137,9 @@ export async function lookupPlace(place, { fetchImpl = (...a) => fetch(...a) } =
 // ---- Landmark stories: a sentence or two about a sight from English Wikipedia ----
 // The article is found by position (within 150 m of the sight) and name, so a street or a
 // neighbour's article is not read out as the sight's; without a match there is no story.
-const WIKIPEDIA_API = 'https://en.wikipedia.org/w/api.php';
-const WIKIPEDIA_SUMMARY = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+// `lang` picks the edition: English, or Hebrew when the directions are spoken in Hebrew.
+const wikipediaApi = (lang) => `https://${lang}.wikipedia.org/w/api.php`;
+const wikipediaSummary = (lang) => `https://${lang}.wikipedia.org/api/rest_v1/page/summary`;
 const STORY_MAX_CHARS = 260;
 
 /** The first sentence or two of an article extract, as spoken text; null when too thin. */
@@ -180,18 +181,18 @@ const storyMemo = new Map();
  * The story for a sight { name, local, lat, lon }: { title, url, story } or null.
  * Never throws; a failed lookup is tried again next time.
  */
-export async function findStory(sight, { fetchImpl = (...a) => fetch(...a) } = {}) {
-  const key = `${sight.name}|${(+sight.lat).toFixed(4)},${(+sight.lon).toFixed(4)}`;
+export async function findStory(sight, { fetchImpl = (...a) => fetch(...a), lang = 'en' } = {}) {
+  const key = `${lang}|${sight.name}|${(+sight.lat).toFixed(4)},${(+sight.lon).toFixed(4)}`;
   if (storyMemo.has(key)) return storyMemo.get(key);
   const p = (async () => {
     try {
-      const geo = await getJson(`${WIKIPEDIA_API}?action=query&list=geosearch&gscoord=${(+sight.lat).toFixed(6)}|${(+sight.lon).toFixed(6)}&gsradius=150&gslimit=8&format=json&origin=*`, fetchImpl);
+      const geo = await getJson(`${wikipediaApi(lang)}?action=query&list=geosearch&gscoord=${(+sight.lat).toFixed(6)}|${(+sight.lon).toFixed(6)}&gsradius=150&gslimit=8&format=json&origin=*`, fetchImpl);
       const page = pickArticle(geo?.query?.geosearch || [], sight);
       if (!page) return null;
-      const sum = await getJson(`${WIKIPEDIA_SUMMARY}/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, fetchImpl);
+      const sum = await getJson(`${wikipediaSummary(lang)}/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, fetchImpl);
       const story = storyFromSummary(sum?.extract);
       if (!story) return null;
-      return { title: page.title, url: sum?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, story };
+      return { title: page.title, url: sum?.content_urls?.desktop?.page || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`, story };
     } catch {
       return null;
     }

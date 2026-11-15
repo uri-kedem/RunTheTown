@@ -9,5 +9,6 @@ class RTTViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(HealthPlugin())
         bridge?.registerPluginInstance(ChimePlugin())
         bridge?.registerPluginInstance(LiveActivityPlugin())
+        bridge?.registerPluginInstance(WatchPlugin())
     }
 }

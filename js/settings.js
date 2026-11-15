@@ -15,6 +15,7 @@ export const DEFAULTS = Object.freeze({
   awake: true, // keep the screen on during a run
   health: true, // iPhone: save every run as a workout in Apple Health
   lockScreen: true, // iPhone: show the run on the Lock Screen (Live Activity, iOS 16.1+)
+  watch: true, // iPhone: show the run on a paired Apple Watch and tap the wrist at turns
   language: 'en', // 'en' for now; 'he' is coming
 });
 
