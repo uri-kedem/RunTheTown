@@ -49,3 +49,32 @@ const COMPASS16 = [
 export function bearingNameFine(deg) {
   return COMPASS16[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
 }
+
+/**
+ * The sun's height above the horizon, in degrees, at a place and a moment (good to about
+ * half a degree, which is all a "is it dark?" question needs).
+ */
+export function sunAltitude(lat, lon, date = new Date()) {
+  const rad = Math.PI / 180;
+  const d = date.getTime() / 86400000 - 10957.5; // days since noon on Jan 1, 2000 (UTC)
+  const meanLon = 280.46 + 0.9856474 * d;
+  const anomaly = (357.528 + 0.9856003 * d) * rad;
+  const ecliptic = (meanLon + 1.915 * Math.sin(anomaly) + 0.02 * Math.sin(2 * anomaly)) * rad;
+  const tilt = (23.439 - 0.0000004 * d) * rad;
+  const rightAsc = Math.atan2(Math.cos(tilt) * Math.sin(ecliptic), Math.cos(ecliptic));
+  const decl = Math.asin(Math.sin(tilt) * Math.sin(ecliptic));
+  const sidereal = (18.697374558 + 24.06570982441908 * d) * 15; // Greenwich, in degrees
+  const hourAngle = (sidereal + lon) * rad - rightAsc;
+  return Math.asin(Math.sin(lat * rad) * Math.sin(decl) + Math.cos(lat * rad) * Math.cos(decl) * Math.cos(hourAngle)) / rad;
+}
+
+// The sun this far under the horizon: dusk has set in and the street lamps matter.
+export const DARK_SUN_DEG = -3;
+
+/**
+ * Will part of a run be in the dark? True when it is dark at the start now, or will be
+ * `minutes` from now (a run that starts at sunset ends at night).
+ */
+export function darkForRun(lat, lon, date = new Date(), minutes = 45) {
+  return sunAltitude(lat, lon, date) < DARK_SUN_DEG || sunAltitude(lat, lon, new Date(date.getTime() + minutes * 60000)) < DARK_SUN_DEG;
+}

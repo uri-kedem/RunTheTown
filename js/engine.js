@@ -5,7 +5,7 @@
 // on the device, so coming back to the same city is instant.
 
 import { makeProjection, haversine } from './geo.js';
-import { fetchTiles, tilesFor, parseOverpass, fetchStops, applySidewalkTags } from './osm.js';
+import { fetchTiles, tilesFor, parseOverpass, fetchStops, fetchUnlit, applySidewalkTags, wayMarks } from './osm.js';
 import { vtTilesFor, fetchVectorTiles, osmFromVectorTiles } from './vectortiles.js';
 import { fetchElevationGrid, ElevationGrid } from './elevation.js';
 import { fetchLandcoverGrid } from './landcover.js';
@@ -114,6 +114,9 @@ export class RouteEngine {
       osm.stopPoints = stopPoints || [];
       if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
       if (stopPoints?.sidewalks?.length) applySidewalkTags(osm, stopPoints.sidewalks, proj); // the sidewalk tag, where mapped
+      // No answer about lights and crossings: the graph marks the junctions of main roads as
+      // likely lights, so a route is still steered round them.
+      osm.stopsUnknown = stopPoints === null;
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -144,7 +147,7 @@ export class RouteEngine {
     grid.addLandcover(landcover); // satellite fills what the map leaves out
     grid.finish();
     const graph = new Graph(osm, proj, grid, elev);
-    graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched
+    graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched (they are then estimated)
     const built = {
       lat, lon, radius, mode, proj, graph, grid, elev, source, tiles, failedTiles,
       stopsKnown: source === 'overpass' || stopPoints !== null,
@@ -172,6 +175,33 @@ export class RouteEngine {
     return points;
   }
 
+  // The ways the map says are unlit: from the device cache, else one query. Null when the
+  // servers do not answer.
+  async loadUnlit(lat, lon, radius) {
+    const key = `unlit1:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const last = this.unlitLast; // the answer of this session, for the next plan from the same start
+    if (last && haversine(last.lat, last.lon, lat, lon) + radius <= last.radius) return last.ways;
+    if (this.useCache) {
+      const hit = await tileCache.get(key);
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return hit.ways;
+    }
+    const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
+    const ways = await fetchUnlit(lat, lon, r, { fetchImpl: this.fetchImpl });
+    if (ways) this.unlitLast = { lat, lon, radius: r, ways };
+    if (ways && this.useCache) tileCache.put(key, { lat, lon, radius: r, ways });
+    return ways;
+  }
+
+  // A run after dark (prefs.dark): the unlit ways are laid on the area's graph, so the
+  // planner can prefer the lit ones. `asked` is the request started alongside the map
+  // download; it is waited for at most STOPS_GRACE_MS more (it is kept on the phone when
+  // it arrives later, for the next plan). The backup map carries the lit tag itself.
+  async lightUp(area, asked) {
+    if (!asked || area.source === 'overpass') return;
+    const ways = await Promise.race([asked, new Promise((r) => setTimeout(() => r(null), STOPS_GRACE_MS))]);
+    if (ways) area.graph.setUnlit(wayMarks(ways, area.proj));
+  }
+
   // Elevation is optional: on failure, routes are planned without hills.
   async loadElevation(lat, lon, radius, proj) {
     if (this.useCache) {
@@ -195,7 +225,9 @@ export class RouteEngine {
 
   async plan({ lat, lon, distanceKm, prefs, terrain, onStatus = () => {}, turnWeight = 1 }) {
     const D = Math.min(MAX_DISTANCE_KM, distanceKm) * 1000;
+    const unlit = prefs?.dark ? this.loadUnlit(lat, lon, radiusFor(D)).catch(() => null) : null;
     const area = await this.loadArea(lat, lon, radiusFor(D), onStatus);
+    await this.lightUp(area, unlit);
     const g = area.graph;
     g.turnWeight = turnWeight;
     const routes = await this.design(g, prefs, terrain, () => {
@@ -236,7 +268,9 @@ export class RouteEngine {
     const needed = Math.min(radiusFor(MAX_DISTANCE_KM * 1000) * 2, Math.max(1500, apart / 2 + 600 + 0.2 * (D - apart)));
     const cLat = (lat + toLat) / 2;
     const cLon = (lon + toLon) / 2;
+    const unlit = prefs?.dark ? this.loadUnlit(cLat, cLon, needed).catch(() => null) : null;
     const area = await this.loadArea(cLat, cLon, needed, onStatus);
+    await this.lightUp(area, unlit);
     const g = area.graph;
     g.turnWeight = turnWeight;
     const routes = await this.design(g, prefs, terrain, () => {

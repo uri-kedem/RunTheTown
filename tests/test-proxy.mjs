@@ -100,11 +100,37 @@ const fromHost = (a) => new URL(a.url).host;
   check(slow.status === 200 && slow.headers.get('X-Upstream') === 'overpass-api.de' && Date.now() - t < 2000, 'a mirror that hangs does not hold the answer up');
   globalThis.setTimeout = realTimeout;
 
+  // An answer that is JSON but says the server gave up half-way is not passed on or kept.
+  asked.length = 0;
+  upstream = async (url) => (url.includes('maps.mail.ru')
+    ? new Response(JSON.stringify({ elements: [], remark: 'runtime error: Query timed out in "query" at line 1 after 26 seconds.' }), { status: 200 })
+    : okJson({ elements: [{ type: 'node', id: 3 }] }));
+  const gaveUp = await post(query + ' remark');
+  check(gaveUp.status === 200 && (await gaveUp.json()).elements.length === 1 && gaveUp.headers.get('X-Upstream') === 'overpass-api.de', 'a mirror that ran out of time is passed over like one that refused');
+
   upstream = async () => new Response('down', { status: 521 });
   const none = await post(query + '  ');
   const err = await none.json();
   check(none.status === 502 && PUBLIC_OVERPASS.every((u) => err.error.includes(new URL(u).host)), 'no mirror answering: an error that says what each one said');
   check((await post('')).status === 502 && (await post('x'.repeat(20001))).status === 502, 'an empty or endless query is refused');
+
+  // An answer older than three days is asked for again; when no mirror answers, the old
+  // one is served rather than nothing (the lights of last week beat no lights).
+  const realNow = Date.now;
+  const lights = query + ' lights';
+  upstream = async () => okJson({ elements: [{ type: 'node', id: 7 }] });
+  await post(lights);
+  Date.now = () => realNow() + 4 * 86400 * 1000;
+  asked.length = 0;
+  upstream = async () => new Response('down', { status: 521 });
+  const stale = await post(lights);
+  check(stale.status === 200 && stale.headers.get('X-Cache') === 'STALE' && (await stale.json()).elements[0].id === 7 && asked.length === PUBLIC_OVERPASS.length, 'four days on with every mirror down: the older answer is served');
+  upstream = async () => okJson({ elements: [{ type: 'node', id: 8 }] });
+  const fresh = await post(lights);
+  check(fresh.headers.get('X-Cache') === 'MISS' && (await fresh.json()).elements[0].id === 8, 'and replaced as soon as a mirror answers again');
+  asked.length = 0;
+  check((await post(lights)).headers.get('X-Cache') === 'HIT' && asked.length === 0, 'the new answer is fresh for three days');
+  Date.now = realNow;
 }
 
 globalThis.fetch = realFetch;

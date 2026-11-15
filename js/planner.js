@@ -2,7 +2,7 @@
 // target distance, scores them against the runner's preferences and returns
 // the best few distinct options.
 
-import { HW } from './graph.js';
+import { HW, LIT } from './graph.js';
 import { bearingName, bearingNameFine, haversine } from './geo.js';
 import { buildCues } from './cues.js';
 
@@ -16,6 +16,15 @@ const COUNTRY_LANE_COST = 1.1; // an unpaved lane or track in country mode: a sm
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 export const ROUGH_COST = 3;
+// After dark (prefs.dark) a lit street beats an unlit park path (Uri's decision, Nov 15,
+// 2026): a way the map says has no street lighting loses everything the landscape gives
+// it and counts as twice its length, so a quiet street (1.0) or a tertiary road (1.25) is
+// taken before it (1.7), and only a primary road is worse. It also stops counting as
+// landscape: the "landscape runs only" rule looks at the lit park paths and promenades.
+export const UNLIT_COST = 2;
+// The share of a run that counts as landscape: by day its park paths, boardwalks and
+// promenades; after dark those of them the map does not say are unlit.
+const landOf = (s) => s.landFrac ?? s.promFrac;
 
 export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   const table = g.village ? VILLAGE_COST : prefs.quiet ? QUIET_COST : BASE_COST;
@@ -25,6 +34,7 @@ export function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
     if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
     if (g.country?.[e]) c = COUNTRY_LANE_COST; // country mode: the lanes are the village's streets
     else if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
+    else if (prefs.dark && g.lit?.[e] === LIT.NO) c *= UNLIT_COST; // after dark an unlit path is no landscape
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
       // promenades, boardwalks and park paths most of all: they are the point of the app.
@@ -195,13 +205,15 @@ export async function planLoops(g, opts) {
     // The seaside counts on top: when the beach is within reach, that is the run to offer,
     // even with a few plain kilometres to get there (Ramat Aviv: the Yarkon is 1 km
     // away, the sea 3 km — the beach promenade is the run).
-    return s.promFrac + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0);
+    // After dark only the lit promenade counts, and what is unlit counts against the run:
+    // the best-lit comes first.
+    return landOf(s) + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0) - (prefs.dark ? 2.5 * (s.unlitFrac || 0) : 0);
   };
   const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
   // Landscape runs only: when any run keeps LANDSCAPE_SHARE of its length on park paths,
   // boardwalks and promenades, nothing else is offered — a run that is 80% streets is no
   // fun, even if it touches the beach. Fewer than `count` options is fine then.
-  const scenicPool = prefs.sights ? [] : pool.filter((r) => r.stats.promFrac >= LANDSCAPE_SHARE).sort((a, b) => promenadeOf(b) - promenadeOf(a));
+  const scenicPool = prefs.sights ? [] : pool.filter((r) => landOf(r.stats) >= LANDSCAPE_SHARE).sort((a, b) => promenadeOf(b) - promenadeOf(a));
   if (scenicPool.length) {
     for (const limit of [0.5, 0.7]) {
       for (const r of scenicPool) {
@@ -362,7 +374,7 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
       if (Math.abs(length - D) / D > 0.08) continue;
       const route = { nodes, edges, length, type: 'loop', turnaround: u };
       route.stats = routeStats(g, route, D, prefs);
-      if (route.stats.repeatFrac > 0.25 || route.stats.promFrac < LANDSCAPE_SHARE || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
+      if (route.stats.repeatFrac > 0.25 || landOf(route.stats) < LANDSCAPE_SHARE || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
       if (loops.some((o) => overlap(g, route, o) > 0.6)) continue;
       route.score = scoreRoute(route.stats, prefs, terrain);
       loops.push(route);
@@ -702,12 +714,13 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 export function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
+  if (prefs.dark && g.lit?.[e] === LIT.NO) return 0; // nor is an unlit path after dark
   if (!prefs.green && !prefs.water) return Math.min(1, Math.max(g.green[e], g.water[e], g.prom[e]) + 0.5 * g.sea[e]);
   return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e] + 0.5 * g.sea[e]);
 }
 
 export function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0, unlit = 0, land = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -719,11 +732,13 @@ export function routeStats(g, route, D, prefs = {}) {
     sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
+    if (!(prefs.dark && g.lit?.[e] === LIT.NO)) land += L * g.prom[e];
     if (g.country?.[e]) country += L; // unpaved roads and tracks (country mode)
     else if (g.rough[e]) rough += L;
     if (g.hw[e] === HW.PATH || g.hw[e] === HW.LOCAL) quiet += L;
     if (g.hw[e] >= HW.SECONDARY) busy += L;
     if (g.hw[e] === HW.TRUNK) trunk += L;
+    if (g.lit?.[e] === LIT.NO) unlit += L;
     if (seen.has(e)) repeated += L;
     seen.add(e);
     const kind = g.stopOnArc(route.nodes[i], e, route.nodes[i + 1]);
@@ -751,8 +766,10 @@ export function routeStats(g, route, D, prefs = {}) {
     repeatFrac: repeated / total,
     scenicFrac: scenic / total,
     promFrac: prom / total,
+    landFrac: land / total, // what counts as landscape: the promenade share, after dark without its unlit part
     roughFrac: rough / total,
     countryFrac: country / total,
+    unlitFrac: unlit / total, // on ways the map says have no street lighting
     village: !!g.village,
     signals,
     crossings,
@@ -773,9 +790,10 @@ export function scoreRoute(s, prefs, terrain) {
   score -= 0.6 * s.busyFrac;
   if (s.village) score -= 2.0 * s.busyFrac - 0.8 * s.quietFrac; // a village run lives on the lanes
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
-  score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
+  score += 1.0 * landOf(s); // promenades, boardwalks, park paths: the best running there is
   score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
+  if (prefs.dark) score -= 2 * (s.unlitFrac || 0); // after dark, the lit way wins
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;
   if (prefs.avoidStops !== false) {
@@ -864,6 +882,9 @@ function describe(g, route, start, prefs = {}) {
   // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
   const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
   if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
+  // After dark, the stretch the map says has no street lighting (most ways say nothing).
+  const unlitM = prefs.dark ? Math.round(((s.unlitFrac || 0) * s.distance) / 50) * 50 : 0;
+  if (unlitM >= 100) highlights.push(`${unlitM >= 1000 ? `${(unlitM / 1000).toFixed(1)} km` : `${unlitM} m`} without street lights`);
   const countryM = Math.round((s.countryFrac * s.distance) / 50) * 50;
   if (countryM >= 100) highlights.push(`${countryM >= 1000 ? `${(countryM / 1000).toFixed(1)} km` : `${countryM} m`} on unpaved lanes and tracks`);
 
@@ -933,9 +954,10 @@ export function whereText(s, g) {
 
 export function stopsText(s) {
   const n = (k, one, many) => (k === 0 ? `no ${many}` : k === 1 ? `1 ${one}` : `${k} ${many}`);
-  // When the traffic-light source is down, the card simply says nothing about lights.
+  // When the traffic-light source is down, the card simply says nothing about lights: the
+  // junctions the graph guessed a light at are counted as the road crossings they surely are.
   const t = s.stopsKnown === false
-    ? n(s.crossings, 'road crossing', 'road crossings')
+    ? n(s.crossings + s.signals, 'road crossing', 'road crossings')
     : `${n(s.signals, 'traffic light', 'traffic lights')} · ${n(s.crossings, 'road crossing', 'road crossings')}`;
   return t[0].toUpperCase() + t.slice(1);
 }

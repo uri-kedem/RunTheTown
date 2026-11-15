@@ -212,6 +212,16 @@ export function makeMockMapBackend(dataset, { seaX = null, vtFailRate = 0, vtDow
     }
     // Overpass: the stops-only query, or a full tile query (backup path).
     const query = decodeURIComponent(String(opts.body || '').replace(/^data=/, ''));
+    if (query.includes('["lit"~"^(no|disused)$"]') && !query.includes('"highway"~')) {
+      // The unlit-ways query of a run after dark (the tiles drop the lit tag): the ways the
+      // map says are unlit, with their geometry. `dataset.lit` adds stretches of a way (a
+      // promenade unlit along one half only).
+      calls.unlit = (calls.unlit || 0) + 1;
+      if (overpass.deadServers?.includes(new URL(url).host) || rand() < (overpass.failRate || 0)) return { ok: false, status: 504, json: async () => ({}) };
+      const out = [...(dataset.lit || [])];
+      for (const el of dataset.elements) if (el.type === 'way' && el.nodes && /^(no|disused)$/.test(el.tags?.lit || '') && el.tags.highway) out.push({ ...el, geometry: el.nodes.map((id) => { const nd = nodes.get(id); return { lat: nd.lat, lon: nd.lon }; }) });
+      return { ok: true, status: 200, json: async () => ({ elements: out }) };
+    }
     if (query.includes('["sidewalk"]') || !query.includes('way["highway"')) {
       // The stops query: traffic lights and crossings, plus marina basins and sidewalk-tagged roads (with geometry).
       calls.stops++;

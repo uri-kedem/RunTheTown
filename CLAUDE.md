@@ -23,6 +23,7 @@ start of a session, and keep `docs/mvp-status.md` up to date when something mate
 npm test                                   # all Node test suites, about 12 minutes
 node tests/test-navigation.mjs             # one suite (each tests/test-*.mjs runs alone)
 python3 tests/ui/ui_nav.py                 # browser walk-through (needs: pip install playwright; playwright install chromium)
+node tests/ui/lights_check.mjs             # by hand, needs the network: guessed traffic lights against the mapped ones of a real city
 node build.mjs                             # build: bundle, version stamp, fingerprints, dist/
 npm run ios                                # build + plugin patch + project config + cap sync + open Xcode
 node build.mjs && node native/patch-plugins.mjs && node native/configure-ios.mjs && npx cap sync ios   # sync to Xcode without opening it
@@ -60,11 +61,11 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | --- | --- |
 | `js/app.js` | Every screen and button: map, search, planning sheet, results, the run screen, rerouting, the heading-up map, settings, profile, journal, cover page |
 | `js/planner.js` | Loops, out-and-backs, sightseeing tours; scoring, naming, the route cards; live reroutes (`rejoinRoute`, `backRoute`, `outbackReroute`) |
-| `js/graph.js` | The street graph, the cost tables that implement the running rules, Dijkstra with turn costs |
+| `js/graph.js` | The street graph, the cost tables that implement the running rules, Dijkstra with turn costs; traffic lights and crossings per arc (guessed at main junctions when none could be fetched), street lighting per stretch |
 | `js/navigation.js` | `Navigator` (follows GPS along a route, decides what to say), browser `Voice`, `GpsSource`, `SimulatedRun` |
 | `js/native.js` | iPhone adapters: `NativeVoice`, `NativeGps` (background), `NativeScreenLock`, `nativeShare` |
 | `js/engine.js` | `RouteEngine`: loads a map area and runs one planning request, with fallbacks |
-| `js/vectortiles.js`, `js/osm.js` | Map data in: OpenFreeMap vector tiles first, Overpass as fallback |
+| `js/vectortiles.js`, `js/osm.js` | Map data in: OpenFreeMap vector tiles first, Overpass as fallback, and Overpass for what the tiles leave out (traffic lights, crossings, the sidewalk tag; unlit ways for a run after dark) |
 | `js/landscape.js`, `js/landcover.js`, `js/elevation.js` | Parks, water, sea, promenades, built-up land and heights as grids |
 | `js/cues.js` | A path becomes turn-by-turn cues |
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
@@ -88,6 +89,9 @@ and `tour` (and "sightseeing"). Do not rename the code.
   offer only such routes. From an inland start, head for the sea or beach when it is in reach.
 - Never route on a road without a sidewalk, except a short necessary crossing (capped at 10%
   of the run and 300 m + 2% of the distance).
+- After dark, lit streets first: a way the map says has no street lighting stops counting as
+  landscape and a lit street is taken before it (Nov 15, 2026). By day, and where the map says
+  nothing about lighting, landscape first stands as written.
 - Quality over speed of planning. Laps at a track include the way there and back.
 - In a small village with few roads, use the least significant ways.
 - During a run: off route is a two-note chime and a quiet reroute, never "you're off route".

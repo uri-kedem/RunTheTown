@@ -29,7 +29,9 @@ const OVERPASS = [
 // Nominatim alone, whose usage policy asks for one; the others get the name.
 const AGENT = 'RunTheTown-proxy/1.0';
 // How long an answer is kept at the edge. Places and streets change slowly.
-const TTL = { search: 7 * 86400, nominatim: 30 * 86400, overpass: 3 * 86400 };
+// Street data is fresh for three days and kept for thirty: on a day the public servers do
+// not answer, an older copy of the streets and traffic lights is far better than none.
+const TTL = { search: 7 * 86400, nominatim: 30 * 86400, overpass: 3 * 86400, overpassKeep: 30 * 86400 };
 
 export default {
   async fetch(request, env) {
@@ -120,7 +122,8 @@ function withCors(res, cors, cacheState) {
 // Overpass: the query goes to the first mirror; when it has not answered in 6 s (or has
 // refused) the next one is asked as well, and the first good answer wins. The public
 // mirrors have slow hours: this keeps one slow server from costing the runner a minute.
-// Cached by the query text, so a city asked for twice costs the servers one request.
+// Cached by the query text, so a city asked for twice costs the servers one request; a
+// copy older than three days is refreshed, and still served when the refresh fails.
 const OVERPASS_HEDGE_MS = 6000;
 const OVERPASS_GIVE_UP_MS = 45000; // the app itself waits 75 s, then asks the mirrors directly
 async function overpass(data, cors, env) {
@@ -129,16 +132,20 @@ async function overpass(data, cors, env) {
   const cache = caches.default;
   const key = new Request(`https://cache.runthetown.invalid/overpass/${await sha256(data)}`, { method: 'GET' });
   const hit = await cache.match(key);
-  if (hit) return withCors(hit, cors, 'HIT');
+  const age = hit ? Date.now() - Number(hit.headers.get('X-Fetched') || 0) : Infinity;
+  if (hit && age < TTL.overpass * 1000) return withCors(hit, cors, 'HIT');
   const tried = []; // what each mirror said, for the error when none answered
   const stop = new AbortController();
   const giveUp = AbortSignal.any([stop.signal, AbortSignal.timeout(OVERPASS_GIVE_UP_MS)]);
   const ask = async (base) => {
     const res = await fetch(base, { method: 'POST', signal: giveUp, body: `data=${encodeURIComponent(data)}`, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': AGENT } });
     if (!res.ok) throw new Error(String(res.status));
-    const body = await res.text();
-    if (!body.slice(0, 200).trimStart().startsWith('{')) throw new Error('not JSON'); // an HTML error page
-    if (/"remark"\s*:\s*"[^"]*(error|timed out|out of memory)/i.test(body.slice(-600))) throw new Error('the server ran out of time');
+    // The answer is passed on as the bytes it came in: a city's lights can be several
+    // megabytes, and only its first and last lines need reading here.
+    const body = await res.arrayBuffer();
+    const text = new TextDecoder();
+    if (!text.decode(body.slice(0, 200)).trimStart().startsWith('{')) throw new Error('not JSON'); // an HTML error page
+    if (/"remark"\s*:\s*"[^"]*(error|timed out|out of memory)/i.test(text.decode(body.slice(-600)))) throw new Error('the server ran out of time');
     return { body, host: new URL(base).host };
   };
   const answer = await new Promise((resolve) => {
@@ -160,8 +167,9 @@ async function overpass(data, cors, env) {
     start();
   });
   stop.abort(); // the mirrors still working on it are let go
-  if (!answer) return json({ error: tried.join('; ') || 'no mirror answered' }, 502, cors);
-  const out = new Response(answer.body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${TTL.overpass}`, 'X-Upstream': answer.host } });
+  // No mirror answered: the older copy, when there is one, rather than nothing.
+  if (!answer) return hit ? withCors(hit, cors, 'STALE') : json({ error: tried.join('; ') || 'no mirror answered' }, 502, cors);
+  const out = new Response(answer.body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${TTL.overpassKeep}`, 'X-Upstream': answer.host, 'X-Fetched': String(Date.now()) } });
   await cache.put(key, out.clone());
   return withCors(out, cors, 'MISS');
 }

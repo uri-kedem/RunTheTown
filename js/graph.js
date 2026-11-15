@@ -2,7 +2,7 @@
 // attributes, a spatial index for snapping, and Dijkstra shortest paths.
 
 import { haversine } from './geo.js';
-import { STOP, stopKind, isBikeRoute, sidewalkKind } from './osm.js';
+import { STOP, stopKind, isBikeRoute, sidewalkKind, litKind, markAlong } from './osm.js';
 
 // Extra "virtual meters" for having to stop: a traffic light is worth a ~250 m
 // detour, a crosswalk ~50 m. Runners hate stopping more than running a bit more.
@@ -20,6 +20,8 @@ export const TURN_COST = { slight: 16, turn: 50, sharp: 120, uturn: 600 };
 // cross it are its through-roads (traffic, no sidewalk) and the run keeps to the lanes.
 export const VILLAGE_MADE_M = 40000;
 
+// Street lighting of a way, from the map's lit tag: most ways say nothing.
+export const LIT = { UNKNOWN: 0, YES: 1, NO: 2 };
 export const HW = { PATH: 0, STEPS: 1, LOCAL: 2, TERTIARY: 3, SECONDARY: 4, PRIMARY: 5, TRUNK: 6 };
 
 // Promenades, esplanades, boardwalks, quays and boulevards, in a few languages.
@@ -76,6 +78,7 @@ export class Graph {
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
     const ecountry = []; // 1 = an unpaved road or a dirt track: off unless the planner switches country mode on
     let countryWays = 0;
+    const elit = []; // LIT: what the map says about street lighting on the way
     const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
@@ -193,6 +196,10 @@ export class Graph {
       if (country) countryWays++;
       const prom = rough ? 0 : promenadeOf(road.tags);
       const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
+      // Street lighting: the way's own lit tag (the backup map carries it). With the map
+      // tiles, which drop it, the unlit ways are laid on afterwards (setUnlit).
+      const lk = litKind(road.tags);
+      const roadLit = lk === 'no' ? LIT.NO : lk === 'yes' ? LIT.YES : LIT.UNKNOWN;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
       const crossNodes = isCrossing ? [] : null;
       let prev = -1;
@@ -208,6 +215,7 @@ export class Graph {
           erough.push(rough);
           ecountry.push(country);
           ebike.push(bike);
+          elit.push(roadLit);
         }
         prev = cur;
       }
@@ -255,6 +263,7 @@ export class Graph {
     this.country = Uint8Array.from(ecountry);
     this.countryWays = countryWays; // unpaved roads and tracks parsed (used only in country mode)
     this.allowCountry = false; // RouteEngine.plan switches this on when the made network cannot carry the run
+    this.lit = Uint8Array.from(elit); // street lighting, where the map says (used for runs after dark)
     this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
@@ -320,7 +329,7 @@ export class Graph {
 
     this.buildSpatialIndex();
     this.attachSights(osm.sights || [], proj);
-    this.computeStops(osm.stops || new Map(), idx, crossWays, osm.stopPoints || [], proj);
+    this.computeStops(osm.stops || new Map(), idx, crossWays, osm.stopPoints || [], proj, !!osm.stopsUnknown);
     this.labelComponents();
     this.stopWeight = 1;
     this.turnWeight = 1;
@@ -364,7 +373,7 @@ export class Graph {
   //  - crosswalk: only when actually crossing (arriving via a footway/crossing),
   //    not when running along the road past a zebra;
   //  - unmarked junction with a busy road, entered from a smaller street: likely a crossing.
-  computeStops(stopsById, idx, crossWays, stopPoints = [], proj = null) {
+  computeStops(stopsById, idx, crossWays, stopPoints = [], proj = null, guess = false) {
     const n = this.n;
     const stop = new Uint8Array(n);
     for (const [id, kind] of stopsById) {
@@ -388,6 +397,14 @@ export class Graph {
     for (const [kind, nodes] of crossWays) {
       for (const v of nodes) if (onRoad[v] && stop[v] < kind) stop[v] = kind;
     }
+    // No word on lights at all (the servers did not answer): the junctions of main roads
+    // are taken to have one, so the route is still steered round them. The cards do not
+    // count these guesses as lights (see stopsText).
+    this.stopsGuessed = false;
+    if (guess) {
+      for (const v of this.likelySignals()) if (stop[v] < STOP.SIGNAL) stop[v] = STOP.SIGNAL;
+      this.stopsGuessed = true;
+    }
     this.stop = stop;
     this.arcKind = new Uint8Array(2 * this.m);
     this.arcStop = new Float32Array(2 * this.m);
@@ -405,6 +422,43 @@ export class Graph {
         this.arcStop[k] = STOP_COST[kind];
       }
     }
+  }
+
+  // Lays the ways the map says are unlit (osm.js wayMarks) on the graph: a stretch of
+  // street or path that runs along one for most of its length is unlit. A stretch that
+  // already knows its lighting keeps it.
+  setUnlit(marks) {
+    if (!marks) return 0;
+    let n = 0;
+    for (let e = 0; e < this.m; e++) {
+      if (this.lit[e] !== LIT.UNKNOWN) continue;
+      const a = this.ea[e], b = this.eb[e];
+      if (markAlong(marks, this.x[a], this.y[a], this.x[b], this.y[b]) === 'no') { this.lit[e] = LIT.NO; n++; }
+    }
+    return n;
+  }
+
+  // Where a traffic light is likely, read from the streets alone: a junction where two
+  // different main roads (tertiary or bigger) meet. Measured against the mapped lights of
+  // Tel Aviv, Berlin and Manhattan (tests/ui/lights_check.mjs): 65 to 98% of these
+  // junctions do have a light, and they are a quarter to a half of all the lights there
+  // are. Good enough to steer a route round the big junctions; not a count to show.
+  likelySignals() {
+    const names = new Map(); // node -> the main roads meeting there, by name
+    for (let e = 0; e < this.m; e++) {
+      const h = this.hw[e];
+      if (h < HW.TERTIARY) continue;
+      for (const v of [this.ea[e], this.eb[e]]) {
+        let at = names.get(v);
+        if (!at) names.set(v, (at = { roads: new Set() }));
+        at.roads.add(this.edgeName[e]);
+      }
+    }
+    const out = [];
+    for (const [v, at] of names) {
+      if (at.roads.size >= 2 && this.adjStart[v + 1] - this.adjStart[v] >= 3) out.push(v);
+    }
+    return out;
   }
 
   // Landmarks, each tied to the nearest walkable point within 120 m.

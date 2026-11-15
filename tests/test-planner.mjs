@@ -1,7 +1,9 @@
 // Offline engine test on a synthetic city. Run: node tests/test-planner.mjs
 import { RouteEngine } from '../js/engine.js';
 import { stopsText, LANDSCAPE_SHARE } from '../js/planner.js';
-import { parseOverpass } from '../js/osm.js';
+import { parseOverpass, fetchStops, fetchUnlit, gridBboxFor, litKind, STOP } from '../js/osm.js';
+import { LIT } from '../js/graph.js';
+import { sunAltitude, darkForRun } from '../js/geo.js';
 import { ElevationGrid } from '../js/elevation.js';
 import { syntheticOverpass, hillElevation, CENTER } from './synthetic-city.mjs';
 import { makeMockMapBackend } from './mock-vectortiles.mjs';
@@ -373,6 +375,123 @@ for (const km of [4, 8, 12]) {
   let refused = null;
   try { await engine.planOneWay({ lat: CENTER[0], lon: CENTER[1], toLat: CENTER[0] + 0.5, toLon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' }); } catch (err) { refused = err.message; }
   check(/further than the longest run/.test(refused || ''), `a finish 55 km away is refused: ${refused}`);
+}
+
+// Is it dark? The sun's height at a place and a moment, against known sunsets.
+{
+  const alt = (la, lo, t) => sunAltitude(la, lo, new Date(t));
+  console.log(`\nsun: Tel Aviv noon ${alt(32.08, 34.78, '2026-06-21T09:42:00Z').toFixed(1)}, sunset ${alt(32.08, 34.78, '2026-06-21T16:50:00Z').toFixed(1)}, midnight ${alt(32.08, 34.78, '2026-06-21T21:42:00Z').toFixed(1)}`);
+  check(Math.abs(alt(32.08, 34.78, '2026-06-21T09:42:00Z') - 81.4) < 0.6, 'midsummer noon in Tel Aviv: the sun 81 degrees up');
+  check(Math.abs(alt(32.08, 34.78, '2026-06-21T16:50:00Z') + 0.8) < 0.6 && Math.abs(alt(51.5, -0.12, '2026-12-21T08:04:00Z') + 0.8) < 0.6 && Math.abs(alt(-33.87, 151.21, '2026-11-15T08:35:00Z') + 0.8) < 0.6, 'on the horizon at the published sunset and sunrise (Tel Aviv, London, Sydney)');
+  check(!darkForRun(32.08, 34.78, new Date('2026-06-21T09:42:00Z'), 60), 'a midday run is not in the dark');
+  check(darkForRun(32.08, 34.78, new Date('2026-06-21T21:00:00Z'), 30), 'a run at midnight is');
+  check(darkForRun(32.08, 34.78, new Date('2026-06-21T16:30:00Z'), 60) && !darkForRun(32.08, 34.78, new Date('2026-06-21T16:30:00Z'), 10), 'an hour\'s run that starts 20 minutes before sunset ends in the dark; ten minutes do not');
+}
+
+// The lights request: a box on a fixed grid, so runners near each other ask the same
+// question (and the proxy answers the second from its cache), with the lighting tags.
+{
+  const a = gridBboxFor(32.0632, 34.7706, 4000);
+  const b = gridBboxFor(32.0611, 34.7689, 4000);
+  const [s, w, n, e] = a.split(',').map(Number);
+  check(a === b, `starts 300 m apart ask for the same box (${a})`);
+  check(s <= 32.0632 - 4000 / 110574 && n >= 32.0632 + 4000 / 110574 && w <= 34.7706 - 0.042 && e >= 34.7706 + 0.042 && n - s < 0.13, 'the box holds the whole area, and little more');
+  check(gridBboxFor(-33.8712, 151.2046, 3000) === gridBboxFor(-33.8690, 151.2060, 3000) && gridBboxFor(40.7501, -73.9861, 3000) === gridBboxFor(40.7513, -73.9849, 3000), 'south of the equator and west of Greenwich too');
+  let asked = '';
+  const answer = { elements: [
+    { type: 'node', id: 1, lat: 32.06, lon: 34.77, tags: { highway: 'traffic_signals' } },
+    { type: 'way', id: 2, tags: { highway: 'footway', lit: 'no' }, geometry: [{ lat: 32.06, lon: 34.77 }, { lat: 32.061, lon: 34.77 }] },
+    { type: 'way', id: 3, tags: { highway: 'path', lit: 'yes' }, geometry: [{ lat: 32.062, lon: 34.77 }, { lat: 32.063, lon: 34.77 }] },
+    { type: 'way', id: 4, tags: { highway: 'path', lit: 'unknown' }, geometry: [{ lat: 32.064, lon: 34.77 }, { lat: 32.065, lon: 34.77 }] },
+  ] };
+  const fetchImpl = async (url, opts) => { asked = decodeURIComponent(String(opts.body).replace(/^data=/, '')); return { ok: true, status: 200, json: async () => answer }; };
+  const stops = await fetchStops(32.0632, 34.7706, 4000, { fetchImpl });
+  check(asked.includes(`[bbox:${a}]`) && asked.includes('traffic_signals') && !asked.includes('"lit"'), 'the lights request names the grid box, and asks nothing about lighting (a daytime runner does not pay for it)');
+  check(stops.length === 1 && stops[0][2] === STOP.SIGNAL, 'the lights are read from the answer');
+  const unlit = await fetchUnlit(32.0632, 34.7706, 4000, { fetchImpl });
+  check(asked.includes(`[bbox:${a}]`) && asked.includes('way["highway"]["lit"~"^(no|disused)$"]') && !/yes/.test(asked), 'the after-dark request asks for the unlit ways of the same box, and not for the many lit ones');
+  check(unlit.length === 1 && unlit[0].no === true && unlit[0].pts.length === 2, 'only the ways said to be unlit are read from its answer');
+  check((await fetchUnlit(32.0632, 34.7706, 4000, { fetchImpl: async () => ({ ok: false, status: 504 }) })) === null, 'no answer: null, not an exception');
+  check(litKind({ lit: 'no' }) === 'no' && litKind({ lit: '24/7' }) === 'yes' && litKind({ lit: 'yes' }) === 'yes' && litKind({}) === null && litKind({ lit: 'unknown' }) === null, 'lit tag values are read');
+}
+
+// After dark: north of the start the river promenade has no street lighting (the map says
+// so); of the rest, and of the east-bank path, nothing is said. By day the run goes
+// either way; after dark it keeps off the unlit stretch, says so when it cannot, and is
+// still a landscape run.
+{
+  const cityAtNight = syntheticOverpass();
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const unlit = [];
+  for (let y = 500; y <= 3500; y += 50) unlit.push({ lat: CENTER[0] + y / ky, lon: CENTER[1] + 1950 / kx });
+  cityAtNight.lit = [{ type: 'way', id: 990001, tags: { highway: 'footway', lit: 'no' }, geometry: unlit }];
+  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(cityAtNight), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
+  const start = { lat: CENTER[0] + 500 / ky, lon: CENTER[1] + 1900 / kx }; // by the river, where the unlit stretch begins
+  const fetched = eng.fetchImpl.calls;
+  await eng.plan({ ...start, distanceKm: 8, prefs: {}, terrain: 'any' });
+  check(!fetched.unlit, 'a daytime plan does not ask about street lighting');
+  const night = await eng.plan({ ...start, distanceKm: 8, prefs: { dark: true }, terrain: 'any' });
+  check(fetched.unlit === 1, 'a plan after dark asks once, on the map already loaded');
+  // The same daytime plan again, now that the graph knows the unlit stretch: the cards
+  // can be measured against it, and the plan itself must not change with the knowledge.
+  const day = await eng.plan({ ...start, distanceKm: 8, prefs: {}, terrain: 'any' });
+  const g = eng.area.graph;
+  const count = (pick) => { let k = 0; for (let e2 = 0; e2 < g.m; e2++) if (pick(e2, g.names[g.edgeName[e2]]?.name || '', (g.y[g.ea[e2]] + g.y[g.eb[e2]]) / 2 + 500)) k++; return k; };
+  const north = count((e2, nm, y) => nm === 'River Promenade' && y > 600);
+  const south = count((e2, nm, y) => nm === 'River Promenade' && y < 400);
+  check(north > 20 && count((e2, nm, y) => nm === 'River Promenade' && y > 600 && g.lit[e2] === LIT.NO) >= 0.95 * north, 'the unlit stretch of the promenade is known as unlit, though the map tiles carry no such tag');
+  check(south > 20 && count((e2, nm, y) => nm === 'River Promenade' && y < 400 && g.lit[e2] !== LIT.UNKNOWN) === 0, 'the rest of the promenade, of which the map says nothing, stays unknown');
+  check(count((e2, nm) => /^(Oak|Elm) Street/.test(nm)) > 500 && count((e2, nm) => /^(Oak|Elm) Street|Avenue|East Bank Path/.test(nm) && g.lit[e2] !== LIT.UNKNOWN) === 0, 'the streets and the other bank stay unknown');
+  check(count((e2, nm) => !nm && g.lit[e2] === LIT.NO) === 0, 'a connector or footbridge that only touches the unlit promenade does not take its tag');
+  const share = (rs) => rs.reduce((a, r) => a + r.stats.unlitFrac * r.distance, 0) / rs.reduce((a, r) => a + r.distance, 0);
+  const line = (r) => r.highlights.find((h) => /without street lights/.test(h));
+  console.log(`\nby the river 8 km, by day:     ${day.map((r) => `${r.name} unlit ${(r.stats.unlitFrac * 100) | 0}% prom ${(r.stats.promFrac * 100) | 0}%`).join(' | ')}`);
+  console.log(`by the river 8 km, after dark: ${night.map((r) => `${r.name} unlit ${(r.stats.unlitFrac * 100) | 0}% prom ${(r.stats.promFrac * 100) | 0}% ${line(r) ? `[${line(r)}]` : ''}`).join(' | ')}`);
+  check(share(day) > 0.1 && day.some((r) => r.stats.unlitFrac > 0.25), `by day the unlit stretch is run like any other (${(share(day) * 100) | 0}% of the cards)`);
+  check(night[0].stats.unlitFrac < 0.05 && share(night) < share(day) * 0.75, `after dark the first card keeps off it and the others have less of it (${(share(night) * 100) | 0}%; first card ${(night[0].stats.unlitFrac * 100) | 0}%)`);
+  check(night.every((r, i) => !i || r.stats.unlitFrac >= night[i - 1].stats.unlitFrac - 0.02), 'the cards come in order of how lit they are, when all are landscape runs');
+  check(night.every((r) => r.stats.landFrac >= LANDSCAPE_SHARE), 'and every option is still a landscape run, on the lit promenade alone');
+  check(day.every((r) => !line(r)), 'by day no card speaks of street lights');
+  check(night.every((r) => (r.stats.unlitFrac * r.distance >= 125) === !!line(r)), 'after dark a card with an unlit stretch says how long it is');
+}
+
+// After dark a lit street beats an unlit park path (Uri's decision): here both river banks
+// are unlit from end to end. By day the run is on them, as the landscape rule wants;
+// after dark it is on the streets, and what little is left unlit is said on the card.
+{
+  const darkBanks = syntheticOverpass();
+  for (const el of darkBanks.elements) if (el.type === 'way' && /^(River Promenade|East Bank Path)$/.test(el.tags?.name || '')) el.tags = { ...el.tags, lit: 'no' };
+  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(darkBanks), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
+  const kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  const start = { lat: CENTER[0], lon: CENTER[1] + 1900 / kx };
+  const night = await eng.plan({ ...start, distanceKm: 8, prefs: { dark: true }, terrain: 'any' });
+  const day = await eng.plan({ ...start, distanceKm: 8, prefs: {}, terrain: 'any' });
+  const line = (r) => r.highlights.find((h) => /without street lights/.test(h));
+  console.log(`\nunlit river banks, by day:     ${day.map((r) => `${r.name} unlit ${(r.stats.unlitFrac * 100) | 0}% prom ${(r.stats.promFrac * 100) | 0}%`).join(' | ')}`);
+  console.log(`unlit river banks, after dark: ${night.map((r) => `${r.name} unlit ${(r.stats.unlitFrac * 100) | 0}% prom ${(r.stats.promFrac * 100) | 0}% ${line(r) ? `[${line(r)}]` : ''}`).join(' | ')}`);
+  check(day.every((r) => r.stats.promFrac >= LANDSCAPE_SHARE && r.stats.unlitFrac > 0.5), 'by day every option runs the river banks, lit or not');
+  check(night.length >= 2 && night.every((r) => r.stats.unlitFrac < 0.1), `after dark every option keeps to the streets (${night.map((r) => `${(r.stats.unlitFrac * 100) | 0}%`).join(', ')} unlit)`);
+  check(night.every((r) => Math.abs(r.distance - 8000) / 8000 < 0.12 && r.stats.trunkFrac * r.distance <= 460), 'they are still 8 km runs, and none takes a road without a sidewalk to stay in the light');
+  check(night.every((r) => r.stats.landFrac < 0.3), 'an unlit promenade does not count as landscape after dark');
+}
+
+// No answer about traffic lights (the street-data servers are down): the junctions of the
+// avenues are taken to have one, so routes are still steered round them; the cards do not
+// count a guess as a light.
+{
+  const eng = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass(), { overpass: { failRate: 1 } }), fetchElevationImpl: fakeElev, useCache: false, scanPauseMs: 0, cityScan: true });
+  const rs = await eng.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
+  const g = eng.area.graph;
+  const guessed = [];
+  for (let v = 0; v < g.n; v++) if (g.stop[v] === STOP.SIGNAL) guessed.push(v);
+  const avenuesAt = (v) => { const set = new Set(); for (let k = g.adjStart[v]; k < g.adjStart[v + 1]; k++) { const nm = g.names[g.edgeName[g.adjEdge[k]]]?.name || ''; if (/Avenue|Boulevard/.test(nm)) set.add(nm); } return set.size; };
+  console.log(`\nno lights data: ${guessed.length} junctions taken to have a light | ${rs.map((r) => `${r.name}: ${stopsText(r.stats)}`).join(' | ')}`);
+  check(rs.stopsUnknown && g.stopsGuessed === true && g.stopsKnown === false, 'the plan says the lights are unknown, and the graph that it guessed');
+  check(guessed.length >= 10 && guessed.every((v) => avenuesAt(v) >= 2), `the guesses are the junctions where two main roads meet (${guessed.length})`);
+  check(rs.every((r) => !/traffic light/.test(stopsText(r.stats)) && r.highlights.every((h) => !/traffic light/.test(h))), 'no card counts traffic lights');
+  check(rs.every((r) => stopsText(r.stats) === (r.stats.crossings + r.stats.signals === 0 ? 'No road crossings' : r.stats.crossings + r.stats.signals === 1 ? '1 road crossing' : `${r.stats.crossings + r.stats.signals} road crossings`)), 'a guessed light on the way counts as the road crossing it is');
+  const known = await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 6, prefs: {}, terrain: 'any' });
+  check(!known.stopsUnknown && engine.area.graph.stopsGuessed === false && known.every((r) => /traffic light/.test(stopsText(r.stats))), 'with the lights fetched nothing is guessed');
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nAll checks passed');

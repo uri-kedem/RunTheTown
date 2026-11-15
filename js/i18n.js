@@ -462,6 +462,7 @@ export const HE_TEXT = {
   '{n}% on unpaved lanes and tracks': '{n}% על דרכי עפר ושבילים',
   '{d} on unpaved lanes and tracks': '{d} על דרכי עפר ושבילים',
   '{d} on a road with no sidewalk': '{d} על כביש ללא מדרכה',
+  '{d} without street lights': '{d} ללא תאורת רחוב',
   'Passes {n} sight: {a}': 'עובר ליד אתר אחד: {a}',
   'Passes {n} sights: {a}': 'עובר ליד {n} אתרים: {a}',
   ' +{n} more': ' +{n} נוספים',

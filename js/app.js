@@ -3,7 +3,7 @@
 import { RouteEngine, MAX_DISTANCE_KM, packRadius } from './engine.js';
 import { downloadPack, offlinePackAt } from './offline.js';
 import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
-import { haversine } from './geo.js';
+import { haversine, darkForRun } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue, spokenLength } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
@@ -58,6 +58,14 @@ let busy = false; // a route search is running
 const isDesktop = () => window.matchMedia('(min-width: 900px)').matches;
 
 // ---------- Map ----------
+// What the planner is asked for: the runner's choices, and whether part of the run will be
+// in the dark (the sun down at the start now, or before the run is over at an easy pace):
+// after dark the planner prefers ways with street lighting.
+function planPrefs() {
+  const minutes = Math.min(240, Math.max(20, (state.distanceKm || 5) * 7));
+  return { ...state.prefs, dark: !!state.start && darkForRun(state.start.lat, state.start.lon, new Date(), minutes) };
+}
+
 // Night: the dark style between 19:00 and 06:00 when the setting allows it.
 const isNight = () => { const h = new Date().getHours(); return h >= 19 || h < 6; };
 const nightMap = () => !!settings.darkMap && isNight();
@@ -683,7 +691,7 @@ $('goBtn').addEventListener('click', async () => {
       lat: state.start.lat,
       lon: state.start.lon,
       distanceKm: state.distanceKm,
-      prefs: { ...state.prefs },
+      prefs: planPrefs(),
       terrain: state.terrain,
       onStatus: status,
     };
@@ -724,7 +732,7 @@ function showRoutes(routes, { keep = false } = {}) {
   $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}${oneWay && state.dest ? ` to ${state.dest.label}` : ''}`;
   // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
   const note = $('resultsNote');
-  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => r.stats?.promFrac >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
+  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';
@@ -860,7 +868,7 @@ function readLapsKm() {
   if (!ok && raw !== '') msg.textContent = `Enter a distance between ${min} and ${max} ${U.unit}`;
   else if (ok && askedPlace?.ring && state.start) {
     // What that distance means here: the real plan (laps, plus the way there and back).
-    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: { ...state.prefs } });
+    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: planPrefs() });
     // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
     msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${inUnits(r.highlights[0])} · ${inUnits(r.highlights[1])} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
   }
@@ -894,7 +902,7 @@ async function planLaps() {
   }
   busy = false;
   status(null);
-  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
+  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: planPrefs() });
   if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
   route.place.wantedKm = km;
   // The lap run is the one route on offer; the spots stay on the map.

@@ -502,6 +502,7 @@ const HE_TEXT = {
   '{n}% on unpaved lanes and tracks': '{n}% על דרכי עפר ושבילים',
   '{d} on unpaved lanes and tracks': '{d} על דרכי עפר ושבילים',
   '{d} on a road with no sidewalk': '{d} על כביש ללא מדרכה',
+  '{d} without street lights': '{d} ללא תאורת רחוב',
   'Passes {n} sight: {a}': 'עובר ליד אתר אחד: {a}',
   'Passes {n} sights: {a}': 'עובר ליד {n} אתרים: {a}',
   ' +{n} more': ' +{n} נוספים',
@@ -878,6 +879,35 @@ function bearingNameFine(deg) {
   return COMPASS16[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
 }
 
+/**
+ * The sun's height above the horizon, in degrees, at a place and a moment (good to about
+ * half a degree, which is all a "is it dark?" question needs).
+ */
+function sunAltitude(lat, lon, date = new Date()) {
+  const rad = Math.PI / 180;
+  const d = date.getTime() / 86400000 - 10957.5; // days since noon on Jan 1, 2000 (UTC)
+  const meanLon = 280.46 + 0.9856474 * d;
+  const anomaly = (357.528 + 0.9856003 * d) * rad;
+  const ecliptic = (meanLon + 1.915 * Math.sin(anomaly) + 0.02 * Math.sin(2 * anomaly)) * rad;
+  const tilt = (23.439 - 0.0000004 * d) * rad;
+  const rightAsc = Math.atan2(Math.cos(tilt) * Math.sin(ecliptic), Math.cos(ecliptic));
+  const decl = Math.asin(Math.sin(tilt) * Math.sin(ecliptic));
+  const sidereal = (18.697374558 + 24.06570982441908 * d) * 15; // Greenwich, in degrees
+  const hourAngle = (sidereal + lon) * rad - rightAsc;
+  return Math.asin(Math.sin(lat * rad) * Math.sin(decl) + Math.cos(lat * rad) * Math.cos(decl) * Math.cos(hourAngle)) / rad;
+}
+
+// The sun this far under the horizon: dusk has set in and the street lamps matter.
+const DARK_SUN_DEG = -3;
+
+/**
+ * Will part of a run be in the dark? True when it is dark at the start now, or will be
+ * `minutes` from now (a run that starts at sunset ends at night).
+ */
+function darkForRun(lat, lon, date = new Date(), minutes = 45) {
+  return sunAltitude(lat, lon, date) < DARK_SUN_DEG || sunAltitude(lat, lon, new Date(date.getTime() + minutes * 60000)) < DARK_SUN_DEG;
+}
+
 // ---- osm.js ----
 // Fetches runnable paths and landscape features from OpenStreetMap (Overpass API).
 // fetchTiles downloads raw JSON per tile (cacheable); parseOverpass turns it into data.
@@ -950,6 +980,18 @@ function bboxFor(lat, lon, radius) {
   const dLat = radius / 110574;
   const dLon = radius / (111320 * Math.cos((lat * Math.PI) / 180));
   return toBbox(lat - dLat, lon - dLon, lat + dLat, lon + dLon);
+}
+
+// The same box with its sides moved out to a fixed grid (0.02 degrees, about 2 km): runners
+// who start near each other then ask for exactly the same box, so the answer one of them
+// got is the answer the proxy has ready for the next.
+const STOPS_GRID_DEG = 0.02;
+function gridBboxFor(lat, lon, radius, step = STOPS_GRID_DEG) {
+  const dLat = radius / 110574;
+  const dLon = radius / (111320 * Math.cos((lat * Math.PI) / 180));
+  const down = (v) => Math.floor(v / step + 1e-9) * step;
+  const up = (v) => Math.ceil(v / step - 1e-9) * step;
+  return [down(lat - dLat), down(lon - dLon), up(lat + dLat), up(lon + dLon)].map((v) => v.toFixed(2)).join(',');
 }
 
 // Grid tiles covering the circle (lat, lon, radius), nearest first.
@@ -1130,41 +1172,88 @@ function sidewalkKind(tags = {}) {
   return null;
 }
 
-// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
-// no sidewalk tag): a road whose nodes mostly lie within ~12 m of a tagged way takes its answer.
-function applySidewalkTags(osm, sidewalks, proj) {
-  if (!sidewalks?.length) return 0;
-  const CELL = 12;
-  const key = (x, y) => `${Math.round(x / CELL)}:${Math.round(y / CELL)}`;
+// What the lit tag says: 'no' (no street lighting), 'yes' (lit at night), or null when the
+// tag is missing or unclear.
+function litKind(tags = {}) {
+  const v = tags.lit;
+  if (!v) return null;
+  if (/^(no|disused)$/.test(v)) return 'no';
+  if (/^(yes|24\/7|automatic|limited|sunset-sunrise|dusk-dawn)$/.test(v)) return 'yes';
+  return null;
+}
+
+// Tags the tiles leave out (sidewalk, lit) come from Overpass as ways with their geometry:
+// [{ no: true|false, pts: [[lat, lon], …] }]. They are laid on a grid of 12 m cells, each
+// cell a tagged way passes through holding its answer ('no' or 'yes'); a tile road or a
+// stretch of one is then asked what the cells along it say.
+const MARK_CELL = 12;
+const markKey = (x, y) => `${Math.round(x / MARK_CELL)}:${Math.round(y / MARK_CELL)}`;
+function wayMarks(ways, proj) {
+  if (!ways?.length) return null;
   const marks = new Map(); // cell -> 'no' | 'yes'
-  for (const sw of sidewalks) {
-    const xy = sw.pts.map(([la, lo]) => proj.toXY(la, lo));
+  for (const w of ways) {
+    const xy = w.pts.map(([la, lo]) => proj.toXY(la, lo));
     for (let i = 0; i < xy.length; i++) {
       const [x0, y0] = xy[i];
-      marks.set(key(x0, y0), sw.no ? 'no' : 'yes');
+      marks.set(markKey(x0, y0), w.no ? 'no' : 'yes');
       if (i + 1 < xy.length) {
         const [x1, y1] = xy[i + 1];
-        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (CELL / 2));
-        for (let k = 1; k < steps; k++) marks.set(key(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), sw.no ? 'no' : 'yes');
+        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (MARK_CELL / 2));
+        for (let k = 1; k < steps; k++) marks.set(markKey(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), w.no ? 'no' : 'yes');
       }
     }
   }
+  return marks;
+}
+
+// The answer of the cell at (x, y) or of one next to it: a tagged way within ~12 m.
+function markAt(marks, x, y) {
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const hit = marks.get(markKey(x + dx * MARK_CELL, y + dy * MARK_CELL));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Feels a line of points (a point every ~10 m between them), counting the answers: a
+// side path that merely touches a tagged way at one end is mostly out of its reach.
+function feelLine(marks, xy, tally) {
+  let prev = null;
+  for (const [x, y] of xy) {
+    if (prev) {
+      const steps = Math.ceil(Math.hypot(x - prev[0], y - prev[1]) / 10);
+      for (let k = 1; k < steps; k++) tally(markAt(marks, prev[0] + ((x - prev[0]) * k) / steps, prev[1] + ((y - prev[1]) * k) / steps));
+    }
+    tally(markAt(marks, x, y));
+    prev = [x, y];
+  }
+}
+
+/** What the marks say along the straight stretch (x0, y0)-(x1, y1): 'no', 'yes' or null. */
+function markAlong(marks, x0, y0, x1, y1) {
+  let no = 0, yes = 0, cnt = 0;
+  feelLine(marks, [[x0, y0], [x1, y1]], (hit) => { cnt++; if (hit === 'no') no++; else if (hit === 'yes') yes++; });
+  return no / cnt > 0.5 ? 'no' : yes / cnt > 0.5 ? 'yes' : null;
+}
+
+// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
+// no sidewalk tag): a bigger road that runs within ~12 m of a tagged way for most of its
+// length takes its answer. (Street lighting is read per stretch instead: see Graph.)
+function applySidewalkTags(osm, sidewalks, proj) {
+  const marks = wayMarks(sidewalks, proj);
+  if (!marks) return 0;
   let stamped = 0;
   for (const road of osm.roads) {
     if (road.tags.sidewalk || !/^(tertiary|secondary|primary|trunk|unclassified)/.test(road.tags.highway)) continue;
     let no = 0, yes = 0, cnt = 0;
+    const xy = [];
     for (const id of road.nodes) {
       const p = osm.nodes.get(id);
-      if (!p) continue;
-      const [x, y] = proj.toXY(p[0], p[1]);
-      cnt++;
-      let hit = null;
-      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = marks.get(key(x + dx * CELL, y + dy * CELL)) || null;
-      if (hit === 'no') no++;
-      else if (hit === 'yes') yes++;
+      if (p) xy.push(proj.toXY(p[0], p[1]));
     }
-    if (cnt && no / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
-    else if (cnt && yes / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
+    feelLine(marks, xy, (hit) => { cnt++; if (hit === 'no') no++; else if (hit === 'yes') yes++; });
+    if (cnt && no / cnt > 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
+    else if (cnt && yes / cnt > 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
   }
   return stamped;
 }
@@ -1242,19 +1331,9 @@ function parseOverpass(json) {
   return { nodes, stops, roads, features };
 }
 
-/**
- * Traffic lights and crosswalks for an area (vector tiles don't carry them).
- * One small query, raced on the two main servers. Best-effort: returns
- * [[lat, lon, kind], ...] or null if the servers don't answer in time.
- */
-async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
-  const sel = long
-    ? 'node["highway"="traffic_signals"];'
-    : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
-  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
-  // quays and pontoons around them are not running routes.
-  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
+// One small Overpass question, asked of the first server (our proxy, or the two main
+// public ones side by side): its JSON, or an exception when none answers in time.
+async function askOverpass(query, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -1275,9 +1354,27 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
       clearTimeout(timer);
     }
   };
+  const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
+  ctrls.forEach((c) => c.abort());
+  return json;
+}
+
+/**
+ * Traffic lights and crosswalks for an area (vector tiles don't carry them), with what else
+ * the tiles leave out: marina basins and the sidewalk tag of the bigger roads. One small
+ * query on a box of the fixed grid. Best-effort: returns [[lat, lon, kind], ...] (with
+ * .docks and .sidewalks) or null if the servers don't answer in time.
+ */
+async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const sel = long
+    ? 'node["highway"="traffic_signals"];'
+    : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
+  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
+  // quays and pontoons around them are not running routes.
+  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
+  const query = `[out:json][timeout:25][bbox:${gridBboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
   try {
-    const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
-    ctrls.forEach((c) => c.abort());
+    const json = await askOverpass(query, { fetchImpl, timeoutMs });
     const out = [];
     const docks = [];
     const sidewalks = []; // [{ no: true|false, pts: [[lat, lon], …] }] from the sidewalk tag
@@ -1296,6 +1393,29 @@ async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, t
     out.docks = docks;
     out.sidewalks = sidewalks;
     return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The ways an area's map says have no street lighting (the tiles drop the lit tag), for a
+ * run after dark: [{ no: true, pts: [[lat, lon], …] }], or null if the servers don't
+ * answer in time. Asked only when it is dark, and apart from the lights, because in a city
+ * mapped as thoroughly as Berlin it is a big answer (about 11 MB there; a fraction of a
+ * megabyte in most places). The ways mapped as lit are not asked for: they change no
+ * route (a way is taken to be lit unless the map says otherwise) and there are five times
+ * as many of them.
+ */
+async function fetchUnlit(lat, lon, radius, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const query = `[out:json][timeout:25][bbox:${gridBboxFor(lat, lon, radius)}];way["highway"]["lit"~"^(no|disused)$"];out geom qt;`;
+  try {
+    const json = await askOverpass(query, { fetchImpl, timeoutMs });
+    const ways = [];
+    for (const el of json.elements || []) {
+      if (el.type === 'way' && el.geometry && litKind(el.tags) === 'no') ways.push({ no: true, pts: el.geometry.filter(Boolean).map((p) => [p.lat, p.lon]) });
+    }
+    return ways;
   } catch {
     return null;
   }
@@ -2651,6 +2771,8 @@ const TURN_COST = { slight: 16, turn: 50, sharp: 120, uturn: 600 };
 // cross it are its through-roads (traffic, no sidewalk) and the run keeps to the lanes.
 const VILLAGE_MADE_M = 40000;
 
+// Street lighting of a way, from the map's lit tag: most ways say nothing.
+const LIT = { UNKNOWN: 0, YES: 1, NO: 2 };
 const HW = { PATH: 0, STEPS: 1, LOCAL: 2, TERTIARY: 3, SECONDARY: 4, PRIMARY: 5, TRUNK: 6 };
 
 // Promenades, esplanades, boardwalks, quays and boulevards, in a few languages.
@@ -2707,6 +2829,7 @@ class Graph {
     const erough = []; // 1 = a bare path of unknown surface (likely a trail), used only when nothing better exists
     const ecountry = []; // 1 = an unpaved road or a dirt track: off unless the planner switches country mode on
     let countryWays = 0;
+    const elit = []; // LIT: what the map says about street lighting on the way
     const ebike = []; // 1 = part of a bike route (shared foot-and-bike path, cycleway open to walkers)
     this.names = []; // [{ name, local }], indexed by edge name id
     const nameIdx = new Map();
@@ -2824,6 +2947,10 @@ class Graph {
       if (country) countryWays++;
       const prom = rough ? 0 : promenadeOf(road.tags);
       const bike = !rough && (road.tags.bike || isBikeRoute(road.tags.highway, road.tags.bicycle, road.tags.foot)) ? 1 : 0;
+      // Street lighting: the way's own lit tag (the backup map carries it). With the map
+      // tiles, which drop it, the unlit ways are laid on afterwards (setUnlit).
+      const lk = litKind(road.tags);
+      const roadLit = lk === 'no' ? LIT.NO : lk === 'yes' ? LIT.YES : LIT.UNKNOWN;
       const isCrossing = road.tags.footway === 'crossing' || road.tags.cycleway === 'crossing';
       const crossNodes = isCrossing ? [] : null;
       let prev = -1;
@@ -2839,6 +2966,7 @@ class Graph {
           erough.push(rough);
           ecountry.push(country);
           ebike.push(bike);
+          elit.push(roadLit);
         }
         prev = cur;
       }
@@ -2886,6 +3014,7 @@ class Graph {
     this.country = Uint8Array.from(ecountry);
     this.countryWays = countryWays; // unpaved roads and tracks parsed (used only in country mode)
     this.allowCountry = false; // RouteEngine.plan switches this on when the made network cannot carry the run
+    this.lit = Uint8Array.from(elit); // street lighting, where the map says (used for runs after dark)
     this.bike = Uint8Array.from(ebike); // bike routes: continuous made paths (promenades, park paths)
     this.nodeRough = new Uint8Array(n).fill(1); // 1 = the node sits on bare paths only (start points avoid these)
     for (let e = 0; e < m; e++) if (!erough[e]) this.nodeRough[ea[e]] = this.nodeRough[eb[e]] = 0;
@@ -2951,7 +3080,7 @@ class Graph {
 
     this.buildSpatialIndex();
     this.attachSights(osm.sights || [], proj);
-    this.computeStops(osm.stops || new Map(), idx, crossWays, osm.stopPoints || [], proj);
+    this.computeStops(osm.stops || new Map(), idx, crossWays, osm.stopPoints || [], proj, !!osm.stopsUnknown);
     this.labelComponents();
     this.stopWeight = 1;
     this.turnWeight = 1;
@@ -2995,7 +3124,7 @@ class Graph {
   //  - crosswalk: only when actually crossing (arriving via a footway/crossing),
   //    not when running along the road past a zebra;
   //  - unmarked junction with a busy road, entered from a smaller street: likely a crossing.
-  computeStops(stopsById, idx, crossWays, stopPoints = [], proj = null) {
+  computeStops(stopsById, idx, crossWays, stopPoints = [], proj = null, guess = false) {
     const n = this.n;
     const stop = new Uint8Array(n);
     for (const [id, kind] of stopsById) {
@@ -3019,6 +3148,14 @@ class Graph {
     for (const [kind, nodes] of crossWays) {
       for (const v of nodes) if (onRoad[v] && stop[v] < kind) stop[v] = kind;
     }
+    // No word on lights at all (the servers did not answer): the junctions of main roads
+    // are taken to have one, so the route is still steered round them. The cards do not
+    // count these guesses as lights (see stopsText).
+    this.stopsGuessed = false;
+    if (guess) {
+      for (const v of this.likelySignals()) if (stop[v] < STOP.SIGNAL) stop[v] = STOP.SIGNAL;
+      this.stopsGuessed = true;
+    }
     this.stop = stop;
     this.arcKind = new Uint8Array(2 * this.m);
     this.arcStop = new Float32Array(2 * this.m);
@@ -3036,6 +3173,43 @@ class Graph {
         this.arcStop[k] = STOP_COST[kind];
       }
     }
+  }
+
+  // Lays the ways the map says are unlit (osm.js wayMarks) on the graph: a stretch of
+  // street or path that runs along one for most of its length is unlit. A stretch that
+  // already knows its lighting keeps it.
+  setUnlit(marks) {
+    if (!marks) return 0;
+    let n = 0;
+    for (let e = 0; e < this.m; e++) {
+      if (this.lit[e] !== LIT.UNKNOWN) continue;
+      const a = this.ea[e], b = this.eb[e];
+      if (markAlong(marks, this.x[a], this.y[a], this.x[b], this.y[b]) === 'no') { this.lit[e] = LIT.NO; n++; }
+    }
+    return n;
+  }
+
+  // Where a traffic light is likely, read from the streets alone: a junction where two
+  // different main roads (tertiary or bigger) meet. Measured against the mapped lights of
+  // Tel Aviv, Berlin and Manhattan (tests/ui/lights_check.mjs): 65 to 98% of these
+  // junctions do have a light, and they are a quarter to a half of all the lights there
+  // are. Good enough to steer a route round the big junctions; not a count to show.
+  likelySignals() {
+    const names = new Map(); // node -> the main roads meeting there, by name
+    for (let e = 0; e < this.m; e++) {
+      const h = this.hw[e];
+      if (h < HW.TERTIARY) continue;
+      for (const v of [this.ea[e], this.eb[e]]) {
+        let at = names.get(v);
+        if (!at) names.set(v, (at = { roads: new Set() }));
+        at.roads.add(this.edgeName[e]);
+      }
+    }
+    const out = [];
+    for (const [v, at] of names) {
+      if (at.roads.size >= 2 && this.adjStart[v + 1] - this.adjStart[v] >= 3) out.push(v);
+    }
+    return out;
   }
 
   // Landmarks, each tied to the nearest walkable point within 120 m.
@@ -3428,6 +3602,15 @@ const COUNTRY_LANE_COST = 1.1; // an unpaved lane or track in country mode: a sm
 // A bare path with no surface tag (most likely a dirt trail) counts as three times its
 // length, so it is only ever used when there is no made surface to run on at all.
 const ROUGH_COST = 3;
+// After dark (prefs.dark) a lit street beats an unlit park path (Uri's decision, Nov 15,
+// 2026): a way the map says has no street lighting loses everything the landscape gives
+// it and counts as twice its length, so a quiet street (1.0) or a tertiary road (1.25) is
+// taken before it (1.7), and only a primary road is worse. It also stops counting as
+// landscape: the "landscape runs only" rule looks at the lit park paths and promenades.
+const UNLIT_COST = 2;
+// The share of a run that counts as landscape: by day its park paths, boardwalks and
+// promenades; after dark those of them the map does not say are unlit.
+const landOf = (s) => s.landFrac ?? s.promFrac;
 
 function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
   const table = g.village ? VILLAGE_COST : prefs.quiet ? QUIET_COST : BASE_COST;
@@ -3437,6 +3620,7 @@ function applyPreferences(g, { prefs = {}, terrain = 'any' }) {
     if (g.country?.[e] && !g.allowCountry) { g.costF[e] = g.costB[e] = Infinity; continue; } // unpaved roads and tracks: off in a town
     if (g.country?.[e]) c = COUNTRY_LANE_COST; // country mode: the lanes are the village's streets
     else if (g.rough[e]) c = BASE_COST[HW.PATH] * ROUGH_COST; // no landscape bonus can make a trail attractive
+    else if (prefs.dark && g.lit?.[e] === LIT.NO) c *= UNLIT_COST; // after dark an unlit path is no landscape
     else {
       // Parks and waterfronts always pull the route in (more when asked for);
       // promenades, boardwalks and park paths most of all: they are the point of the app.
@@ -3607,13 +3791,15 @@ async function planLoops(g, opts) {
     // The seaside counts on top: when the beach is within reach, that is the run to offer,
     // even with a few plain kilometres to get there (Ramat Aviv: the Yarkon is 1 km
     // away, the sea 3 km — the beach promenade is the run).
-    return s.promFrac + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0);
+    // After dark only the lit promenade counts, and what is unlit counts against the run:
+    // the best-lit comes first.
+    return landOf(s) + landscape + seaBoost(s.seaFrac) - (r.type === 'outback' ? 0.08 : 0) - (prefs.dark ? 2.5 * (s.unlitFrac || 0) : 0);
   };
   const pool = [...candidates, ...outbacks].filter((r) => r.stats.distErr <= 0.08);
   // Landscape runs only: when any run keeps LANDSCAPE_SHARE of its length on park paths,
   // boardwalks and promenades, nothing else is offered — a run that is 80% streets is no
   // fun, even if it touches the beach. Fewer than `count` options is fine then.
-  const scenicPool = prefs.sights ? [] : pool.filter((r) => r.stats.promFrac >= LANDSCAPE_SHARE).sort((a, b) => promenadeOf(b) - promenadeOf(a));
+  const scenicPool = prefs.sights ? [] : pool.filter((r) => landOf(r.stats) >= LANDSCAPE_SHARE).sort((a, b) => promenadeOf(b) - promenadeOf(a));
   if (scenicPool.length) {
     for (const limit of [0.5, 0.7]) {
       for (const r of scenicPool) {
@@ -3774,7 +3960,7 @@ async function promenadeLoops(g, { start, D, prefs, terrain, perSector = 3, maxL
       if (Math.abs(length - D) / D > 0.08) continue;
       const route = { nodes, edges, length, type: 'loop', turnaround: u };
       route.stats = routeStats(g, route, D, prefs);
-      if (route.stats.repeatFrac > 0.25 || route.stats.promFrac < LANDSCAPE_SHARE || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
+      if (route.stats.repeatFrac > 0.25 || landOf(route.stats) < LANDSCAPE_SHARE || route.stats.roughFrac > 0.1 || route.stats.trunkFrac > 0.1) continue;
       if (loops.some((o) => overlap(g, route, o) > 0.6)) continue;
       route.score = scoreRoute(route.stats, prefs, terrain);
       loops.push(route);
@@ -4114,12 +4300,13 @@ function routeThrough(g, waypoints) {
 // preference, any park or waterfront counts.
 function scenicOf(g, e, prefs = {}) {
   if (g.rough[e] || g.hw[e] === HW.TRUNK) return 0; // a dirt trail or an arterial along the water is no asset for a runner
+  if (prefs.dark && g.lit?.[e] === LIT.NO) return 0; // nor is an unlit path after dark
   if (!prefs.green && !prefs.water) return Math.min(1, Math.max(g.green[e], g.water[e], g.prom[e]) + 0.5 * g.sea[e]);
   return Math.min(1, (prefs.green ? g.green[e] : 0) + (prefs.water ? g.water[e] : 0) + 0.5 * g.prom[e] + 0.5 * g.sea[e]);
 }
 
 function routeStats(g, route, D, prefs = {}) {
-  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0;
+  let total = 0, green = 0, water = 0, sea = 0, quiet = 0, busy = 0, trunk = 0, gain = 0, loss = 0, repeated = 0, scenic = 0, prom = 0, rough = 0, country = 0, unlit = 0, land = 0;
   let signals = 0, crossings = 0;
   const seen = new Set();
   for (let i = 0; i < route.edges.length; i++) {
@@ -4131,11 +4318,13 @@ function routeStats(g, route, D, prefs = {}) {
     sea += L * g.sea[e];
     scenic += L * scenicOf(g, e, prefs);
     prom += L * g.prom[e];
+    if (!(prefs.dark && g.lit?.[e] === LIT.NO)) land += L * g.prom[e];
     if (g.country?.[e]) country += L; // unpaved roads and tracks (country mode)
     else if (g.rough[e]) rough += L;
     if (g.hw[e] === HW.PATH || g.hw[e] === HW.LOCAL) quiet += L;
     if (g.hw[e] >= HW.SECONDARY) busy += L;
     if (g.hw[e] === HW.TRUNK) trunk += L;
+    if (g.lit?.[e] === LIT.NO) unlit += L;
     if (seen.has(e)) repeated += L;
     seen.add(e);
     const kind = g.stopOnArc(route.nodes[i], e, route.nodes[i + 1]);
@@ -4163,8 +4352,10 @@ function routeStats(g, route, D, prefs = {}) {
     repeatFrac: repeated / total,
     scenicFrac: scenic / total,
     promFrac: prom / total,
+    landFrac: land / total, // what counts as landscape: the promenade share, after dark without its unlit part
     roughFrac: rough / total,
     countryFrac: country / total,
+    unlitFrac: unlit / total, // on ways the map says have no street lighting
     village: !!g.village,
     signals,
     crossings,
@@ -4185,9 +4376,10 @@ function scoreRoute(s, prefs, terrain) {
   score -= 0.6 * s.busyFrac;
   if (s.village) score -= 2.0 * s.busyFrac - 0.8 * s.quietFrac; // a village run lives on the lanes
   score -= 0.8 * s.trunkFrac; // on top of "busy": a trunk road is a last resort, like a trail
-  score += 1.0 * s.promFrac; // promenades, boardwalks, park paths: the best running there is
+  score += 1.0 * landOf(s); // promenades, boardwalks, park paths: the best running there is
   score += 0.6 * s.seaFrac; // and the seaside above every other waterfront
   score -= 1.5 * s.roughFrac; // trails of unknown surface: a last resort
+  if (prefs.dark) score -= 2 * (s.unlitFrac || 0); // after dark, the lit way wins
   score -= 4 * s.distErr;
   score -= 1.2 * s.repeatFrac;
   if (prefs.avoidStops !== false) {
@@ -4276,6 +4468,9 @@ function describe(g, route, start, prefs = {}) {
   // Honest about the one thing a runner cannot see on the map: metres on a road with no sidewalk.
   const noSidewalkM = Math.round((s.trunkFrac * s.distance) / 50) * 50;
   if (noSidewalkM >= 100) highlights.push(`${noSidewalkM} m on a road with no sidewalk`);
+  // After dark, the stretch the map says has no street lighting (most ways say nothing).
+  const unlitM = prefs.dark ? Math.round(((s.unlitFrac || 0) * s.distance) / 50) * 50 : 0;
+  if (unlitM >= 100) highlights.push(`${unlitM >= 1000 ? `${(unlitM / 1000).toFixed(1)} km` : `${unlitM} m`} without street lights`);
   const countryM = Math.round((s.countryFrac * s.distance) / 50) * 50;
   if (countryM >= 100) highlights.push(`${countryM >= 1000 ? `${(countryM / 1000).toFixed(1)} km` : `${countryM} m`} on unpaved lanes and tracks`);
 
@@ -4345,9 +4540,10 @@ function whereText(s, g) {
 
 function stopsText(s) {
   const n = (k, one, many) => (k === 0 ? `no ${many}` : k === 1 ? `1 ${one}` : `${k} ${many}`);
-  // When the traffic-light source is down, the card simply says nothing about lights.
+  // When the traffic-light source is down, the card simply says nothing about lights: the
+  // junctions the graph guessed a light at are counted as the road crossings they surely are.
   const t = s.stopsKnown === false
-    ? n(s.crossings, 'road crossing', 'road crossings')
+    ? n(s.crossings + s.signals, 'road crossing', 'road crossings')
     : `${n(s.signals, 'traffic light', 'traffic lights')} · ${n(s.crossings, 'road crossing', 'road crossings')}`;
   return t[0].toUpperCase() + t.slice(1);
 }
@@ -5835,6 +6031,9 @@ class RouteEngine {
       osm.stopPoints = stopPoints || [];
       if (stopPoints?.docks?.length) osm.features.push(...stopPoints.docks); // marina basins: their quays leave the network
       if (stopPoints?.sidewalks?.length) applySidewalkTags(osm, stopPoints.sidewalks, proj); // the sidewalk tag, where mapped
+      // No answer about lights and crossings: the graph marks the junctions of main roads as
+      // likely lights, so a route is still steered round them.
+      osm.stopsUnknown = stopPoints === null;
     } else {
       // 2) Backup: the full map from Overpass (slower, but has everything).
       source = 'overpass';
@@ -5865,7 +6064,7 @@ class RouteEngine {
     grid.addLandcover(landcover); // satellite fills what the map leaves out
     grid.finish();
     const graph = new Graph(osm, proj, grid, elev);
-    graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched
+    graph.stopsKnown = source === 'overpass' || stopPoints !== null; // cards say so when the lights could not be fetched (they are then estimated)
     const built = {
       lat, lon, radius, mode, proj, graph, grid, elev, source, tiles, failedTiles,
       stopsKnown: source === 'overpass' || stopPoints !== null,
@@ -5893,6 +6092,33 @@ class RouteEngine {
     return points;
   }
 
+  // The ways the map says are unlit: from the device cache, else one query. Null when the
+  // servers do not answer.
+  async loadUnlit(lat, lon, radius) {
+    const key = `unlit1:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+    const last = this.unlitLast; // the answer of this session, for the next plan from the same start
+    if (last && haversine(last.lat, last.lon, lat, lon) + radius <= last.radius) return last.ways;
+    if (this.useCache) {
+      const hit = await tileCache.get(key);
+      if (hit && haversine(hit.lat, hit.lon, lat, lon) + radius <= hit.radius) return hit.ways;
+    }
+    const r = Math.round(radius + 1500); // a bit extra so nearby starts reuse it
+    const ways = await fetchUnlit(lat, lon, r, { fetchImpl: this.fetchImpl });
+    if (ways) this.unlitLast = { lat, lon, radius: r, ways };
+    if (ways && this.useCache) tileCache.put(key, { lat, lon, radius: r, ways });
+    return ways;
+  }
+
+  // A run after dark (prefs.dark): the unlit ways are laid on the area's graph, so the
+  // planner can prefer the lit ones. `asked` is the request started alongside the map
+  // download; it is waited for at most STOPS_GRACE_MS more (it is kept on the phone when
+  // it arrives later, for the next plan). The backup map carries the lit tag itself.
+  async lightUp(area, asked) {
+    if (!asked || area.source === 'overpass') return;
+    const ways = await Promise.race([asked, new Promise((r) => setTimeout(() => r(null), STOPS_GRACE_MS))]);
+    if (ways) area.graph.setUnlit(wayMarks(ways, area.proj));
+  }
+
   // Elevation is optional: on failure, routes are planned without hills.
   async loadElevation(lat, lon, radius, proj) {
     if (this.useCache) {
@@ -5916,7 +6142,9 @@ class RouteEngine {
 
   async plan({ lat, lon, distanceKm, prefs, terrain, onStatus = () => {}, turnWeight = 1 }) {
     const D = Math.min(MAX_DISTANCE_KM, distanceKm) * 1000;
+    const unlit = prefs?.dark ? this.loadUnlit(lat, lon, radiusFor(D)).catch(() => null) : null;
     const area = await this.loadArea(lat, lon, radiusFor(D), onStatus);
+    await this.lightUp(area, unlit);
     const g = area.graph;
     g.turnWeight = turnWeight;
     const routes = await this.design(g, prefs, terrain, () => {
@@ -5957,7 +6185,9 @@ class RouteEngine {
     const needed = Math.min(radiusFor(MAX_DISTANCE_KM * 1000) * 2, Math.max(1500, apart / 2 + 600 + 0.2 * (D - apart)));
     const cLat = (lat + toLat) / 2;
     const cLon = (lon + toLon) / 2;
+    const unlit = prefs?.dark ? this.loadUnlit(cLat, cLon, needed).catch(() => null) : null;
     const area = await this.loadArea(cLat, cLon, needed, onStatus);
+    await this.lightUp(area, unlit);
     const g = area.graph;
     g.turnWeight = turnWeight;
     const routes = await this.design(g, prefs, terrain, () => {
@@ -8057,6 +8287,14 @@ let busy = false; // a route search is running
 const isDesktop = () => window.matchMedia('(min-width: 900px)').matches;
 
 // ---------- Map ----------
+// What the planner is asked for: the runner's choices, and whether part of the run will be
+// in the dark (the sun down at the start now, or before the run is over at an easy pace):
+// after dark the planner prefers ways with street lighting.
+function planPrefs() {
+  const minutes = Math.min(240, Math.max(20, (state.distanceKm || 5) * 7));
+  return { ...state.prefs, dark: !!state.start && darkForRun(state.start.lat, state.start.lon, new Date(), minutes) };
+}
+
 // Night: the dark style between 19:00 and 06:00 when the setting allows it.
 const isNight = () => { const h = new Date().getHours(); return h >= 19 || h < 6; };
 const nightMap = () => !!settings.darkMap && isNight();
@@ -8682,7 +8920,7 @@ $('goBtn').addEventListener('click', async () => {
       lat: state.start.lat,
       lon: state.start.lon,
       distanceKm: state.distanceKm,
-      prefs: { ...state.prefs },
+      prefs: planPrefs(),
       terrain: state.terrain,
       onStatus: status,
     };
@@ -8723,7 +8961,7 @@ function showRoutes(routes, { keep = false } = {}) {
   $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}${oneWay && state.dest ? ` to ${state.dest.label}` : ''}`;
   // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
   const note = $('resultsNote');
-  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => r.stats?.promFrac >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
+  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';
@@ -8859,7 +9097,7 @@ function readLapsKm() {
   if (!ok && raw !== '') msg.textContent = `Enter a distance between ${min} and ${max} ${U.unit}`;
   else if (ok && askedPlace?.ring && state.start) {
     // What that distance means here: the real plan (laps, plus the way there and back).
-    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: { ...state.prefs } });
+    const r = engine.routeAtPlace(askedPlace, { lat: state.start.lat, lon: state.start.lon, distanceKm: U.toKm(v), prefs: planPrefs() });
     // Before the map reaches the spot, the way there is not known yet: say so instead of a lap count that will change.
     msg.textContent = r ? (r.highlights[1]?.includes('there and back') ? `${inUnits(r.highlights[0])} · ${inUnits(r.highlights[1])} · ${U.len(r.distance)} in total` : `Laps plus the way there and back from your start`) : '';
   }
@@ -8893,7 +9131,7 @@ async function planLaps() {
   }
   busy = false;
   status(null);
-  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: { ...state.prefs } });
+  const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: planPrefs() });
   if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
   route.place.wantedKm = km;
   // The lap run is the one route on offer; the spots stay on the map.

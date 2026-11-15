@@ -71,6 +71,18 @@ export function bboxFor(lat, lon, radius) {
   return toBbox(lat - dLat, lon - dLon, lat + dLat, lon + dLon);
 }
 
+// The same box with its sides moved out to a fixed grid (0.02 degrees, about 2 km): runners
+// who start near each other then ask for exactly the same box, so the answer one of them
+// got is the answer the proxy has ready for the next.
+export const STOPS_GRID_DEG = 0.02;
+export function gridBboxFor(lat, lon, radius, step = STOPS_GRID_DEG) {
+  const dLat = radius / 110574;
+  const dLon = radius / (111320 * Math.cos((lat * Math.PI) / 180));
+  const down = (v) => Math.floor(v / step + 1e-9) * step;
+  const up = (v) => Math.ceil(v / step - 1e-9) * step;
+  return [down(lat - dLat), down(lon - dLon), up(lat + dLat), up(lon + dLon)].map((v) => v.toFixed(2)).join(',');
+}
+
 // Grid tiles covering the circle (lat, lon, radius), nearest first.
 export function tilesFor(lat, lon, radius, mode = 'full') {
   const size = TILE_DEG[mode];
@@ -249,41 +261,88 @@ export function sidewalkKind(tags = {}) {
   return null;
 }
 
-// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
-// no sidewalk tag): a road whose nodes mostly lie within ~12 m of a tagged way takes its answer.
-export function applySidewalkTags(osm, sidewalks, proj) {
-  if (!sidewalks?.length) return 0;
-  const CELL = 12;
-  const key = (x, y) => `${Math.round(x / CELL)}:${Math.round(y / CELL)}`;
+// What the lit tag says: 'no' (no street lighting), 'yes' (lit at night), or null when the
+// tag is missing or unclear.
+export function litKind(tags = {}) {
+  const v = tags.lit;
+  if (!v) return null;
+  if (/^(no|disused)$/.test(v)) return 'no';
+  if (/^(yes|24\/7|automatic|limited|sunset-sunrise|dusk-dawn)$/.test(v)) return 'yes';
+  return null;
+}
+
+// Tags the tiles leave out (sidewalk, lit) come from Overpass as ways with their geometry:
+// [{ no: true|false, pts: [[lat, lon], …] }]. They are laid on a grid of 12 m cells, each
+// cell a tagged way passes through holding its answer ('no' or 'yes'); a tile road or a
+// stretch of one is then asked what the cells along it say.
+const MARK_CELL = 12;
+const markKey = (x, y) => `${Math.round(x / MARK_CELL)}:${Math.round(y / MARK_CELL)}`;
+export function wayMarks(ways, proj) {
+  if (!ways?.length) return null;
   const marks = new Map(); // cell -> 'no' | 'yes'
-  for (const sw of sidewalks) {
-    const xy = sw.pts.map(([la, lo]) => proj.toXY(la, lo));
+  for (const w of ways) {
+    const xy = w.pts.map(([la, lo]) => proj.toXY(la, lo));
     for (let i = 0; i < xy.length; i++) {
       const [x0, y0] = xy[i];
-      marks.set(key(x0, y0), sw.no ? 'no' : 'yes');
+      marks.set(markKey(x0, y0), w.no ? 'no' : 'yes');
       if (i + 1 < xy.length) {
         const [x1, y1] = xy[i + 1];
-        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (CELL / 2));
-        for (let k = 1; k < steps; k++) marks.set(key(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), sw.no ? 'no' : 'yes');
+        const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (MARK_CELL / 2));
+        for (let k = 1; k < steps; k++) marks.set(markKey(x0 + ((x1 - x0) * k) / steps, y0 + ((y1 - y0) * k) / steps), w.no ? 'no' : 'yes');
       }
     }
   }
+  return marks;
+}
+
+// The answer of the cell at (x, y) or of one next to it: a tagged way within ~12 m.
+function markAt(marks, x, y) {
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const hit = marks.get(markKey(x + dx * MARK_CELL, y + dy * MARK_CELL));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Feels a line of points (a point every ~10 m between them), counting the answers: a
+// side path that merely touches a tagged way at one end is mostly out of its reach.
+function feelLine(marks, xy, tally) {
+  let prev = null;
+  for (const [x, y] of xy) {
+    if (prev) {
+      const steps = Math.ceil(Math.hypot(x - prev[0], y - prev[1]) / 10);
+      for (let k = 1; k < steps; k++) tally(markAt(marks, prev[0] + ((x - prev[0]) * k) / steps, prev[1] + ((y - prev[1]) * k) / steps));
+    }
+    tally(markAt(marks, x, y));
+    prev = [x, y];
+  }
+}
+
+/** What the marks say along the straight stretch (x0, y0)-(x1, y1): 'no', 'yes' or null. */
+export function markAlong(marks, x0, y0, x1, y1) {
+  let no = 0, yes = 0, cnt = 0;
+  feelLine(marks, [[x0, y0], [x1, y1]], (hit) => { cnt++; if (hit === 'no') no++; else if (hit === 'yes') yes++; });
+  return no / cnt > 0.5 ? 'no' : yes / cnt > 0.5 ? 'yes' : null;
+}
+
+// Stamps the sidewalk tag from Overpass onto the tile roads it runs along (tile roads carry
+// no sidewalk tag): a bigger road that runs within ~12 m of a tagged way for most of its
+// length takes its answer. (Street lighting is read per stretch instead: see Graph.)
+export function applySidewalkTags(osm, sidewalks, proj) {
+  const marks = wayMarks(sidewalks, proj);
+  if (!marks) return 0;
   let stamped = 0;
   for (const road of osm.roads) {
     if (road.tags.sidewalk || !/^(tertiary|secondary|primary|trunk|unclassified)/.test(road.tags.highway)) continue;
     let no = 0, yes = 0, cnt = 0;
+    const xy = [];
     for (const id of road.nodes) {
       const p = osm.nodes.get(id);
-      if (!p) continue;
-      const [x, y] = proj.toXY(p[0], p[1]);
-      cnt++;
-      let hit = null;
-      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = marks.get(key(x + dx * CELL, y + dy * CELL)) || null;
-      if (hit === 'no') no++;
-      else if (hit === 'yes') yes++;
+      if (p) xy.push(proj.toXY(p[0], p[1]));
     }
-    if (cnt && no / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
-    else if (cnt && yes / cnt >= 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
+    feelLine(marks, xy, (hit) => { cnt++; if (hit === 'no') no++; else if (hit === 'yes') yes++; });
+    if (cnt && no / cnt > 0.5) { road.tags = { ...road.tags, sidewalk: 'no' }; stamped++; }
+    else if (cnt && yes / cnt > 0.5) { road.tags = { ...road.tags, sidewalk: 'yes' }; stamped++; }
   }
   return stamped;
 }
@@ -361,19 +420,9 @@ export function parseOverpass(json) {
   return { nodes, stops, roads, features };
 }
 
-/**
- * Traffic lights and crosswalks for an area (vector tiles don't carry them).
- * One small query, raced on the two main servers. Best-effort: returns
- * [[lat, lon, kind], ...] or null if the servers don't answer in time.
- */
-export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
-  const sel = long
-    ? 'node["highway"="traffic_signals"];'
-    : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
-  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
-  // quays and pontoons around them are not running routes.
-  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
-  const query = `[out:json][timeout:25][bbox:${bboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
+// One small Overpass question, asked of the first server (our proxy, or the two main
+// public ones side by side): its JSON, or an exception when none answers in time.
+async function askOverpass(query, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
   const ctrls = [];
   const one = async (url) => {
     const ctrl = new AbortController();
@@ -394,9 +443,27 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
       clearTimeout(timer);
     }
   };
+  const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
+  ctrls.forEach((c) => c.abort());
+  return json;
+}
+
+/**
+ * Traffic lights and crosswalks for an area (vector tiles don't carry them), with what else
+ * the tiles leave out: marina basins and the sidewalk tag of the bigger roads. One small
+ * query on a box of the fixed grid. Best-effort: returns [[lat, lon, kind], ...] (with
+ * .docks and .sidewalks) or null if the servers don't answer in time.
+ */
+export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const sel = long
+    ? 'node["highway"="traffic_signals"];'
+    : '(node["highway"~"^(traffic_signals|crossing|stop)$"];node["crossing"];);';
+  // Marina basins come along (vector tiles don't tell a harbour from a lake): the
+  // quays and pontoons around them are not running routes.
+  // Roads that say whether they have a sidewalk come along too (the tiles drop the tag).
+  const query = `[out:json][timeout:25][bbox:${gridBboxFor(lat, lon, radius)}];(${sel}way["leisure"="marina"];relation["leisure"="marina"];way["highway"~"^(tertiary|secondary|primary|trunk|unclassified)$"]["sidewalk"];);out geom qt;`;
   try {
-    const json = await Promise.any(ENDPOINTS.slice(0, OVERPASS_HOMES).map(one));
-    ctrls.forEach((c) => c.abort());
+    const json = await askOverpass(query, { fetchImpl, timeoutMs });
     const out = [];
     const docks = [];
     const sidewalks = []; // [{ no: true|false, pts: [[lat, lon], …] }] from the sidewalk tag
@@ -415,6 +482,29 @@ export async function fetchStops(lat, lon, radius, { long = false, fetchImpl = f
     out.docks = docks;
     out.sidewalks = sidewalks;
     return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The ways an area's map says have no street lighting (the tiles drop the lit tag), for a
+ * run after dark: [{ no: true, pts: [[lat, lon], …] }], or null if the servers don't
+ * answer in time. Asked only when it is dark, and apart from the lights, because in a city
+ * mapped as thoroughly as Berlin it is a big answer (about 11 MB there; a fraction of a
+ * megabyte in most places). The ways mapped as lit are not asked for: they change no
+ * route (a way is taken to be lit unless the map says otherwise) and there are five times
+ * as many of them.
+ */
+export async function fetchUnlit(lat, lon, radius, { fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+  const query = `[out:json][timeout:25][bbox:${gridBboxFor(lat, lon, radius)}];way["highway"]["lit"~"^(no|disused)$"];out geom qt;`;
+  try {
+    const json = await askOverpass(query, { fetchImpl, timeoutMs });
+    const ways = [];
+    for (const el of json.elements || []) {
+      if (el.type === 'way' && el.geometry && litKind(el.tags) === 'no') ways.push({ no: true, pts: el.geometry.filter(Boolean).map((p) => [p.lat, p.lon]) });
+    }
+    return ways;
   } catch {
     return null;
   }
