@@ -83,6 +83,9 @@ function photonUrl(url) {
   const p = pick(url, ['q', 'lat', 'lon', 'lang', 'limit']);
   if (!p.get('q')) throw new Error('q missing');
   if (!p.get('limit') || +p.get('limit') > 15) p.set('limit', '12');
+  // The position only leans the suggestions towards the runner: passed on to the nearest
+  // kilometre, whatever the app sent (and nearby runners then share a cached answer).
+  for (const k of ['lat', 'lon']) if (p.has(k) && Number.isFinite(+p.get(k))) p.set(k, (+p.get(k)).toFixed(2));
   return `${PHOTON}?${p}`;
 }
 function nominatimUrl(url, env, request) {

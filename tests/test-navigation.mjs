@@ -334,6 +334,9 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   check(bad.units === 'km' && bad.warnM === 200, 'bad values fall back to defaults');
   storage.setItem('rtt-settings', '{}'); storage.setItem('rtt-voice', 'u-old');
   check(loadSettings(storage).voice === 'u-old', 'the old voice setting is carried over');
+  // The look of the app: bright unless the runner chose dark; anything else is bright.
+  check(DEFAULTS.theme === 'light' && loadSettings({ getItem: () => '{"theme":"dark"}' }).theme === 'dark' && loadSettings({ getItem: () => '{"theme":"neon"}' }).theme === 'light', 'the theme is bright by default, dark when chosen, and never anything else');
+  check(!('awake' in DEFAULTS) && !('awake' in loadSettings({ getItem: () => '{"awake":false}' })), 'the removed keep-the-screen-on setting is not read back');
   const vs = [{ name: 'Zoe', lang: 'en-US', voiceURI: 'c.zoe' }, { name: 'Zoe (Premium)', lang: 'en-US', voiceURI: 'com.apple.voice.premium.en-US.Zoe' }, { name: 'Tom', lang: 'en-US', voiceURI: 'c.tom' }, { name: 'Tomas', lang: 'de-DE', voiceURI: 'c.tomas' }];
   const h = houseVoices(vs);
   check(h[0].voice.voiceURI.includes('premium') && h[0].quality === 'premium' && h[1].voice.voiceURI === 'c.tom' && h[1].quality === 'standard', 'house voices: Zoe Premium over compact, Tom found, Tomas not');

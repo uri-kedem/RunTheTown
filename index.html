@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=975d6106" />
+    <link rel="manifest" href="manifest.webmanifest?v=3c6b6491" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=975d6106" />
+    <link rel="stylesheet" href="css/style.css?v=3c6b6491" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -47,10 +47,7 @@
       <button type="button" class="rail-item" data-nav="settings">
         <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
-      <button type="button" class="rail-item" data-nav="terms">
-        <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
-      </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="975d6106">975d6106</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3c6b6491">3c6b6491</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -111,26 +108,27 @@
         <div class="page-title">Terms &amp; policy</div>
       </div>
       <div class="page-body">
-        <p class="page-note">What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page: <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> · <a href="support.html" target="_blank" rel="noopener">support</a>.</p>
+        <p class="page-note">What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page: <a href="https://uri-kedem.github.io/RunTheTown/privacy.html" target="_blank" rel="noopener">privacy policy</a> · <a href="https://uri-kedem.github.io/RunTheTown/support.html" target="_blank" rel="noopener">support</a>.</p>
         <h2>Run at your own risk</h2>
         <p>Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.</p>
         <h2>Your location</h2>
-        <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never sent to a RunTheTown server (there is none) and never stored by us. To fetch map data and look up places, the app sends coordinates to the public services below; they receive the area you are looking at, not your identity.</p>
+        <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never stored by us and never tied to a name or an account: there is no account. To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.</p>
         <h2>Your profile and your runs stay on the device</h2>
-        <p>Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. Nothing is sent to us: there is no server and no account. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
+        <p>Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. None of it is sent to us, and there is no account. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
         <h2>No tracking</h2>
         <p>No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.</p>
         <h2>Services used</h2>
         <ul>
-          <li><b>OpenFreeMap</b> for the street and park data, <b>Esri</b> and <b>OpenStreetMap</b> for the background map pictures.</li>
+          <li><b>OpenFreeMap</b> for the map and for the street and park data.</li>
           <li><b>Microsoft Planetary Computer</b> (ESA WorldCover) for land cover, <b>AWS Terrain Tiles</b> and <b>Open-Meteo</b> for elevation.</li>
-          <li><b>Overpass API</b> for traffic lights and crossings (best effort).</li>
+          <li><b>Overpass API</b> for traffic lights and crossings, and after dark for the ways without street lights (best effort).</li>
           <li><b>Photon (komoot)</b> and <b>Nominatim</b> for address search and for finding tracks, stadiums and parks.</li>
-          <li><b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article.</li>
+          <li><b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article, and for the stories on an Explorer tour.</li>
+          <li><b>Cloudflare</b> runs RunTheTown's relay, which stands between the app and Photon, Nominatim and Overpass. It keeps their answers for up to 30 days so the same question is not asked twice, and not who asked. Like any web server it handles your internet address to send the answer back.</li>
         </ul>
         <p>Each of these has its own terms and privacy policy. Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database License.</p>
         <h2>Fair use</h2>
-        <p>These are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.</p>
+        <p>Most of these are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.</p>
         <h2>Changes</h2>
         <p>This page may change as the app grows. Continued use after a change means you accept the new version.</p>
       </div>
@@ -262,6 +260,13 @@
           <button type="button" data-v="300" role="radio" aria-checked="false">300 m</button>
         </div>
 
+        <h2>Appearance</h2>
+        <div class="segmented" id="setTheme" role="radiogroup">
+          <button type="button" data-v="light" role="radio" aria-checked="true" class="on">Bright</button>
+          <button type="button" data-v="dark" role="radio" aria-checked="false">Dark</button>
+        </div>
+        <p class="set-hint">Dark keeps the map dark by day too.</p>
+
         <h2>Language</h2>
         <div class="segmented" id="setLang" role="radiogroup">
           <button type="button" data-v="en" role="radio" aria-checked="true" class="on">English</button>
@@ -273,7 +278,6 @@
         <label class="set-row"><span><b>Follow me</b><small>The map moves with you; drag it to look around, tap Re-center to come back</small></span><input type="checkbox" id="setFollow" class="switch" /></label>
         <label class="set-row"><span><b>Map turns with you</b><small>The way ahead is always up, like a car navigator. Off: north stays up</small></span><input type="checkbox" id="setHeading" class="switch" /></label>
         <label class="set-row"><span><b>Dark map at night</b><small>Between 7 pm and 6 am the map goes dark, easier on the eyes</small></span><input type="checkbox" id="setDark" class="switch" /></label>
-        <label class="set-row"><span><b>Keep the screen on</b><small>Directions stop if the phone locks</small></span><input type="checkbox" id="setAwake" class="switch" /></label>
         <label class="set-row native-only"><span><b>Save runs to Apple Health</b><small>Every run you keep becomes a workout in Health: distance, time and the route</small></span><input type="checkbox" id="setHealth" class="switch" /></label>
         <label class="set-row native-only"><span><b>Run on the Lock Screen</b><small>The next turn, your distance and pace on the locked screen (iOS 16.1 and later)</small></span><input type="checkbox" id="setLockScreen" class="switch" /></label>
         <label class="set-row native-only"><span><b>Apple Watch</b><small>The run shows on your watch, and each turn taps your wrist</small></span><input type="checkbox" id="setWatch" class="switch" /></label>
@@ -555,6 +559,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=975d6106"></script>
+    <script src="js/bundle.js?v=3c6b6491"></script>
   </body>
 </html>

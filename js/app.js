@@ -21,6 +21,10 @@ const $ = (id) => document.getElementById(id);
 // ---------- Settings (kept on the phone) ----------
 const settings = loadSettings();
 setLanguage(settings.language); // the interface language: English, or Hebrew (right to left)
+// The look of the app: bright, or dark when the runner chose so in Settings. The style
+// sheet does the rest (html[data-theme='dark']); the map goes dark with it (nightMap).
+function applyTheme() { document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light'; }
+applyTheme();
 // Units on screen: numbers in km or miles, short lengths in m or ft.
 const U = {
   get mi() { return settings.units === 'mi'; },
@@ -66,9 +70,10 @@ function planPrefs() {
   return { ...state.prefs, dark: !!state.start && darkForRun(state.start.lat, state.start.lon, new Date(), minutes) };
 }
 
-// Night: the dark style between 19:00 and 06:00 when the setting allows it.
+// The dark map style: always with the dark theme; with the bright one between 19:00 and
+// 06:00 when the setting allows it.
 const isNight = () => { const h = new Date().getHours(); return h >= 19 || h < 6; };
-const nightMap = () => !!settings.darkMap && isNight();
+const nightMap = () => settings.theme === 'dark' || (!!settings.darkMap && isNight());
 const map = glCreateMap('map', { zoomControl: isDesktop(), attributionControl: true, dark: nightMap() });
 map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { animate: false });
 function applyMapTheme() { map.setTheme(nightMap() ? 'dark' : 'light'); }
@@ -388,7 +393,9 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
     ac.controller?.abort();
     ac.controller = new AbortController();
     const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
-    const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`);
+    // The position only leans the suggestions towards where the runner is: to the nearest
+    // kilometre is enough, and nothing finer leaves the phone with a search.
+    const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(2)}&lon=${c.lng.toFixed(2)}`);
     try {
       const res = await fetch(url, { signal: ac.controller.signal });
       if (!res.ok) throw new Error(res.status);
@@ -1260,6 +1267,7 @@ function renderSettings() {
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
   setSegment('setLang', settings.language);
+  setSegment('setTheme', settings.theme);
   // Hebrew: who reads the directions, or why they stay in English.
   $('langHint').hidden = !(isHebrew() && voice.available);
   if (isHebrew()) $('langHint').textContent = voice.voices?.he
@@ -1272,7 +1280,6 @@ function renderSettings() {
   $('setFollow').checked = settings.follow;
   $('setHeading').checked = settings.headingUp;
   $('setDark').checked = settings.darkMap;
-  $('setAwake').checked = settings.awake;
   $('setHealth').checked = settings.health;
   $('setLockScreen').checked = settings.lockScreen;
   $('setWatch').checked = settings.watch;
@@ -1285,6 +1292,16 @@ $('setUnits').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setUnits', settings.units);
   applyUnits();
+  renderSettings();
+});
+// The look: bright or dark, at once, the map with it.
+$('setTheme').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.theme) return;
+  settings.theme = b.dataset.v;
+  saveSettings(settings);
+  applyTheme();
+  applyMapTheme();
   renderSettings();
 });
 // The language: the whole page switches at once (and its direction: Hebrew reads right to left).
@@ -1305,7 +1322,7 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
@@ -1313,7 +1330,6 @@ for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'],
     if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
     if (key === 'headingUp' && nav.active && !settings.headingUp) setMapRotation(null);
     if (key === 'darkMap') applyMapTheme();
-    if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
   });
 }
 $('setUpdate').addEventListener('click', async () => {
@@ -1496,7 +1512,8 @@ async function startRun({ demo }) {
   map.setView(route.latlngs[0], 17);
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
-  const locked = settings.awake ? await screenLock.acquire() : false;
+  // The screen stays on for the whole run (there is no setting for it: Uri removed it).
+  const locked = await screenLock.acquire();
   if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = isNative()
     ? 'Directions keep coming with the screen locked or the phone in your pocket.'

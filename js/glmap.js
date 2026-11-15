@@ -17,6 +17,37 @@ const OFM_STYLES = {
 };
 const ZOOM_SHIFT = 1; // Leaflet zoom = MapLibre zoom + 1
 
+// OpenFreeMap's dark style is black on black: streets a shade off the background, paths
+// darker than the parks they cross. A runner has to read the streets, so the dark map is
+// repainted here: streets in greys that stand off the ground (the bigger the road the
+// lighter), paths and trails as a light dashed line, street names legible, and a little
+// blue in the water so the coast and the river show (this style draws no parks).
+// [layer id in the style, paint property, value]; a layer the style no longer has is skipped.
+export const DARK_MAP_PAINT = [
+  ['background', 'background-color', '#0c1016'],
+  ['water', 'fill-color', '#10283d'],
+  ['waterway', 'line-color', '#10283d'],
+  ['highway_minor', 'line-color', '#4b566a'],
+  ['highway_minor', 'line-opacity', 1],
+  ['highway_major_casing', 'line-color', '#1b212c'],
+  ['highway_major_inner', 'line-color', '#6f7d95'],
+  ['highway_major_subtle', 'line-color', '#6f7d95'],
+  ['highway_motorway_casing', 'line-color', '#1b212c'],
+  ['highway_motorway_inner', 'line-color', '#8593ab'],
+  ['highway_motorway_subtle', 'line-color', '#8593ab'],
+  ['highway_path', 'line-color', '#b3bfd3'],
+  ['highway_path', 'line-opacity', 1],
+  ['highway_path', 'line-dasharray', [2, 1.2]],
+  ['highway_path', 'line-width', ['interpolate', ['exponential', 1.3], ['zoom'], 12, 0.9, 15, 1.7, 20, 7]],
+  ['highway_name_other', 'text-color', '#b8c2d3'],
+  ['highway_name_other', 'text-halo-color', '#0c1016'],
+  ['highway_name_motorway', 'text-color', '#c9d1df'],
+];
+/** Repaints a loaded dark style (a MapLibre map, or anything with getLayer / setPaintProperty). */
+export function paintDarkMap(glMap) {
+  for (const [id, prop, value] of DARK_MAP_PAINT) if (glMap.getLayer(id)) glMap.setPaintProperty(id, prop, value);
+}
+
 // Everything the map asks OpenFreeMap for goes through offlineFetch (offline.js): from the
 // phone when it is there, from the network when not. MapLibre does that through a protocol
 // of our own: the requests are renamed rttofm://… and answered here.
@@ -362,6 +393,7 @@ export function glCreateMap(id, { zoomControl = false, attributionControl = true
   // Sources and layers can only be added once the style is in, and again after every
   // style change (a style change drops them all).
   m._gl.on('style.load', () => {
+    if (m._theme === 'dark') paintDarkMap(m._gl); // the dark style as it comes is too dark to read the streets on
     m._ready = true;
     const todo = m._pending.splice(0);
     for (const line of m._lines) { line._bound = false; m._attachLine(line); }

@@ -2,7 +2,8 @@
 
 Everything App Store Connect asks for, ready to paste. Keep this file in sync with the app:
 the privacy answers below describe what the app actually does (nothing leaves the phone except
-map and route data requests, no accounts, no analytics, no ads).
+map, route and search requests, some of them through our own relay on Cloudflare; no accounts,
+no analytics, no ads).
 
 Bundle ID: `com.urikedem.runthetown` · Version 1.0 (build 1) · iOS 15.0 or later · iPhone only, portrait.
 
@@ -55,8 +56,8 @@ the map. Share a run card with friends or run the same route again.
 
 What RunTheTown does not do: it does not ask you to create an account, does not store your
 runs anywhere but on your phone, does not track you and shows no ads. Your location is used
-to guide you and is never sent to us, because there is no "us" server: map and route data come
-straight from public map services.
+to guide you and is never stored by us or tied to a name: there is no account. Map and route
+data come from public map services.
 
 Works anywhere OpenStreetMap has streets, which is most of the world. Best on paths and
 promenades, by design.
@@ -93,13 +94,23 @@ Simulator location to the start (Features → Location → Custom Location) so t
 **Do you or your third-party partners collect data from this app?** → **No.**
 
 Reasoning, if Apple asks: location is processed on the device to plan and guide the run and to
-request map tiles and street data for the surrounding area from public map services
-(OpenStreetMap tile servers, Overpass API, Microsoft Planetary Computer / AWS Terrain tiles for
-elevation). Those requests carry coordinates of the area being planned, like any map app, and
-are not linked to an identity; the developer runs no server and receives nothing. Name and
-photo entered in the profile stay in the app's local storage on the phone. The run
-journal is stored on the phone only. No analytics SDK, no advertising SDK, no crash reporter,
-no account.
+request map tiles and street data for the surrounding area from map services (OpenFreeMap,
+Overpass API, Microsoft Planetary Computer / AWS Terrain tiles for elevation). Those requests
+carry the area being planned, like any map app, and are not linked to an identity. Search
+text (with a position rounded to about a kilometre), place lookups and the traffic-light
+requests pass through the developer's own relay, a Cloudflare Worker (`server/worker.js`): it
+forwards them to Photon, Nominatim and Overpass, caches the answers by the question for up to
+30 days, has no logging, no accounts and no identifiers, and the developer cannot read who
+asked what. Name and photo entered in the profile stay in the app's local storage on the
+phone. The run journal is stored on the phone only; a run is written to Apple Health when the
+user allows it. No analytics SDK, no advertising SDK, no crash reporter, no account.
+
+**For Uri to decide before submitting (changed on Nov 15, 2026, when the relay went live):**
+Apple counts data as "collected" when it is sent off the device and kept longer than needed to
+answer the request. The relay keeps answers, not people, so "No" is still defensible; but it
+is now our server and not only third parties', which is what a reviewer will ask about. If in
+doubt, the cautious answer is the fallback below plus Search History → App Functionality →
+not linked → not used for tracking.
 
 If the reviewer insists that map-tile requests count as "collection" (they normally do not,
 because the data is not retained by the developer), the fallback answer is: Location → Precise

@@ -57,7 +57,7 @@ check(fillText('{a} of {b}', { a: 1, b: 2 }) === '1 of 2', 'fillText puts values
   for (const m of body.matchAll(/>([^<>]+)</g)) { const t = decode(m[1]).replace(/\s+/g, ' ').trim(); if (/[A-Za-z]{2,}/.test(t)) texts.add(t); }
   for (const m of body.matchAll(/(?:placeholder|aria-label|title)="([^"]+)"/g)) { const t = decode(m[1]).trim(); if (/[A-Za-z]{2,}/.test(t)) texts.add(t); }
   // Proper names, version stamps and the units inside number fields stay as they are.
-  const AS_IS = /^(RunTheTown|OpenStreetMap|OpenFreeMap|Esri|Photon \(komoot\)|Nominatim|Overpass API|Wikidata|Open-Meteo|AWS Terrain Tiles|Microsoft Planetary Computer|Safari|English|Android \(Chrome\)|DEMO ×\d+|[0-9a-f]{8}|עברית|Apple Watch)$/;
+  const AS_IS = /^(RunTheTown|OpenStreetMap|OpenFreeMap|Cloudflare|Photon \(komoot\)|Nominatim|Overpass API|Wikidata|Open-Meteo|AWS Terrain Tiles|Microsoft Planetary Computer|Safari|English|Android \(Chrome\)|DEMO ×\d+|[0-9a-f]{8}|עברית|Apple Watch)$/;
   const missing = [...texts].filter((t) => !AS_IS.test(t) && !HEBREW.test(tr(t)));
   for (const t of missing) console.log(`    no Hebrew for: ${JSON.stringify(t.slice(0, 100))}`);
   check(texts.size > 150 && missing.length === 0, `all ${texts.size} texts of the page have Hebrew (${missing.length} missing)`);

@@ -113,5 +113,26 @@ check(offlineKind(`${OFM}/styles/liberty`) === 'style' && offlineKind(`${OFM}/pl
   check(/did not finish/.test(err?.message || '') && store2.size === 0, 'a download that mostly failed says so and records no pack');
 }
 
+// The dark map is repainted so its streets can be read (OpenFreeMap's dark style is black
+// on black): every street and path must stand well off the ground, the bigger the road the
+// lighter, paths lightest of all; a layer the style does not have is left alone.
+{
+  const { DARK_MAP_PAINT, paintDarkMap } = await import('../js/glmap.js');
+  const has = new Set(['background', 'water', 'highway_minor', 'highway_major_inner', 'highway_path', 'highway_name_other']);
+  const painted = {};
+  paintDarkMap({ getLayer: (id) => (has.has(id) ? { id } : undefined), setPaintProperty: (id, k, v) => { painted[`${id}.${k}`] = v; } });
+  // How light a colour is to the eye (0 black, 1 white), and the contrast of two colours.
+  const light = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => (Math.max(light(a), light(b)) + 0.05) / (Math.min(light(a), light(b)) + 0.05);
+  const ground = painted['background.background-color'];
+  const [minor, major, path, name] = [painted['highway_minor.line-color'], painted['highway_major_inner.line-color'], painted['highway_path.line-color'], painted['highway_name_other.text-color']];
+  console.log(`dark map: streets ${contrast(minor, ground).toFixed(1)}:1, main roads ${contrast(major, ground).toFixed(1)}:1, paths ${contrast(path, ground).toFixed(1)}:1, names ${contrast(name, ground).toFixed(1)}:1 against the ground`);
+  check(contrast(minor, ground) >= 2 && contrast(major, ground) >= 4 && contrast(path, ground) >= 8, 'streets, main roads and paths stand off the dark ground');
+  check(light(minor) < light(major) && light(major) < light(path), 'the bigger the road the lighter, and paths lightest');
+  check(contrast(name, ground) >= 7, 'street names can be read');
+  check(contrast(painted['water.fill-color'], ground) >= 1.15 && contrast(minor, painted['water.fill-color']) >= 1.6, 'water shows, and a street beside it still does');
+  check(!Object.keys(painted).some((k) => k.startsWith('highway_motorway')) && DARK_MAP_PAINT.some(([id]) => id.startsWith('highway_motorway')), 'a layer the style does not have is skipped');
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll offline tests passed');
 process.exit(failures ? 1 : 0);

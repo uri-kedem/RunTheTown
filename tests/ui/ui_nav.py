@@ -253,6 +253,9 @@ with sync_playwright() as p:
     # ---- demo run ----
     pg.click('#demoRunBtn'); pg.wait_for_timeout(300)
     print('body navigating:', pg.evaluate("document.body.classList.contains('navigating')"), 'wake:', pg.evaluate('window.__wake'))
+    # The screen is kept on for every run; there is no setting for it any more.
+    assert pg.evaluate('window.__wake')>=1, 'the screen is not kept awake during the run'
+    assert pg.query_selector('#setAwake') is None, 'the Keep the screen on setting is still on the page'
     pg.click('#navDemo'); pg.click('#navDemo')  # x6 -> x15 -> x1 ; set back to 15
     pg.click('#navDemo'); pg.click('#navDemo')
     print('demo badge:', pg.text_content('#navDemo'))
@@ -348,6 +351,26 @@ with sync_playwright() as p:
     # Hebrew: the page turns right to left, the texts and the spoken directions are Hebrew, and English comes back intact.
     pg.set_viewport_size({'width':390,'height':844}); pg.goto('http://127.0.0.1:8766/index.html'); pg.wait_for_timeout(1200)
     if pg.is_visible('#profile'): pg.click('#profileBack') if pg.is_visible('#profileBack') else pg.click('#profileSkip'); pg.wait_for_timeout(200)
+    # TERMS: not in the menu any more; reached from the bottom of Settings, and it says what the relay is.
+    assert pg.query_selector('.rail [data-nav="terms"]') is None, 'Terms & policy is still in the menu'
+    pg.evaluate("window.__rtt.navigate('settings')"); pg.wait_for_timeout(300)
+    pg.click('.settings [data-nav="terms"]'); pg.wait_for_timeout(300)
+    terms=pg.inner_text('#terms')
+    assert pg.is_visible('#terms') and 'relay' in terms and 'there is none' not in terms and 'Esri' not in terms, 'the terms page is not the corrected one'
+    print('TERMS: opened from Settings; menu items:', pg.eval_on_selector_all('.rail .rail-item','e=>e.map(x=>x.textContent.trim().split("\\n")[0])'))
+    pg.click('#termsBack'); pg.wait_for_timeout(300)
+    # THEME: Dark in Settings turns the page and the map dark at once, survives a reload, and Bright puts both back.
+    pg.evaluate("window.__rtt.navigate('settings')"); pg.wait_for_timeout(300)
+    look=lambda: pg.evaluate("({theme: document.documentElement.dataset.theme, bg: getComputedStyle(document.body).backgroundColor, sheet: getComputedStyle(document.querySelector('.settings')||document.body).color, map: window.__rtt.map._theme, stored: JSON.parse(localStorage.getItem('rtt-settings')||'{}').theme})")
+    bright=look(); pg.click('#setTheme [data-v="dark"]'); pg.wait_for_timeout(300); dark=look()
+    print('THEME bright:', bright, '| dark:', dark)
+    assert bright['theme']=='light' and bright['bg']=='rgb(241, 245, 249)', bright
+    assert dark['theme']=='dark' and dark['bg']=='rgb(15, 23, 42)' and dark['map']=='dark' and dark['stored']=='dark', dark
+    assert pg.get_attribute('#setTheme [data-v="dark"]','aria-checked')=='true'
+    assert pg.evaluate("getComputedStyle(document.querySelector('.rail')).backgroundColor") in ('rgb(11, 18, 32)',), 'the menu must stay dark in the dark theme'
+    pg.click('#setTheme [data-v="light"]'); pg.wait_for_timeout(300); back=look()
+    assert back['theme']=='light' and back['bg']=='rgb(241, 245, 249)' and back['stored']=='light', back
+    print('THEME back to bright:', back['theme'], back['map'])
     pg.evaluate("window.__rtt.navigate('settings')"); pg.wait_for_timeout(300); pg.click('#setLang [data-v="he"]'); pg.wait_for_timeout(300)
     print('HEBREW: dir:', pg.evaluate('document.documentElement.dir'), '| stored:', pg.evaluate('JSON.parse(localStorage.getItem("rtt-settings")).language'), '| settings title:', pg.text_content('#settings .page-title'), '| hint:', (pg.text_content('#langHint') or '')[:40])
     pg.click('#settingsBack'); pg.wait_for_timeout(200); pg.evaluate("window.__rtt.navigate('run')"); pg.wait_for_timeout(600)

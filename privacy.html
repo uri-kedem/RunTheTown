@@ -18,29 +18,31 @@
 <body>
 <main>
   <h1>RunTheTown privacy policy</h1>
-  <p class="muted">Effective 8 November 2026 · <a href="./">Back to the app</a> · <a href="support.html">Support</a></p>
+  <p class="muted">Effective 16 November 2026 · <a href="./">Back to the app</a> · <a href="support.html">Support</a></p>
 
   <h2>The short version</h2>
-  <p>RunTheTown has no server and no account. Everything you type or record stays on your device. The app talks to public map services only to fetch the map around the place you are planning a run.</p>
+  <p>RunTheTown has no account and keeps nothing about you on a server. Everything you record stays on your device. To plan a run the app fetches the map around the place you are planning, and sends what you type in the search box to a search service. Some of these requests pass through RunTheTown's own relay, which keeps no record of who asked.</p>
 
   <h2>What stays on your device</h2>
   <ul>
-    <li><b>Your profile</b> (name, e-mail address, photo), kept only so the app can show it to you and put your name on a run picture you choose to share. It is never sent to us or to anyone else.</li>
-    <li><b>Your runs</b> (date, distance, time, pace, the planned route, the GPS track and a picture of the route), kept in the app's own storage on the device. You can delete any run, and you can export them all as a file.</li>
-    <li><b>Your settings</b> (voice, units, announcements) and the cached map data for places you planned runs in, kept up to 14 days so they load faster.</li>
+    <li><b>Your profile</b> (name, photo), kept only so the app can show it to you and put your name on a run picture you choose to share. It is never sent to us or to anyone else.</li>
+    <li><b>Your runs</b> (date, distance, time, pace, the planned route, the GPS track and a picture of the route), kept in the app's own storage on the device. You can delete any run, and you can export them all as a file. In the iPhone app a run you keep is also written to Apple Health when you allow it (the app reads nothing from Health), and shown on your Apple Watch when you use one.</li>
+    <li><b>Your settings</b> (voice, units, announcements, appearance) and the cached map data for places you planned runs in, kept up to 14 days so they load faster.</li>
   </ul>
   <p>Deleting the app removes all of this. On the website version, clearing the site data in your browser does the same.</p>
 
   <h2>Location</h2>
-  <p>RunTheTown uses your location to set the start point, to find running spots around you, and, during a run, to follow you along the route so it can read the turns and count your distance. In the iPhone app this continues while the phone is locked or in your pocket, which is why the app asks for location access "while using" and runs in the background during a run only. Your location is never sent to a RunTheTown server (there is none) and never stored by us.</p>
-  <p>To draw the map and plan a route, the app sends the coordinates of the area you are looking at to the public services listed below. They receive an area, not your identity, and each has its own privacy policy.</p>
+  <p>RunTheTown uses your location to set the start point, to find running spots around you, and, during a run, to follow you along the route so it can read the turns and count your distance. In the iPhone app this continues while the phone is locked or in your pocket, which is why the app asks for location access "while using" and runs in the background during a run only. Your location is never stored by us and never tied to a name or an account.</p>
+  <p>To draw the map and plan a route, the app sends the area you are looking at to the services listed below. A search sends what you typed and your position to the nearest kilometre. They receive an area or a search, not your identity, and each has its own privacy policy.</p>
+  <p>Search, place lookups and the requests for traffic lights and for unlit ways go through RunTheTown's relay, a small server that Cloudflare runs for us. It passes them on with nothing that identifies you, keeps the answers (not who asked) for up to 30 days so the same question is not asked twice, and RunTheTown keeps no log of the requests. Like any web server, it handles your internet address to send the answer back.</p>
 
   <h2>Services the app uses</h2>
   <ul>
-    <li><b>OpenFreeMap</b> for streets, paths and parks; <b>Esri</b> and <b>OpenStreetMap</b> for the background map pictures.</li>
+    <li><b>OpenFreeMap</b> for the map and for streets, paths and parks.</li>
     <li><b>Microsoft Planetary Computer (ESA WorldCover)</b> for land cover, and <b>AWS Terrain Tiles</b> / <b>Open-Meteo</b> for elevation.</li>
-    <li><b>Overpass API</b> for traffic lights and crossings.</li>
-    <li><b>Photon (komoot)</b> and <b>Nominatim</b> for address search and for finding tracks, stadiums and parks; <b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article.</li>
+    <li><b>Overpass API</b> for traffic lights and crossings, and after dark for the ways without street lights.</li>
+    <li><b>Photon (komoot)</b> and <b>Nominatim</b> for address search and for finding tracks, stadiums and parks; <b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article, and for the stories on an Explorer tour.</li>
+    <li><b>Cloudflare</b>, which runs RunTheTown's relay between the app and Photon, Nominatim and Overpass.</li>
   </ul>
   <p>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, Open Database License.</p>
 

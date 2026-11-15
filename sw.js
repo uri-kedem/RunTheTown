@@ -4,7 +4,7 @@
 // IndexedDB), so they are passed straight through here.
 // CACHE_VERSION is stamped by build.py from the bundle's hash: a new build means a
 // new cache, and the old one is dropped on activation.
-const CACHE_VERSION = '975d6106';
+const CACHE_VERSION = '3c6b6491';
 const CACHE = `rtt-shell-${CACHE_VERSION}`;
 const SHELL = [
   './',
@@ -24,7 +24,6 @@ const SHELL = [
   './img/mark-outline.570c9973.png',
   './img/tour-outline.da8b5f9d.png',
   './img/install-outline.18f1e068.png',
-  './img/terms-outline.5cd3bd29.png',
   './img/install-icon.92c58148.png',
   './img/terms-icon.07c4c41a.png',
   './img/favicon.e34a6874.png',

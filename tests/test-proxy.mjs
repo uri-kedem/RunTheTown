@@ -40,6 +40,12 @@ const fromHost = (a) => new URL(a.url).host;
   const b = await call('/search?q=tel%20aviv&limit=12&lang=en&lat=32.08&lon=34.77');
   check(b.headers.get('X-Cache') === 'HIT' && asked.length === 1, 'the second ask is answered from the cache');
   check((await call('/search?limit=3')).status === 502, 'a search without text is refused');
+  asked.length = 0;
+  await call('/search?q=cafe&lat=32.08537&lon=34.78179');
+  const sent = new URL(asked[0].url).searchParams;
+  check(sent.get('lat') === '32.09' && sent.get('lon') === '34.78', 'the position goes to the search service to the nearest kilometre only');
+  await call('/search?q=cafe&lat=32.08911&lon=34.78402');
+  check(asked.length === 1, 'so two runners a few hundred metres apart share one answer');
 }
 
 // Nominatim: contact address, the phone's language, a long list of tracks kept whole.

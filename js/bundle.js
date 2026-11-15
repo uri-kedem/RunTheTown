@@ -94,25 +94,25 @@ const HE_TEXT = {
   'Run at your own risk': 'הריצה על אחריותך',
   'Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.': 'המסלולים נבנים אוטומטית מנתוני OpenStreetMap, שעלולים להיות שגויים או לא מעודכנים. שביל עשוי להיות סגור, לא מואר, לא בטוח או פרטי, ומסלול ריצה או אצטדיון עשויים להיות סגורים לקהל. בדוק שהמסלול הגיוני לפני היציאה, ציית לחוקי התנועה ולרמזורים והפעל שיקול דעת בכל עת. ההנחיה הקולית היא נוחות, לא תחליף להסתכלות לאן אתה רץ. השימוש ב-RunTheTown הוא על אחריותך בלבד, ללא כל אחריות מצדנו.',
   'Your location': 'המיקום שלך',
-  'Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never sent to a RunTheTown server (there is none) and never stored by us. To fetch map data and look up places, the app sends coordinates to the public services below; they receive the area you are looking at, not your identity.': 'המיקום שלך משמש במכשיר בלבד כדי לקבוע את נקודת ההתחלה, לעקוב אחריך לאורך המסלול ולמצוא מקומות ריצה סביבך. הוא לעולם לא נשלח לשרת של RunTheTown (אין כזה) ולא נשמר אצלנו. כדי להביא נתוני מפה ולחפש מקומות, האפליקציה שולחת קואורדינטות לשירותים הציבוריים שלמטה; הם מקבלים את האזור שאתה מסתכל עליו, לא את זהותך.',
+  "Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never stored by us and never tied to a name or an account: there is no account. To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.": 'המיקום שלך משמש במכשיר כדי לקבוע את נקודת ההתחלה, לעקוב אחריך לאורך המסלול ולמצוא מקומות ריצה סביבך. הוא לעולם לא נשמר אצלנו ולא מקושר לשם או לחשבון: אין חשבון. כדי להביא נתוני מפה ולחפש מקומות, האפליקציה שולחת את האזור שאתה מסתכל עליו, ואת מה שהקלדת בתיבת החיפוש, לשירותים שלמטה. החיפוש, איתור המקומות והבקשה לרמזורים עוברים דרך שרת התיווך של RunTheTown, שרת קטן ב-Cloudflare שמעביר אותם לשירותים הציבוריים ואינו שומר רישום של מי ששאל.',
   'Your profile and your runs stay on the device': 'הפרופיל והריצות שלך נשארים במכשיר',
-  'Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. Nothing is sent to us: there is no server and no account. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.': 'השם והתמונה שלך, וכל ריצה ביומן (מרחק, זמן, המסלול, מסלול ה-GPS ותמונה שלו) נשמרים במכשיר הזה בלבד. שום דבר לא נשלח אלינו: אין שרת ואין חשבון. מחק ריצה מהדף שלה, ייצא את כולן כקובץ, או מחק את האפליקציה כדי להסיר הכול. חלקי מפה, נתוני גובה ופרטי מקומות שהורדו נשמרים עד 14 יום כדי שעיר תיטען מהר יותר בפעם הבאה.',
+  'Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. None of it is sent to us, and there is no account. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.': 'השם והתמונה שלך, וכל ריצה ביומן (מרחק, זמן, המסלול, מסלול ה-GPS ותמונה שלו) נשמרים במכשיר הזה בלבד. דבר מהם לא נשלח אלינו, ואין חשבון. באפליקציית האייפון, ריצה ששמרת נשמרת גם ב-Apple Health אם אישרת זאת, ומוצגת ב-Apple Watch שלך אם אתה משתמש בו. מחק ריצה מהדף שלה, ייצא את כולן כקובץ, או מחק את האפליקציה כדי להסיר הכול. חלקי מפה, נתוני גובה ופרטי מקומות שהורדו נשמרים עד 14 יום כדי שעיר תיטען מהר יותר בפעם הבאה.',
   'No tracking': 'ללא מעקב',
   'No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.': 'ללא אנליטיקה, ללא פרסום וללא מעקב מכל סוג. "דווח על בעיה" פותח את אפליקציית הדוא"ל שלך עם הודעה אלינו; היא נשלחת רק אם תלחץ שלח.',
   'Services used': 'שירותים בשימוש',
-  'for the street and park data,': 'לנתוני הרחובות והפארקים,',
+  'for the map and for the street and park data.': 'למפה ולנתוני הרחובות והפארקים.',
   'and': 'וגם',
-  'for the background map pictures.': 'לתמונות מפת הרקע.',
+  "runs RunTheTown's relay, which stands between the app and Photon, Nominatim and Overpass. It keeps their answers for up to 30 days so the same question is not asked twice, and not who asked. Like any web server it handles your internet address to send the answer back.": 'מפעילה את שרת התיווך של RunTheTown, שעומד בין האפליקציה לבין Photon, Nominatim ו-Overpass. הוא שומר את התשובות שלהם עד 30 יום כדי שאותה שאלה לא תישאל פעמיים, ולא את מי ששאל. כמו כל שרת אינטרנט, הוא מטפל בכתובת האינטרנט שלך כדי להחזיר את התשובה.',
   '(ESA WorldCover) for land cover,': '(ESA WorldCover) לכיסוי הקרקע,',
   'for elevation.': 'לגבהים.',
-  'for traffic lights and crossings (best effort).': 'לרמזורים ולמעברי חצייה (כמיטב היכולת).',
+  'for traffic lights and crossings, and after dark for the ways without street lights (best effort).': 'לרמזורים ולמעברי חצייה, ואחרי רדת החשכה לדרכים ללא תאורת רחוב (כמיטב היכולת).',
   'for address search and for finding tracks, stadiums and parks.': 'לחיפוש כתובות ולמציאת מסלולי ריצה, אצטדיונים ופארקים.',
-  "for a place's website and article.": 'לאתר ולערך של מקום.',
+  "for a place's website and article, and for the stories on an Explorer tour.": 'לאתר ולערך של מקום, ולסיפורים בסיור מגלה.',
   'Each of these has its own terms and privacy policy. Map data ©': 'לכל אחד מהם תנאים ומדיניות פרטיות משלו. נתוני מפה ©',
   'OpenStreetMap contributors': 'תורמי OpenStreetMap',
   ', available under the Open Database License.': ', זמינים תחת רישיון Open Database.',
   'Fair use': 'שימוש הוגן',
-  'These are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.': 'אלה שירותים ציבוריים חינמיים עם מגבלות שימוש. אנא השתמש באפליקציה כפי שרץ היה משתמש, לא להורדות המוניות או לשאילתות אוטומטיות.',
+  'Most of these are free public services with usage limits. Please use the app as a runner would, not for bulk downloads or automated queries.': 'רוב אלה שירותים ציבוריים חינמיים עם מגבלות שימוש. אנא השתמש באפליקציה כפי שרץ היה משתמש, לא להורדות המוניות או לשאילתות אוטומטיות.',
   'Changes': 'שינויים',
   'This page may change as the app grows. Continued use after a change means you accept the new version.': 'דף זה עשוי להשתנות ככל שהאפליקציה גדלה. המשך שימוש אחרי שינוי פירושו הסכמה לגרסה החדשה.',
 
@@ -239,6 +239,10 @@ const HE_TEXT = {
   'Only turns and off-route warnings': 'רק פניות ואזהרות סטייה מהמסלול',
   'Warn before a turn': 'התראה לפני פנייה',
   'How far ahead the next turn is announced': 'כמה מראש מוכרזת הפנייה הבאה',
+  'Appearance': 'מראה',
+  'Bright': 'בהיר',
+  'Dark': 'כהה',
+  'Dark keeps the map dark by day too.': 'במראה כהה המפה נשארת כהה גם ביום.',
   'Language': 'שפה',
   'English': 'English',
   'No Hebrew voice was found on this device, so directions are spoken in English. On iPhone: Settings → Accessibility → Spoken Content → Voices → Hebrew.': 'לא נמצא קול עברי במכשיר, ולכן ההנחיות נאמרות באנגלית. ב-iPhone: הגדרות ← נגישות ← תוכן מוקרא ← קולות ← עברית.',
@@ -249,8 +253,6 @@ const HE_TEXT = {
   'The way ahead is always up, like a car navigator. Off: north stays up': 'הדרך קדימה תמיד למעלה, כמו בניווט ברכב. כבוי: הצפון נשאר למעלה',
   'Dark map at night': 'מפה כהה בלילה',
   'Between 7 pm and 6 am the map goes dark, easier on the eyes': 'בין 19:00 ל-6:00 המפה מחשיכה, נוח יותר לעיניים',
-  'Keep the screen on': 'השאר את המסך דולק',
-  'Directions stop if the phone locks': 'ההנחיות נפסקות אם הטלפון ננעל',
   'Save runs to Apple Health': 'שמור ריצות ב-Apple Health',
   'Every run you keep becomes a workout in Health: distance, time and the route': 'כל ריצה שתשמור הופכת לאימון ב-Health: מרחק, זמן והמסלול',
   'Run on the Lock Screen': 'הריצה במסך הנעילה',
@@ -7171,8 +7173,8 @@ const DEFAULTS = Object.freeze({
   warnM: 200, // how far ahead a turn is announced: 100 | 200 | 300
   follow: true, // the map follows the runner
   headingUp: true, // the map turns so the way ahead is up (during a run, while following)
-  darkMap: true, // the dark map style between 19:00 and 06:00
-  awake: true, // keep the screen on during a run
+  theme: 'light', // the look of the app: 'light' (bright) | 'dark'
+  darkMap: true, // the dark map style between 19:00 and 06:00 (with the dark theme the map is always dark)
   health: true, // iPhone: save every run as a workout in Apple Health
   lockScreen: true, // iPhone: show the run on the Lock Screen (Live Activity, iOS 16.1+)
   watch: true, // iPhone: show the run on a paired Apple Watch and tap the wrist at turns
@@ -7199,6 +7201,7 @@ function loadSettings(storage = globalThis.localStorage) {
   }
   if (!['km', 'mi'].includes(out.units)) out.units = 'km';
   if (![100, 200, 300].includes(out.warnM)) out.warnM = 200;
+  if (!['light', 'dark'].includes(out.theme)) out.theme = 'light';
   return out;
 }
 
@@ -7827,6 +7830,37 @@ const OFM_STYLES = {
 };
 const ZOOM_SHIFT = 1; // Leaflet zoom = MapLibre zoom + 1
 
+// OpenFreeMap's dark style is black on black: streets a shade off the background, paths
+// darker than the parks they cross. A runner has to read the streets, so the dark map is
+// repainted here: streets in greys that stand off the ground (the bigger the road the
+// lighter), paths and trails as a light dashed line, street names legible, and a little
+// blue in the water so the coast and the river show (this style draws no parks).
+// [layer id in the style, paint property, value]; a layer the style no longer has is skipped.
+const DARK_MAP_PAINT = [
+  ['background', 'background-color', '#0c1016'],
+  ['water', 'fill-color', '#10283d'],
+  ['waterway', 'line-color', '#10283d'],
+  ['highway_minor', 'line-color', '#4b566a'],
+  ['highway_minor', 'line-opacity', 1],
+  ['highway_major_casing', 'line-color', '#1b212c'],
+  ['highway_major_inner', 'line-color', '#6f7d95'],
+  ['highway_major_subtle', 'line-color', '#6f7d95'],
+  ['highway_motorway_casing', 'line-color', '#1b212c'],
+  ['highway_motorway_inner', 'line-color', '#8593ab'],
+  ['highway_motorway_subtle', 'line-color', '#8593ab'],
+  ['highway_path', 'line-color', '#b3bfd3'],
+  ['highway_path', 'line-opacity', 1],
+  ['highway_path', 'line-dasharray', [2, 1.2]],
+  ['highway_path', 'line-width', ['interpolate', ['exponential', 1.3], ['zoom'], 12, 0.9, 15, 1.7, 20, 7]],
+  ['highway_name_other', 'text-color', '#b8c2d3'],
+  ['highway_name_other', 'text-halo-color', '#0c1016'],
+  ['highway_name_motorway', 'text-color', '#c9d1df'],
+];
+/** Repaints a loaded dark style (a MapLibre map, or anything with getLayer / setPaintProperty). */
+function paintDarkMap(glMap) {
+  for (const [id, prop, value] of DARK_MAP_PAINT) if (glMap.getLayer(id)) glMap.setPaintProperty(id, prop, value);
+}
+
 // Everything the map asks OpenFreeMap for goes through offlineFetch (offline.js): from the
 // phone when it is there, from the network when not. MapLibre does that through a protocol
 // of our own: the requests are renamed rttofm://… and answered here.
@@ -8172,6 +8206,7 @@ function glCreateMap(id, { zoomControl = false, attributionControl = true, dark 
   // Sources and layers can only be added once the style is in, and again after every
   // style change (a style change drops them all).
   m._gl.on('style.load', () => {
+    if (m._theme === 'dark') paintDarkMap(m._gl); // the dark style as it comes is too dark to read the streets on
     m._ready = true;
     const todo = m._pending.splice(0);
     for (const line of m._lines) { line._bound = false; m._attachLine(line); }
@@ -8250,6 +8285,10 @@ const $ = (id) => document.getElementById(id);
 // ---------- Settings (kept on the phone) ----------
 const settings = loadSettings();
 setLanguage(settings.language); // the interface language: English, or Hebrew (right to left)
+// The look of the app: bright, or dark when the runner chose so in Settings. The style
+// sheet does the rest (html[data-theme='dark']); the map goes dark with it (nightMap).
+function applyTheme() { document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light'; }
+applyTheme();
 // Units on screen: numbers in km or miles, short lengths in m or ft.
 const U = {
   get mi() { return settings.units === 'mi'; },
@@ -8295,9 +8334,10 @@ function planPrefs() {
   return { ...state.prefs, dark: !!state.start && darkForRun(state.start.lat, state.start.lon, new Date(), minutes) };
 }
 
-// Night: the dark style between 19:00 and 06:00 when the setting allows it.
+// The dark map style: always with the dark theme; with the bright one between 19:00 and
+// 06:00 when the setting allows it.
 const isNight = () => { const h = new Date().getHours(); return h >= 19 || h < 6; };
-const nightMap = () => !!settings.darkMap && isNight();
+const nightMap = () => settings.theme === 'dark' || (!!settings.darkMap && isNight());
 const map = glCreateMap('map', { zoomControl: isDesktop(), attributionControl: true, dark: nightMap() });
 map.setView(DEFAULT_VIEW.center, DEFAULT_VIEW.zoom, { animate: false });
 function applyMapTheme() { map.setTheme(nightMap() ? 'dark' : 'light'); }
@@ -8617,7 +8657,9 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
     ac.controller?.abort();
     ac.controller = new AbortController();
     const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
-    const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}`);
+    // The position only leans the suggestions towards where the runner is: to the nearest
+    // kilometre is enough, and nothing finer leaves the phone with a search.
+    const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(2)}&lon=${c.lng.toFixed(2)}`);
     try {
       const res = await fetch(url, { signal: ac.controller.signal });
       if (!res.ok) throw new Error(res.status);
@@ -9489,6 +9531,7 @@ function renderSettings() {
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;
   setSegment('setLang', settings.language);
+  setSegment('setTheme', settings.theme);
   // Hebrew: who reads the directions, or why they stay in English.
   $('langHint').hidden = !(isHebrew() && voice.available);
   if (isHebrew()) $('langHint').textContent = voice.voices?.he
@@ -9501,7 +9544,6 @@ function renderSettings() {
   $('setFollow').checked = settings.follow;
   $('setHeading').checked = settings.headingUp;
   $('setDark').checked = settings.darkMap;
-  $('setAwake').checked = settings.awake;
   $('setHealth').checked = settings.health;
   $('setLockScreen').checked = settings.lockScreen;
   $('setWatch').checked = settings.watch;
@@ -9514,6 +9556,16 @@ $('setUnits').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setUnits', settings.units);
   applyUnits();
+  renderSettings();
+});
+// The look: bright or dark, at once, the map with it.
+$('setTheme').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b || b.dataset.v === settings.theme) return;
+  settings.theme = b.dataset.v;
+  saveSettings(settings);
+  applyTheme();
+  applyMapTheme();
   renderSettings();
 });
 // The language: the whole page switches at once (and its direction: Hebrew reads right to left).
@@ -9534,7 +9586,7 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen'], ['setWatch', 'watch']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
@@ -9542,7 +9594,6 @@ for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'],
     if (key === 'follow' && nav.active) { nav.active.follow = settings.follow; $('recenterBtn').hidden = settings.follow; }
     if (key === 'headingUp' && nav.active && !settings.headingUp) setMapRotation(null);
     if (key === 'darkMap') applyMapTheme();
-    if (key === 'awake' && nav.active) { if (settings.awake) screenLock.acquire(); else screenLock.release(); }
   });
 }
 $('setUpdate').addEventListener('click', async () => {
@@ -9725,7 +9776,8 @@ async function startRun({ demo }) {
   map.setView(route.latlngs[0], 17);
 
   voice.onSay = (text) => ($('navCaption').textContent = text);
-  const locked = settings.awake ? await screenLock.acquire() : false;
+  // The screen stays on for the whole run (there is no setting for it: Uri removed it).
+  const locked = await screenLock.acquire();
   if (nav.active !== n) { screenLock.release(); return; } // ended (or restarted) while the lock was being acquired
   $('navNote').textContent = isNative()
     ? 'Directions keep coming with the screen locked or the phone in your pocket.'
