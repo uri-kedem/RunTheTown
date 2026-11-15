@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=3e2faeab" />
+    <link rel="manifest" href="manifest.webmanifest?v=76f78a78" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=3e2faeab" />
+    <link rel="stylesheet" href="css/style.css?v=76f78a78" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -50,7 +50,7 @@
       <button type="button" class="rail-item" data-nav="terms">
         <img class="ic mark terms" src="img/terms-outline.5cd3bd29.png" alt="" /><span>Terms &amp; policy</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3e2faeab">3e2faeab</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="76f78a78">76f78a78</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -388,6 +388,7 @@
         </div>
 
         <button type="button" class="primary streets-only" id="goBtn" disabled>Find my routes</button>
+        <div class="offline-row"><button type="button" class="link" id="offlineBtn" hidden>Download this area for offline use</button><span class="offline-note" id="offlineNote" hidden></span></div>
       </div>
 
       <!-- Results -->
@@ -554,6 +555,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=3e2faeab"></script>
+    <script src="js/bundle.js?v=76f78a78"></script>
   </body>
 </html>

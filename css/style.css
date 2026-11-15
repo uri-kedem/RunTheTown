@@ -666,3 +666,8 @@ body.native .perks .native-only { display: inline-flex !important; }
 /* The cover keeps its frame (picture, then the night map with its slanted edge); only the words read right to left. */
 [dir='rtl'] .home { direction: ltr; }
 [dir='rtl'] .home .hero, [dir='rtl'] .home .home-top { direction: rtl; }
+
+/* Offline pack: a quiet link under the search button, and the line that says an area is saved. */
+.offline-row { display: grid; gap: 4px; justify-items: center; margin: 10px 0 2px; font-size: 13px; }
+.offline-row .link { color: var(--ink-2); }
+.offline-note { color: var(--ink-3); text-align: center; }

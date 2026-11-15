@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-landcover.mjs && node tests/test-country.mjs && node tests/test-journal.mjs && node tests/test-long-runs.mjs && node tests/test-i18n.mjs",
+    "test": "node tests/test-vectortiles.mjs && node tests/test-planner.mjs && node tests/test-cues.mjs && node tests/test-navigation.mjs && node tests/test-details.mjs && node tests/test-spots.mjs && node tests/test-landcover.mjs && node tests/test-country.mjs && node tests/test-journal.mjs && node tests/test-long-runs.mjs && node tests/test-i18n.mjs && node tests/test-offline.mjs",
     "start": "python3 -m http.server 8080",
     "build": "node build.mjs",
     "ios": "node build.mjs && node native/patch-plugins.mjs && node native/configure-ios.mjs && npx cap sync ios && npx cap open ios"

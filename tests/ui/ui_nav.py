@@ -33,6 +33,8 @@ def route(r):
     u=r.request.url
     if 'maplibre-gl.js' in u: return r.fulfill(body=stub, content_type='application/javascript')
     if 'maplibre-gl.css' in u or 'fonts.g' in u: return r.fulfill(body='', content_type='text/css')
+    if 'tiles.openfreemap.org/styles/' in u: return r.fulfill(body=json.dumps({'version':8,'sources':{},'layers':[],'sprite':'https://tiles.openfreemap.org/sprites/t/ofm','glyphs':'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'}), content_type='application/json')
+    if 'tiles.openfreemap.org/sprites/' in u: return r.fulfill(body='{}', content_type='application/json')
     if u=='https://tiles.openfreemap.org/planet': return r.fulfill(body=json.dumps({'tiles':['https://tiles.openfreemap.org/planet/test/{z}/{x}/{y}.pbf']}), content_type='application/json')
     if u.endswith('.pbf'):
         z,x,y=u.split('/')[-3:]; f=f'{VT}/{x}_{y[:-4]}.pbf'
@@ -120,6 +122,10 @@ with sync_playwright() as p:
     pg.fill('#distanceInput', '5'); print('too short:', pg.text_content('#distanceMsg'))
     pg.click('#planBy [data-v="km"]'); pg.wait_for_timeout(100)
     print('back to distance:', pg.input_value('#distanceInput'), pg.text_content('#distanceUnit'), '| km:', pg.evaluate('window.__rtt.state.distanceKm'))
+    # Offline pack: the area around the start is saved on the phone, and the sheet says so.
+    print('OFFLINE before: button:', pg.text_content('#offlineBtn'), '| note hidden:', pg.is_hidden('#offlineNote'))
+    pg.click('#offlineBtn'); pg.wait_for_selector('#offlineNote:not([hidden])', timeout=60000); pg.wait_for_timeout(300)
+    print('OFFLINE after: note:', pg.text_content('#offlineNote'), '| button:', pg.text_content('#offlineBtn'), '| toast:', pg.text_content('#toast')[:70], '| pack:', pg.evaluate('JSON.parse(localStorage.getItem("rtt-offline"))[0].tiles'))
     pg.click('#runStyle [data-style="laps"]'); pg.wait_for_timeout(100)
     print('laps style: distance hidden:', pg.is_hidden('#distanceInput'), '| go hidden:', pg.is_hidden('#goBtn'))
     pg.wait_for_selector('#spotsPrefs .place', timeout=30000)

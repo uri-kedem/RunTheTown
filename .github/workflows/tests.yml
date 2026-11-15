@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [vectortiles, planner, cues, navigation, details, spots, landcover, country, journal, long-runs, i18n]
+        suite: [vectortiles, planner, cues, navigation, details, spots, landcover, country, journal, long-runs, i18n, offline]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

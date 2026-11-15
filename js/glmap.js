@@ -9,18 +9,31 @@
 // Zoom levels are Leaflet's (256 px tiles): MapLibre's 512 px tiles make its zoom one less
 // for the same scale, and the conversion happens here so the app keeps its numbers.
 
+import { offlineFetch } from './offline.js';
+
 const OFM_STYLES = {
   light: 'https://tiles.openfreemap.org/styles/liberty',
   dark: 'https://tiles.openfreemap.org/styles/dark',
 };
 const ZOOM_SHIFT = 1; // Leaflet zoom = MapLibre zoom + 1
 
+// Everything the map asks OpenFreeMap for goes through offlineFetch (offline.js): from the
+// phone when it is there, from the network when not. MapLibre does that through a protocol
+// of our own: the requests are renamed rttofm://… and answered here.
+let offlineProtocol = false;
+function useOfflineProtocol() {
+  if (offlineProtocol || !gl()?.addProtocol) return;
+  offlineProtocol = true;
+  gl().addProtocol('rttofm', async (params, abort) => ({ data: await offlineFetch(params.url.replace(/^rttofm:\/\//, 'https://'), params.type, { signal: abort?.signal }) }));
+}
+const viaOffline = (url) => ({ url: url.startsWith('https://tiles.openfreemap.org/') ? `rttofm://${url.slice(8)}` : url });
+
 // The style without its low-zoom shaded relief (a second tile server, slow to answer at
 // times, that a snapshot at zoom 14+ never draws). Fetched once per theme.
 const snapshotStyles = {};
 async function snapshotStyle(theme) {
   if (!snapshotStyles[theme]) {
-    snapshotStyles[theme] = fetch(OFM_STYLES[theme]).then((r) => r.json()).then((st) => {
+    snapshotStyles[theme] = offlineFetch(OFM_STYLES[theme], 'json').then((st) => {
       const drop = Object.keys(st.sources || {}).filter((id) => /^ne2|natural_earth/i.test(id) || /natural_earth/i.test(st.sources[id]?.url || ''));
       for (const id of drop) delete st.sources[id];
       st.layers = (st.layers || []).filter((l) => !drop.includes(l.source));
@@ -324,8 +337,10 @@ export function glCreateMap(id, { zoomControl = false, attributionControl = true
     get gl() { return m._gl; },
     remove() { m._gl.remove(); },
   };
+  useOfflineProtocol();
   m._gl = new GLMap({
     container: el,
+    transformRequest: viaOffline,
     style: style || OFM_STYLES[m._theme],
     center: [0, 0],
     zoom: 1,

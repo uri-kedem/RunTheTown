@@ -37,6 +37,9 @@ export function radiusFor(distanceM) {
   return Math.round(Math.min(0.38 * distanceM + 300, long));
 }
 
+/** The area an offline pack covers: what a run of this distance (10 km at least) can reach from the start. */
+export const packRadius = (distanceKm) => radiusFor(Math.max(10, Math.min(MAX_DISTANCE_KM, distanceKm || 0)) * 1000);
+
 export class RouteEngine {
   constructor({ fetchImpl = (...a) => fetch(...a), fetchElevationImpl = fetchElevationGrid, fetchLandcoverImpl = fetchLandcoverGrid, useCache = true, scanPauseMs = 1050, cityScan = false } = {}) {
     // The city-wide stadium scan asks Nominatim several times per start. Its usage policy

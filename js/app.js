@@ -1,6 +1,7 @@
 // UI: map, start point, preferences and route results.
 
-import { RouteEngine, MAX_DISTANCE_KM } from './engine.js';
+import { RouteEngine, MAX_DISTANCE_KM, packRadius } from './engine.js';
+import { downloadPack, offlinePackAt } from './offline.js';
 import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
 import { haversine } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue } from './navigation.js';
@@ -263,7 +264,44 @@ function previewSpots() {
 
 function updateGoButton() {
   $('goBtn').disabled = busy || !state.start || !state.distanceValid || (state.runStyle === 'oneway' && !state.dest);
+  renderOffline();
 }
+
+// ---------- Offline pack ----------
+// "Download this area for offline use": on hotel Wi-Fi, before the run. The streets, heights
+// and map picture around the start are kept on the phone for 14 days; planning, the map and
+// the voice then work with no connection (search and landmark stories do not).
+function renderOffline() {
+  const btn = $('offlineBtn'), note = $('offlineNote');
+  btn.hidden = !state.start || !!nav.active;
+  btn.disabled = busy;
+  const pack = state.start ? offlinePackAt(state.start.lat, state.start.lon) : null;
+  note.hidden = !pack;
+  if (pack) {
+    const until = new Date(pack.time + 14 * 86400000).toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { day: 'numeric', month: 'short' });
+    note.textContent = `Saved on this phone until ${until}: the map and the streets within ${U.lenShort(pack.radius)}`;
+    btn.textContent = 'Download this area again';
+  } else btn.textContent = 'Download this area for offline use';
+}
+$('offlineBtn').addEventListener('click', async () => {
+  if (!state.start || busy) return;
+  if (navigator.onLine === false) return toast('You are offline. Download the area while you have a connection.');
+  busy = true;
+  updateGoButton();
+  status('Getting ready…');
+  try {
+    const { lat, lon, label } = state.start;
+    const pack = await downloadPack({ lat, lon, label, radius: packRadius(state.distanceKm), engine, onStatus: status });
+    toast(`Saved for offline use: the map and the streets within ${U.lenShort(pack.radius)} of your start, for 14 days.${pack.missing ? ' A few map pieces did not load; the rest is saved.' : ''}`);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'The download did not finish. Try again on a better connection.');
+  } finally {
+    busy = false;
+    status(null);
+    updateGoButton();
+  }
+});
 
 // ---------- Location ----------
 function locate({ quiet = false } = {}) {
@@ -657,7 +695,9 @@ $('goBtn').addEventListener('click', async () => {
     if (routes.country) toast('Country run: there is no paved network here, so unpaved lanes and tracks are included. Watch your footing.');
   } catch (err) {
     console.error(err);
-    toast(err.message || 'Something went wrong. Please try again.');
+    // No connection and no saved area: say that, not "the servers are overloaded".
+    if (navigator.onLine === false && !offlinePackAt(state.start.lat, state.start.lon)) toast('You are offline, and this area is not saved on the phone. Download it while you have a connection.');
+    else toast(err.message || 'Something went wrong. Please try again.');
   } finally {
     busy = false;
     updateGoButton();
