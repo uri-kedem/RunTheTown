@@ -11,3 +11,4 @@ tests/ui/out/
 tests/ui/vt/
 docs/
 .claude/
+server/.wrangler/

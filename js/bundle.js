@@ -24,6 +24,11 @@ const nominatimUrl = (path) => (PROXY ? `${PROXY}/nominatim${path}` : `https://n
 /** The Overpass servers to try in turn (through the proxy there is only one). */
 const overpassEndpoints = () => (PROXY ? [`${PROXY}/overpass`] : PUBLIC_OVERPASS);
 
+// ---- contact.js ----
+// Where "Report a problem" sends its e-mail. Kept in a file of its own so the rest of the
+// code carries no address (tools that guard personal data then leave the other files alone).
+const REPORT_TO = 'uri.kedem1@gmail.com';
+
 // ---- geo.js ----
 // Geographic helpers: distances, bearings and a local flat projection (meters).
 
@@ -5910,6 +5915,8 @@ const DEFAULTS = Object.freeze({
   headingUp: true, // the map turns so the way ahead is up (during a run, while following)
   darkMap: true, // the dark map style between 19:00 and 06:00
   awake: true, // keep the screen on during a run
+  health: true, // iPhone: save every run as a workout in Apple Health
+  lockScreen: true, // iPhone: show the run on the Lock Screen (Live Activity, iOS 16.1+)
   language: 'en', // 'en' for now; 'he' is coming
 });
 
@@ -6468,6 +6475,52 @@ async function nativeShare({ dataUrl, fileName, text }) {
   return true;
 }
 
+// ---- RunTheTown's own iOS plugins (ios/App/App/Plugins, registered in RTTViewController) ----
+
+/** Apple Health: a saved run becomes a running workout. Resolves false when not possible. */
+async function nativeHealthSave(run) {
+  const health = plugin('Health');
+  if (!health) return false;
+  try {
+    const route = (run.track?.length > 1 ? run.track : []).map((p) => [p[0], p[1], p[2] ?? 0]);
+    const r = await health.saveRun({ start: run.time, end: run.endedAt || null, distance: run.distance, elapsed: run.elapsed, route, name: run.name });
+    return !!r?.saved;
+  } catch {
+    return false;
+  }
+}
+
+/** The chime through the phone's own audio (plays with the screen locked). False when not native. */
+function nativeChime(name) {
+  const c = plugin('Chime');
+  if (!c) return false;
+  c.play({ name }).catch(() => {});
+  return true;
+}
+
+/** The run on the Lock Screen: start at Start, update about once a second, end at End run. */
+class NativeLiveActivity {
+  constructor() { this.la = plugin('LiveActivity'); this.on = false; this.lastAt = 0; }
+  get available() { return !!this.la; }
+  async start(routeName, state) {
+    if (!this.la) return false;
+    try { const r = await this.la.start({ routeName, ...state }); this.on = !!r?.supported; } catch { this.on = false; }
+    return this.on;
+  }
+  update(state, { minIntervalMs = 1000 } = {}) {
+    if (!this.on) return;
+    const now = Date.now();
+    if (now - this.lastAt < minIntervalMs) return;
+    this.lastAt = now;
+    this.la.update(state).catch(() => {});
+  }
+  end(state) {
+    if (!this.on) return;
+    this.on = false;
+    this.la.end(state).catch(() => {});
+  }
+}
+
 // ---- glmap.js ----
 // The map, drawn by MapLibre GL from OpenFreeMap's vector tiles (the same tiles the planner
 // reads streets from), behind a small Leaflet-shaped API: the app thinks in [lat, lon],
@@ -6874,6 +6927,7 @@ function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = false, ti
 
 // ---- app.js ----
 // UI: map, start point, preferences and route results.
+
 
 
 
@@ -8083,6 +8137,8 @@ function renderSettings() {
   $('setHeading').checked = settings.headingUp;
   $('setDark').checked = settings.darkMap;
   $('setAwake').checked = settings.awake;
+  $('setHealth').checked = settings.health;
+  $('setLockScreen').checked = settings.lockScreen;
   $('settingsBuild').textContent = $('buildTag')?.dataset.build || 'dev';
 }
 $('setUnits').addEventListener('click', (e) => {
@@ -8101,7 +8157,7 @@ $('setWarn').addEventListener('click', (e) => {
   saveSettings(settings);
   setSegment('setWarn', settings.warnM);
 });
-for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake']]) {
+for (const [id, key] of [['setSplits', 'splits'], ['setLandmarks', 'landmarks'], ['setQuiet', 'quiet'], ['setFollow', 'follow'], ['setHeading', 'headingUp'], ['setDark', 'darkMap'], ['setAwake', 'awake'], ['setHealth', 'health'], ['setLockScreen', 'lockScreen']]) {
   $(id).addEventListener('change', (e) => {
     settings[key] = e.target.checked;
     saveSettings(settings);
@@ -8143,7 +8199,6 @@ $('settingsBack').addEventListener('click', () => { $('settings').hidden = true;
 // A runner who meets a locked gate, a road without a sidewalk or a wrong turn can say so
 // in two taps. The report is kept on the phone (the last 50) and goes out as an e-mail
 // the runner sends themself: no server, nothing leaves the phone without their say-so.
-const REPORT_TO = 'uri.kedem1@gmail.com';
 const REPORT_REASONS = {
   closed: 'Closed or private', sidewalk: 'Road with no sidewalk', unsafe: 'Felt unsafe',
   directions: 'Wrong directions', landscape: 'Not the scenery promised', other: 'Something else',
@@ -8257,7 +8312,9 @@ async function startRun({ demo }) {
   const clock = { t: Date.now(), advance(ms) { this.t += ms; } };
   const navigator_ = new Navigator(route, {
     speak: (parts, opts) => voice.say(parts, opts),
-    sound: (name) => { if (!voice.muted) chime(name); },
+    // On the phone the chime goes through the app's own audio session (it plays with the
+    // screen locked); in a browser through the page's.
+    sound: (name) => { if (!voice.muted && !(isNative() && nativeChime(name))) chime(name); },
     now: demo ? () => clock.t : () => Date.now(),
     units: settings.units, splits: settings.splits, landmarks: settings.landmarks, quiet: settings.quiet, warnM: settings.warnM,
     onTurnaround: (where) => turnedAroundOnLoop(where),
@@ -8300,6 +8357,11 @@ async function startRun({ demo }) {
   if (!voice.available) $('navNote').textContent = 'This browser can\u2019t speak, so directions are shown on screen only.';
 
   render(navigator_.start());
+  // The run on the Lock Screen (iPhone, iOS 16.1+): started here, updated by render(), ended with the run.
+  if (isNative() && settings.lockScreen && !demo) {
+    n.live = new NativeLiveActivity();
+    n.live.start(route.name, liveState(navigator_.view()));
+  }
   const onFix = (fix) => {
     if (nav.active !== n || n.navigator.paused) return;
     n.lastFix = fix;
@@ -8328,6 +8390,7 @@ async function startRun({ demo }) {
     if (nav.active !== n) return;
     n.navigator.tick();
     $('statTime').textContent = fmtTime(n.navigator.elapsed);
+    n.live?.update(liveState(n.navigator.view())); // the Lock Screen clock runs even between GPS fixes
   }, 1000);
 }
 
@@ -8419,9 +8482,25 @@ function showAlert(text) {
   if (text) $('navAlert').textContent = text;
 }
 
+// What the Lock Screen card shows: the same words as the banner, as plain strings.
+function liveState(v) {
+  let instruction = 'Starting…', street = '', toTurn = '', symbol = 'figure.run';
+  if (v.routeDone || v.finished) { instruction = v.finished ? 'Run ended' : 'Route complete'; street = v.finished ? '' : 'Keep going, or end the run'; symbol = 'flag.checkered'; }
+  else if (v.joining && v.toLine != null) { instruction = 'To the route'; toTurn = fmtDist(v.toLine); symbol = 'arrow.up'; }
+  else if (v.offRoute) { instruction = 'Off route'; street = 'Head back to the colored line'; toTurn = v.offBy != null ? fmtDist(v.offBy) : ''; symbol = 'arrow.uturn.left'; }
+  else if (v.next) {
+    instruction = v.next.action; street = v.next.street || ''; toTurn = fmtDist(v.next.in);
+    // The arrow the Lock Screen shows, from the turn's kind and side (SF Symbols names).
+    const t = v.next.type, side = v.next.dir === 'left' ? 'left' : 'right';
+    symbol = t === 'uturn' ? `arrow.uturn.${side}` : t === 'arrive' ? 'flag.checkered' : t === 'depart' || t === 'straight' || t === 'lap' ? 'arrow.up' : t === 'slight' ? `arrow.up.${side}` : `arrow.turn.up.${side}`;
+  }
+  return { instruction, street, toTurn, symbol, distance: `${U.num(v.odometer, 2)} ${U.unit}`, pace: `${U.pace(v.pace)} ${U.paceLabel()}`, elapsed: fmtTime(v.elapsed), offRoute: !!v.offRoute };
+}
+
 function render(v) {
   const n = nav.active;
   if (!n) return;
+  n.live?.update(liveState(v));
   const banner = $('navBanner');
   banner.classList.toggle('off', v.offRoute);
   if (v.routeDone || v.finished) {
@@ -8584,6 +8663,10 @@ async function saveRun(n, { finished }) {
   } catch {
     toast('Could not save this run on the phone.');
   }
+  // iPhone: the run also goes to Apple Health as a workout (the first time iOS asks the runner).
+  if (isNative() && settings.health && run.distance >= 100) {
+    nativeHealthSave(run).then((saved) => { if (saved) toast('Saved to Apple Health too.'); }).catch(() => {});
+  }
 }
 
 // End run (confirmed): stop, sum up, ask about the journal.
@@ -8591,6 +8674,7 @@ function endRun() {
   const n = nav.active;
   if (!n || n.navigator.finished) return;
   n.navigator.finish();
+  n.live?.end(liveState(n.navigator.view()));
   showFinish();
 }
 
@@ -8599,6 +8683,7 @@ function closeRun() {
   const n = nav.active;
   if (!n) return;
   n.source?.stop();
+  n.live?.end(liveState(n.navigator.view()));
   setMapRotation(null);
   clearInterval(n.timer);
   voice.stop();

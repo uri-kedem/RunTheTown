@@ -174,3 +174,49 @@ export async function nativeShare({ dataUrl, fileName, text }) {
   await share.share({ text, files: [uri] });
   return true;
 }
+
+// ---- RunTheTown's own iOS plugins (ios/App/App/Plugins, registered in RTTViewController) ----
+
+/** Apple Health: a saved run becomes a running workout. Resolves false when not possible. */
+export async function nativeHealthSave(run) {
+  const health = plugin('Health');
+  if (!health) return false;
+  try {
+    const route = (run.track?.length > 1 ? run.track : []).map((p) => [p[0], p[1], p[2] ?? 0]);
+    const r = await health.saveRun({ start: run.time, end: run.endedAt || null, distance: run.distance, elapsed: run.elapsed, route, name: run.name });
+    return !!r?.saved;
+  } catch {
+    return false;
+  }
+}
+
+/** The chime through the phone's own audio (plays with the screen locked). False when not native. */
+export function nativeChime(name) {
+  const c = plugin('Chime');
+  if (!c) return false;
+  c.play({ name }).catch(() => {});
+  return true;
+}
+
+/** The run on the Lock Screen: start at Start, update about once a second, end at End run. */
+export class NativeLiveActivity {
+  constructor() { this.la = plugin('LiveActivity'); this.on = false; this.lastAt = 0; }
+  get available() { return !!this.la; }
+  async start(routeName, state) {
+    if (!this.la) return false;
+    try { const r = await this.la.start({ routeName, ...state }); this.on = !!r?.supported; } catch { this.on = false; }
+    return this.on;
+  }
+  update(state, { minIntervalMs = 1000 } = {}) {
+    if (!this.on) return;
+    const now = Date.now();
+    if (now - this.lastAt < minIntervalMs) return;
+    this.lastAt = now;
+    this.la.update(state).catch(() => {});
+  }
+  end(state) {
+    if (!this.on) return;
+    this.on = false;
+    this.la.end(state).catch(() => {});
+  }
+}

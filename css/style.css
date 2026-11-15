@@ -609,6 +609,7 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 body.native [data-nav='install'], body.native #railInstall, body.native #setUpdate, body.native .web-only { display: none !important; }
 .native-only { display: none !important; }
 body.native .native-only { display: list-item !important; }
+body.native .set-row.native-only { display: flex !important; }
 body.native .perks .native-only { display: inline-flex !important; }
 
 /* Settings */

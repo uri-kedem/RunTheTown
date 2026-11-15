@@ -13,6 +13,8 @@ export const DEFAULTS = Object.freeze({
   headingUp: true, // the map turns so the way ahead is up (during a run, while following)
   darkMap: true, // the dark map style between 19:00 and 06:00
   awake: true, // keep the screen on during a run
+  health: true, // iPhone: save every run as a workout in Apple Health
+  lockScreen: true, // iPhone: show the run on the Lock Screen (Live Activity, iOS 16.1+)
   language: 'en', // 'en' for now; 'he' is coming
 });
 

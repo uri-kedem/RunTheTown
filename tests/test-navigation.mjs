@@ -12,6 +12,7 @@ const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`)
 const engine = new RouteEngine({ fetchImpl: makeMockMapBackend(syntheticOverpass()), fetchElevationImpl: async () => null, useCache: false, scanPauseMs: 0, cityScan: true });
 
 check(roundDist(147) === 150 && roundDist(42) === 40 && roundDist(1234) === 1200, 'distance rounding');
+check(DEFAULTS.health === true && DEFAULTS.lockScreen === true && loadSettings({ getItem: () => '{"health":false}' }).health === false, 'Apple Health and Lock Screen settings: on by default, remembered when off');
 check(paceShort(332) === '5:32', 'pace format');
 
 // An out-and-back: the way home runs over the way out, so the first fix is as near the end of

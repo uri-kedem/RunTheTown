@@ -24,6 +24,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>RunTheTown only writes your runs to Health; it reads nothing.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>To save your runs as workouts in Health (distance, time and the route).</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>RunTheTown keeps guiding your run while the phone is locked or in your pocket.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
@@ -34,6 +38,27 @@
 	<string>To tell running from standing still.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>To pick a profile photo.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

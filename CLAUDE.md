@@ -24,8 +24,8 @@ npm test                                   # all Node test suites, about 12 minu
 node tests/test-navigation.mjs             # one suite (each tests/test-*.mjs runs alone)
 python3 tests/ui/ui_nav.py                 # browser walk-through (needs: pip install playwright; playwright install chromium)
 node build.mjs                             # build: bundle, version stamp, fingerprints, dist/
-npm run ios                                # build + plugin patch + cap sync + open Xcode
-node build.mjs && node native/patch-plugins.mjs && npx cap sync ios   # sync to Xcode without opening it
+npm run ios                                # build + plugin patch + project config + cap sync + open Xcode
+node build.mjs && node native/patch-plugins.mjs && node native/configure-ios.mjs && npx cap sync ios   # sync to Xcode without opening it
 npm start                                  # local server on :8080 (python3 -m http.server)
 ```
 
@@ -46,6 +46,9 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
   and deletes the older fingerprinted copy. In source, reference either form; commit both the
   source and the fingerprinted file.
 - `dist/` is what Capacitor packages; it is generated and gitignored.
+- The Xcode project carries native pieces of our own: run `node native/configure-ios.mjs` after
+  `npx cap add ios` or whenever the project is recreated (it is idempotent). Local plugins live in
+  `ios/App/App/Plugins/` and are registered in `RTTViewController.swift`, which the storyboard uses.
 - `node_modules` is not in git. `native/patch-plugins.mjs` re-applies our fix to the
   text-to-speech plugin (`native/ios-patches/TextToSpeech.swift`: the audio session is held
   only while a sentence is spoken, so music is lowered only then). It refuses to run if the
@@ -71,7 +74,8 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look, the offline cache |
 | `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |
-| `native/` | iOS notes (`README-ios.md`), the store listing (`APPSTORE.md`), the plugin patch |
+| `native/` | iOS notes (`README-ios.md`), the store listing (`APPSTORE.md`), the plugin patch, `configure-ios.mjs/.rb` (adds the app's own plugins, the HealthKit entitlement and the Lock Screen extension to the Xcode project; rerunnable) |
+| `ios/App/App/Plugins/`, `ios/App/RunActivity/` | The app's own Swift plugins (Apple Health, the chime, the Live Activity), registered in `RTTViewController.swift`; the Lock Screen widget extension |
 
 Mode names: the interface says **Free-flow run** and **Explorer tour**; the code says `run`
 and `tour` (and "sightseeing"). Do not rename the code.
