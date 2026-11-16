@@ -8,7 +8,7 @@ let failures = 0;
 const check = (cond, msg) => { console.log(`  ${cond ? 'PASS' : 'FAIL'} ${msg}`); if (!cond) failures++; };
 
 // A cache and a network that remember what was asked of them.
-const makeCache = () => { const m = new Map(); return { m, get: async (k) => (m.has(k) ? m.get(k) : null), put: async (k, v) => { m.set(k, v); } }; };
+const makeCache = () => { const m = new Map(); return { m, get: async (k) => (m.has(k) ? m.get(k) : null), put: async (k, v) => { m.set(k, v); }, remove: async (k) => { m.delete(k); } }; };
 const OFM = 'https://tiles.openfreemap.org';
 const style = { sprite: `${OFM}/sprites/ofm_f384/ofm`, glyphs: `${OFM}/fonts/{fontstack}/{range}.pbf`, layers: [
   { id: 'a', layout: { 'text-font': ['Noto Sans Regular'] } },
@@ -111,6 +111,62 @@ check(offlineKind(`${OFM}/styles/liberty`) === 'style' && offlineKind(`${OFM}/pl
   let err = null;
   try { await downloadPack({ lat: 32.08, lon: 34.78, radius: R, engine: null, fetchImpl: bad.fetchImpl, cache: cache2, storage: { getItem: (k) => store2.get(k) ?? null, setItem: (k, v) => store2.set(k, v) } }); } catch (e) { err = e; }
   check(/did not finish/.test(err?.message || '') && store2.size === 0, 'a download that mostly failed says so and records no pack');
+}
+
+// A route downloaded to run later: the route is kept whole with its start, the map around
+// it is on the phone, it is listed for 14 days, opens again with no connection, and
+// deleting it frees the map pieces that only it needed.
+{
+  const { saveRouteForLater, savedRoutes, loadSavedRoute, deleteSavedRoute, routeCircle, MAX_SAVED_ROUTES } = await import('../js/offline.js');
+  const cache = makeCache(), net = makeNet();
+  const kv = new Map(), recs = new Map();
+  const storage = { getItem: (k) => kv.get(k) ?? null, setItem: (k, v) => kv.set(k, v) };
+  const store = { put: async (id, r) => { recs.set(id, JSON.parse(JSON.stringify(r))); }, get: async (id) => recs.get(id) || null, remove: async (id) => { recs.delete(id); } };
+  const engine = { loadArea: async (lat, lon, radius) => { for (const t of vtTilesFor(lat, lon, radius)) await cache.put(t.key, new ArrayBuffer(8)); } };
+  const opts = { engine, fetchImpl: net.fetchImpl, cache, storage, store };
+  // A 4 km there-and-back along the coast of Tel Aviv, and a loop 12 km away in Herzliya.
+  const line = (lat0, lon0, km) => Array.from({ length: 41 }, (_, i) => [lat0 + (i / 40) * (km / 111.2), lon0 + 0.002 * Math.sin(i / 6)]);
+  const coast = { name: 'Out & back along the sea', distance: 8000, type: 'outback', latlngs: line(32.08, 34.767, 4), cues: [{ type: 'depart', at: 0, text: 'Head north' }], highlights: ['75% on the seafront promenade'], stats: { distance: 8000 }, turnaround: [32.116, 34.767] };
+  const north = { name: 'Park loop', distance: 5000, type: 'loop', latlngs: line(32.17, 34.84, 2), cues: [], highlights: [], stats: { distance: 5000 } };
+  const circle = routeCircle(coast.latlngs);
+  check(circle.radius > 2000 + 600 && circle.radius < 2000 + 1000 && Math.abs(circle.lat - (32.08 + 2 / 111.2)) < 1e-3, `the map kept is the route with room around it (a circle of ${circle.radius} m for a 4 km line)`);
+  check(coast.latlngs.every(([la, lo]) => packTiles(circle.lat, circle.lon, circle.radius).some((t) => t.z === 14 && vtTilesFor(la, lo, 10)[0].key === t.key)), 'and holds every point of the route');
+  const t0 = Date.parse('2026-11-16T10:00:00Z');
+  const a = await saveRouteForLater({ route: coast, start: { lat: 32.08, lon: 34.767, label: 'Hotel' }, mode: 'run', now: t0, ...opts });
+  const tilesA = packTiles(circle.lat, circle.lon, circle.radius);
+  check(tilesA.every((t) => cache.m.has(t.key)) && cache.m.has(`res:${OFM}/styles/dark`), 'downloading a route puts its map on the phone, with the styles and fonts');
+  check(savedRoutes(storage, t0).length === 1 && savedRoutes(storage, t0)[0].name === coast.name && savedRoutes(storage, t0)[0].until === t0 + 14 * 86400000 && a.id === savedRoutes(storage, t0)[0].id, 'it is listed, with the day it is kept until');
+  check(offlinePackAt(32.08, 34.767, storage, t0) === null, 'and is not listed as a downloaded area as well');
+  const back = await loadSavedRoute(a.id, { storage, store, now: t0 + 86400000 });
+  check(back?.route?.latlngs?.length === 41 && back.route.cues[0].text === 'Head north' && back.route.turnaround[0] === 32.116 && back.start.label === 'Hotel' && back.mode === 'run', 'it opens again whole: the line, the directions, the start');
+  // On screen a card carries its lines on the map and their tap handlers: none of that is stored.
+  const onScreen = { ...north, _layers: { line: { on: () => {} } }, _storiesLoading: true };
+  onScreen._layers.line.route = onScreen; // and they point back at the card
+  const strict = { ...store, put: async (id, r) => { structuredClone(r); return store.put(id, r); } }; // as the phone's storage: what cannot be copied is refused
+  const b = await saveRouteForLater({ route: onScreen, start: { lat: 32.17, lon: 34.84, label: 'Home' }, now: t0 + 3600000, ...opts, store: strict });
+  check(!('_layers' in recs.get(b.id).route) && !('_storiesLoading' in recs.get(b.id).route) && recs.get(b.id).route.latlngs.length === 41 && '_layers' in onScreen, 'a card taken from the screen is stored as the route alone, and the card on screen is left as it was');
+  check(savedRoutes(storage, t0 + 3600000).map((r) => r.name).join('|') === 'Park loop|Out & back along the sea', 'a second route is listed above it, newest first');
+  // A third route over the same coast: deleting the first must leave the pieces it shares.
+  const c = await saveRouteForLater({ route: { ...coast, name: 'Coast again' }, start: { lat: 32.08, lon: 34.767, label: 'Hotel' }, now: t0 + 7200000, ...opts });
+  const freedShared = await deleteSavedRoute(a.id, { cache, storage, store, now: t0 + 7200000 });
+  check(freedShared === 0 && tilesA.every((t) => cache.m.has(t.key)) && !recs.has(a.id) && savedRoutes(storage, t0 + 7200000).length === 2, 'deleting a route whose map another route also uses removes the route and keeps the map');
+  const freed = await deleteSavedRoute(c.id, { cache, storage, store, now: t0 + 7200000 });
+  const northTiles = packTiles(routeCircle(north.latlngs).lat, routeCircle(north.latlngs).lon, routeCircle(north.latlngs).radius);
+  const onlyCoast = tilesA.filter((t) => !northTiles.some((u) => u.key === t.key));
+  check(freed === onlyCoast.length && freed > 5 && onlyCoast.every((t) => !cache.m.has(t.key)) && northTiles.every((t) => cache.m.has(t.key)), `deleting the last route over an area frees its map pieces (${freed}) and no one else's`);
+  check((await loadSavedRoute(c.id, { storage, store, now: t0 + 7200000 })) === null && (await deleteSavedRoute('no-such-route', { cache, storage, store })) === 0, 'a deleted route cannot be opened; deleting what is not there does nothing');
+  check(savedRoutes(storage, t0 + 15 * 86400000).length === 0 && (await loadSavedRoute(b.id, { storage, store, now: t0 + 15 * 86400000 })) === null, 'after 14 days a route is no longer offered (its map has expired)');
+  // The phone keeps a dozen at most, and says so rather than dropping one silently.
+  for (let i = 0; i < MAX_SAVED_ROUTES - 1; i++) await saveRouteForLater({ route: { ...north, name: `Loop ${i}` }, start: { lat: 32.17, lon: 34.84, label: 'Home' }, now: t0 + 9000000 + i, ...opts });
+  let full = '';
+  try { await saveRouteForLater({ route: north, start: { lat: 32.17, lon: 34.84, label: 'Home' }, now: t0 + 9900000, ...opts }); } catch (err) { full = err.message; }
+  check(savedRoutes(storage, t0 + 9900000).length === MAX_SAVED_ROUTES && /Delete one in Settings/.test(full), `the thirteenth is refused with a plain message: ${full}`);
+  // With no connection the map cannot be fetched: nothing is listed.
+  const kv2 = new Map();
+  const storage2 = { getItem: (k) => kv2.get(k) ?? null, setItem: (k, v) => kv2.set(k, v) };
+  let offline = '';
+  try { await saveRouteForLater({ route: coast, start: { lat: 32.08, lon: 34.767, label: 'Hotel' }, engine: null, fetchImpl: makeNet({ down: true }).fetchImpl, cache: makeCache(), storage: storage2, store }); } catch (err) { offline = err.message; }
+  check(offline && savedRoutes(storage2).length === 0, 'a download that fails lists no route');
 }
 
 // The dark map is repainted so its streets can be read (OpenFreeMap's dark style is black

@@ -1,7 +1,7 @@
 // UI: map, start point, preferences and route results.
 
 import { RouteEngine, MAX_DISTANCE_KM, packRadius } from './engine.js';
-import { downloadPack, offlinePackAt } from './offline.js';
+import { downloadPack, offlinePackAt, saveRouteForLater, savedRoutes, loadSavedRoute, deleteSavedRoute } from './offline.js';
 import { rejoinRoute, backRoute, outbackReroute, homeRoute } from './planner.js';
 import { haversine, darkForRun } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue, spokenLength } from './navigation.js';
@@ -385,39 +385,72 @@ function highlight(text, query) {
 // finish of a one-way run inside the sheet. `onPick(item)` gets the chosen place (or
 // { isLocation: true } for "Your location", offered first in an empty box when
 // `offerLocation` is set); `onClear` runs when the box is emptied with its button.
+// How long the search service is waited for before the list says so and offers a plain
+// look-up instead (our proxy gives it two tries of 3.5 s).
+const SEARCH_WAIT_MS = 8000;
 function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLocation = false }) {
-  const ac = { items: [], active: -1, timer: null, controller: null, query: '' };
+  const ac = { items: [], active: -1, timer: null, controller: null, query: '', pending: false };
   const prefix = input.id;
 
+  // The streets of the map already on the phone that match what was typed: offered at
+  // once, with no connection and no search service (see RouteEngine.streetsNamed).
+  function streetsOnTheMap(q) {
+    const near = state.start ? [state.start.lat, state.start.lon] : null;
+    return engine.streetsNamed(q, { near, limit: 3 }).map((s) => ({ main: isHebrew() ? s.local : s.name, secondary: 'Street on your map', lat: s.lat, lon: s.lon, icon: ICONS.street, isLocal: true }));
+  }
+
+  // Suggestions for what was typed, in two steps. On the keystroke itself (beginSearch) the
+  // runner sees that the search is on its way, with any street of the loaded map that
+  // matches. A moment later (fetchSuggestions, once the typing pauses) the search service
+  // is asked; it gets SEARCH_WAIT_MS, and when it is slow, down or has nothing, the list
+  // still offers a way on: the streets of the map, and a row that looks up exactly what
+  // was typed. The list is never left silent, and never left showing an older answer.
+  function beginSearch(q) {
+    ac.controller?.abort();
+    ac.controller = null;
+    ac.pending = true;
+    renderSuggestions(streetsOnTheMap(q), q, { note: 'Searching…' });
+  }
   async function fetchSuggestions(q) {
     ac.controller?.abort();
-    ac.controller = new AbortController();
+    const ctrl = (ac.controller = new AbortController());
+    const near = streetsOnTheMap(q);
     const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
     // The position only leans the suggestions towards where the runner is: to the nearest
     // kilometre is enough, and nothing finer leaves the phone with a search.
     const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(2)}&lon=${c.lng.toFixed(2)}`);
+    let late = false;
+    const limit = setTimeout(() => { late = true; ctrl.abort(); }, SEARCH_WAIT_MS);
     try {
-      const res = await fetch(url, { signal: ac.controller.signal });
+      const res = await fetch(url, { signal: ctrl.signal });
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
       if (input.value.trim() !== q) return; // user kept typing
-      // Long streets come back once per OSM segment: keep one of each.
-      const seen = new Set();
+      // Long streets come back once per OSM segment: keep one of each; a street the map
+      // on the phone already offered is not listed a second time.
+      const seen = new Set(near.map((it) => it.main.toLowerCase()));
       const items = (data.features || []).map(photonToItem).filter((it) => {
         const key = `${it.main}|${it.secondary}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key) || (seen.has(it.main.toLowerCase()) && near.some((n) => n.main.toLowerCase() === it.main.toLowerCase() && haversine(n.lat, n.lon, it.lat, it.lon) < 2000))) return false;
         seen.add(key);
         return true;
       });
-      renderSuggestions(items.slice(0, 6), q);
+      ac.pending = false;
+      renderSuggestions([...near, ...items].slice(0, 6), q, { credit: items.length > 0, manual: !items.length });
     } catch (err) {
-      if (err.name === 'AbortError') return;
-      renderSuggestions([], q, "Suggestions unavailable. Press Enter to search.");
+      if (err.name === 'AbortError' && !late) return; // a newer search took its place
+      if (input.value.trim() !== q) return;
+      ac.pending = false;
+      renderSuggestions(near, q, { note: 'Suggestions are not answering right now.', manual: true });
+    } finally {
+      clearTimeout(limit);
     }
   }
 
-  function renderSuggestions(items, q, emptyText = 'No matching places') {
-    ac.items = items;
+  // The list under the box. `note`: a quiet line at its end ("Searching…"). `manual`: a row
+  // that looks up exactly what was typed. `credit`: the search service's credit line.
+  function renderSuggestions(items, q, { note = '', manual = false, credit = false } = {}) {
+    ac.items = items.slice();
     ac.query = q;
     ac.active = -1;
     list.innerHTML = '';
@@ -426,22 +459,22 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
       ac.items = offerLocation ? [{ main: 'Your location', secondary: 'Use GPS', icon: ICONS.loc, isLocation: true }] : [];
       if (!ac.items.length) return closeList();
     }
-    if (!ac.items.length) {
-      list.innerHTML = `<li class="muted">${escapeHtml(emptyText)}</li>`;
-    }
+    if (q && !items.length && !note) list.innerHTML = `<li class="muted">${escapeHtml('No matching places')}</li>`;
+    if (q && manual) ac.items.push({ main: `Search for “${q}”`, secondary: 'Looks up exactly what you typed', icon: ICONS.pin, isManual: true });
     ac.items.forEach((it, i) => {
       const li = document.createElement('li');
       li.id = `${prefix}-sugg-${i}`;
       li.setAttribute('role', 'option');
       li.innerHTML = `<span class="ico${it.isLocation ? ' loc' : ''}">${it.icon}</span>
-        <span class="txt"><span class="main">${it.isLocation ? escapeHtml(it.main) : highlight(it.main, q)}</span>
+        <span class="txt"><span class="main">${it.isLocation || it.isManual ? escapeHtml(it.main) : highlight(it.main, q)}</span>
         <small>${escapeHtml(it.secondary || '')}</small></span>`;
       li.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the box
       li.addEventListener('click', () => choose(i));
       li.addEventListener('mousemove', () => setActive(i));
       list.appendChild(li);
     });
-    if (q && items.length) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
+    if (note) list.insertAdjacentHTML('beforeend', `<li class="muted" role="presentation">${escapeHtml(note)}</li>`);
+    if (q && credit) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
     openList();
   }
 
@@ -463,6 +496,7 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
   function choose(i) {
     const it = ac.items[i];
     if (!it) return;
+    clearTimeout(ac.timer); // a search about to start for what was typed is no longer wanted
     closeList();
     input.blur();
     if (it.isLocation) {
@@ -470,25 +504,48 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
       clearBtn.hidden = true;
       return onPick({ isLocation: true });
     }
+    if (it.isManual) return lookUp(input.value.trim());
     input.value = it.main;
     clearBtn.hidden = false;
     onPick(it);
   }
 
   // Enter: the highlighted suggestion, else the first one, else one plain geocode (Nominatim).
-  async function submit() {
+  // While the suggestions are still on their way, Enter looks up what was typed as it is.
+  function submit() {
     if (ac.active >= 0) return choose(ac.active);
     const q = input.value.trim();
     if (!q) return;
-    if (ac.items.length && ac.query === q && !ac.items[0].isLocation) return choose(0);
+    if (!ac.pending && ac.items.length && ac.query === q && !ac.items[0].isLocation) return choose(0);
+    return lookUp(q);
+  }
+
+  // One plain look-up of exactly what was typed (Nominatim): the first place found is taken.
+  async function lookUp(q) {
+    if (!q) return;
+    clearTimeout(ac.timer);
+    ac.controller?.abort(); // the suggestions for it are no longer waited for
+    ac.pending = false;
+    closeList();
+    input.blur();
+    // The runner is told the look-up is on its way, and it is not waited for for ever.
+    status('Searching\u2026');
+    const ctrl = new AbortController();
+    const limit = setTimeout(() => ctrl.abort(), 2 * SEARCH_WAIT_MS);
     try {
-      const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`));
+      const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`), { signal: ctrl.signal });
       const [hit] = await res.json();
+      status('');
       if (!hit) return toast('No places found for that search.');
-      ac.items = [{ main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon }];
-      choose(0);
+      const it = { main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon };
+      input.value = it.main;
+      clearBtn.hidden = false;
+      onPick(it);
     } catch {
+      status('');
       toast('Search is unavailable right now. Tap the map instead.');
+    } finally {
+      clearTimeout(limit);
     }
   }
 
@@ -496,8 +553,9 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
     const q = input.value.trim();
     clearBtn.hidden = !input.value;
     clearTimeout(ac.timer);
-    if (!q) return renderSuggestions([], '');
+    if (!q) { ac.controller?.abort(); ac.pending = false; return renderSuggestions([], ''); }
     if (q.length < 2) return;
+    beginSearch(q);
     ac.timer = setTimeout(() => fetchSuggestions(q), 220);
   });
   input.addEventListener('focus', () => {
@@ -739,7 +797,7 @@ function showRoutes(routes, { keep = false } = {}) {
   $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}${oneWay && state.dest ? ` to ${state.dest.label}` : ''}`;
   // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
   const note = $('resultsNote');
-  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
+  if (note) note.textContent = (routes.length < 3 && !oneWay && !routes[0]?.savedId && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';
@@ -1162,6 +1220,11 @@ function openRouteAsk(i) {
   $('routeAskUnit').textContent = U.unit;
   $('voiceBtn').textContent = voiceLabelText();
   $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(inUnits(h))}</li>`).join('');
+  // Run it now, or download it for later; a route already on the phone says until when.
+  const kept = r.savedId ? savedRoutes().find((x) => x.id === r.savedId) : null;
+  $('saveRouteBtn').hidden = !!kept;
+  $('saveRouteNote').hidden = !kept;
+  if (kept) $('saveRouteNote').textContent = `Downloaded: on this phone until ${untilDay(kept.until)}`;
   $('routeAsk').hidden = false;
 }
 function closeRouteAsk() {
@@ -1172,6 +1235,74 @@ $('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk'))
 $('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
 $('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
 $('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openReport(state.routes[state.selected], null); });
+
+// ---------- Routes downloaded to run later ----------
+// On the route sheet the runner chooses: run it now, or download it for later. A downloaded
+// route is the whole route card with its start and the map around it, kept for 14 days
+// (offline.js); it is listed in the planner, where a tap opens it ready to start with no
+// connection, and in Settings, where each can be deleted.
+const untilDay = (ms) => new Date(ms).toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { day: 'numeric', month: 'short' });
+const DOWN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14"/></svg>';
+function renderSavedRoutes() {
+  const list = savedRoutes();
+  const line = (r) => `${U.num(r.distance)} ${U.unit} \u00b7 on this phone until ${untilDay(r.until)}`;
+  $('savedRoutes').hidden = !list.length;
+  $('savedList').innerHTML = list.map((r) => `<button type="button" class="saved-row" data-id="${escapeHtml(r.id)}"><span class="ico">${DOWN_ICON}</span><span class="txt"><b>${escapeHtml(r.name)}</b><small>${escapeHtml(line(r))}</small></span></button>`).join('');
+  $('setRoutesNone').hidden = !!list.length;
+  $('setRoutes').innerHTML = list.map((r) => `<div class="set-row"><span><b>${escapeHtml(r.name)}</b><small>${escapeHtml(line(r))}</small></span><button type="button" class="delete" data-del="${escapeHtml(r.id)}">Delete</button></div>`).join('');
+}
+$('saveRouteBtn').addEventListener('click', async () => {
+  const route = state.routes[state.selected];
+  if (!route || busy || nav.active) return;
+  if (navigator.onLine === false) return toast('You are offline. Download the route while you have a connection.');
+  busy = true;
+  updateGoButton();
+  status('Getting ready\u2026');
+  try {
+    const saved = await saveRouteForLater({ route, start: state.start, dest: route.type === 'oneway' ? state.dest : null, mode: state.mode, engine, onStatus: status });
+    route.savedId = saved.id;
+    toast(`Downloaded with its map, for 14 days. When you are ready to run, open it from Downloaded routes.${saved.missing ? ' A few map pieces did not load; the rest is saved.' : ''}`);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'The download did not finish. Try again on a better connection.');
+  } finally {
+    busy = false;
+    status(null);
+    updateGoButton();
+    renderSavedRoutes();
+    if (!$('routeAsk').hidden) openRouteAsk(state.selected);
+  }
+});
+// Opening one: its start, the route as it was planned, and its card with Start run. The
+// map around it is read back from the phone, so the runner can be led back onto the route.
+async function openSavedRoute(id) {
+  if (busy || nav.active) return;
+  const rec = await loadSavedRoute(id);
+  if (!rec?.route?.latlngs?.length) { renderSavedRoutes(); return toast('This route is no longer on the phone.'); }
+  setMode(rec.mode === 'tour' ? 'tour' : 'run');
+  setView('app');
+  setStart(rec.start.lat, rec.start.lon, rec.start.label || 'Saved start');
+  if (rec.route.type === 'oneway' && rec.dest) { setRunStyle('oneway'); setDest(rec.dest.lat, rec.dest.lon, rec.dest.label || 'Saved finish'); }
+  setDistanceKm(Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, rec.route.distance / 1000)));
+  rec.route.savedId = rec.id;
+  state.routes = [rec.route];
+  showRoutes(state.routes);
+  engine.loadArea(rec.lat, rec.lon, rec.radius, () => {}).catch((err) => console.warn('The map of the downloaded route did not load:', err));
+}
+$('savedList').addEventListener('click', (e) => {
+  const row = e.target.closest('.saved-row');
+  if (row) openSavedRoute(row.dataset.id);
+});
+$('setRoutes').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-del]');
+  if (!b) return;
+  b.disabled = true;
+  // The route on screen may be the one going: it stays usable, but is no longer "downloaded".
+  for (const r of state.routes) if (r.savedId === b.dataset.del) delete r.savedId;
+  await deleteSavedRoute(b.dataset.del);
+  renderSavedRoutes();
+  toast('Deleted from this phone.');
+});
 
 // ---------- Settings page ----------
 // Voice (Zoe and Tom, the house voices, plus the phone's others), units, announcements,
@@ -1195,6 +1326,7 @@ function applyUnits() {
   if (state.routes.length) showRoutes(state.routes, { keep: true });
   if (!$('routeAsk').hidden && state.routes[state.selected]) openRouteAsk(state.selected);
   if (state.spots.length && !state.routes.length) drawPlaces(state.spots, $('spotsPrefs'));
+  renderSavedRoutes(); // their distances are written in the runner's units
 }
 
 const voiceLabelText = () => `Voice: ${voice.voices.en?.name?.replace(/\s*\((enhanced|premium|compact)\)/i, '') || 'default'}`;
@@ -1263,6 +1395,7 @@ function setSegment(id, value) {
 }
 function renderSettings() {
   renderVoices();
+  renderSavedRoutes();
   setSegment('setUnits', settings.units);
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;

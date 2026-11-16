@@ -281,7 +281,11 @@ const HE_TEXT = {
   'Finishing at': 'נקודת סיום:',
   'Unnamed place': 'מקום ללא שם',
   'No matching places': 'אין מקומות מתאימים',
-  'Suggestions unavailable. Press Enter to search.': 'אין הצעות כרגע. לחץ Enter כדי לחפש.',
+  'Searching…': 'מחפש…',
+  'Suggestions are not answering right now.': 'ההצעות לא זמינות כרגע.',
+  'Street on your map': 'רחוב במפה שלך',
+  'Search for “{a}”': 'חפש את “{a}”',
+  'Looks up exactly what you typed': 'מחפש בדיוק את מה שהקלדת',
   'Search by Photon · © OpenStreetMap': 'חיפוש על ידי Photon · © OpenStreetMap',
   'No places found for that search.': 'לא נמצאו מקומות לחיפוש הזה.',
   'Search is unavailable right now. Tap the map instead.': 'החיפוש לא זמין כרגע. הקש על המפה במקום.',
@@ -367,6 +371,18 @@ const HE_TEXT = {
   'Saved for offline use: the map and the streets within {d} of your start, for 14 days.': 'נשמר לשימוש ללא חיבור: המפה והרחובות ברדיוס {d} מנקודת ההתחלה, ל-14 יום.',
   'Saved for offline use: the map and the streets within {d} of your start, for 14 days. A few map pieces did not load; the rest is saved.': 'נשמר לשימוש ללא חיבור: המפה והרחובות ברדיוס {d} מנקודת ההתחלה, ל-14 יום. כמה חלקי מפה לא נטענו; השאר נשמר.',
   'You are offline. Download the area while you have a connection.': 'אין חיבור. הורד את האזור כשיש לך חיבור.',
+  'Download for later': 'הורד למועד מאוחר יותר',
+  'Downloaded routes': 'מסלולים שהורדו',
+  'None on this phone. To keep a route for a run without a connection, choose it and tap Download for later.': 'אין מסלולים בטלפון הזה. כדי לשמור מסלול לריצה ללא חיבור, בחר אותו והקש על הורד למועד מאוחר יותר.',
+  'Downloaded: on this phone until {a}': 'הורד: בטלפון הזה עד {a}',
+  '{d} · on this phone until {a}': '{d} · בטלפון הזה עד {a}',
+  'Delete': 'מחק',
+  'Deleted from this phone.': 'נמחק מהטלפון הזה.',
+  'You are offline. Download the route while you have a connection.': 'אין חיבור. הורד את המסלול כשיש לך חיבור.',
+  'Downloaded with its map, for 14 days. When you are ready to run, open it from Downloaded routes.': 'הורד יחד עם המפה שלו, ל-14 יום. כשתהיה מוכן לרוץ, פתח אותו מתוך מסלולים שהורדו.',
+  'Downloaded with its map, for 14 days. When you are ready to run, open it from Downloaded routes. A few map pieces did not load; the rest is saved.': 'הורד יחד עם המפה שלו, ל-14 יום. כשתהיה מוכן לרוץ, פתח אותו מתוך מסלולים שהורדו. כמה חלקי מפה לא נטענו; השאר נשמר.',
+  'This route is no longer on the phone.': 'המסלול הזה כבר לא נמצא בטלפון.',
+  'You have {n} downloaded routes, which is the most the app keeps. Delete one in Settings first.': 'יש לך {n} מסלולים שהורדו, וזה המספר המרבי שהאפליקציה שומרת. מחק אחד בהגדרות קודם.',
   'You are offline, and this area is not saved on the phone. Download it while you have a connection.': 'אין חיבור, והאזור הזה לא שמור בטלפון. הורד אותו כשיש לך חיבור.',
   'The download did not finish. Try again on a better connection.': 'ההורדה לא הושלמה. נסה שוב עם חיבור טוב יותר.',
   'This area is too large to download in one go. Pick a shorter distance.': 'האזור גדול מדי להורדה בפעם אחת. בחר מרחק קצר יותר.',
@@ -5695,6 +5711,36 @@ const tileCache = {
       /* storage full or blocked: ignore */
     }
   },
+  async remove(key) {
+    try {
+      await tx(await db(), 'readwrite', (s) => s.delete(key), TILES);
+    } catch {
+      /* best-effort: it expires by itself */
+    }
+  },
+};
+
+// Routes downloaded to run later (see offline.js): each a whole route card with its start,
+// kept by id beside the elevation areas (a plain key-value store, never purged; the list of
+// what is there, and when each expires, is the offline module's).
+const routeStore = {
+  async put(id, record) {
+    await tx(await db(), 'readwrite', (s) => s.put(record, `route:${id}`));
+  },
+  async get(id) {
+    try {
+      return (await tx(await db(), 'readonly', (s) => s.get(`route:${id}`))) || null;
+    } catch {
+      return null;
+    }
+  },
+  async remove(id) {
+    try {
+      await tx(await db(), 'readwrite', (s) => s.delete(`route:${id}`));
+    } catch {
+      /* best-effort */
+    }
+  },
 };
 
 // The run journal: whole runs by id, newest first. Never purged.
@@ -5739,9 +5785,14 @@ const runStore = {
 //   - downloadPack(): the runner's "Download this area": the streets, heights and land
 //     cover the planner needs (through the engine, which keeps them for 14 days anyway) and
 //     the map picture for the same area at every zoom.
+//   - saveRouteForLater(): the runner's "Download for later" on a route they chose: the
+//     route itself, kept whole, with the map around it. It is listed (savedRoutes), opened
+//     again to run with no connection (loadSavedRoute) and deleted from Settings
+//     (deleteSavedRoute), which also frees the map pieces only that route needed.
 //
 // Everything lives in the same on-phone store as the planner's tiles (cache.js) and expires
 // with it after 14 days. OpenFreeMap allows offline copies of up to 3,000 tiles.
+
 
 
 
@@ -5876,7 +5927,7 @@ function rememberPack(pack, storage = globalThis.localStorage) {
  * reports progress. Resolves to { lat, lon, radius, label, time, tiles, missing }; throws
  * when the streets themselves could not be loaded (the pack would be of no use).
  */
-async function downloadPack({ lat, lon, radius, label = '', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage }) {
+async function downloadPack({ lat, lon, radius, label = '', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage, remember = true }) {
   const tiles = packTiles(lat, lon, radius);
   if (tiles.length > OFFLINE_MAX_TILES) throw new Error('This area is too large to download in one go. Pick a shorter distance.');
   // 1) The planner's own data: streets, heights, land cover (it keeps them as it loads them).
@@ -5912,8 +5963,99 @@ async function downloadPack({ lat, lon, radius, label = '', engine = null, onSta
   const missing = await fetchAll(todo.map((t) => () => offlineFetch(template.replace('{z}', t.z).replace('{x}', t.x).replace('{y}', t.y), 'arrayBuffer', { fetchImpl, cache, store: true })), 'Downloading the map…');
   if (todo.length && missing > 0.2 * todo.length) throw new Error('The download did not finish. Try again on a better connection.');
   const pack = { lat, lon, radius: Math.round(radius), label, time: Date.now(), tiles: tiles.length, missing };
-  rememberPack(pack, storage);
+  if (remember) rememberPack(pack, storage); // a route's own download is listed with the route instead
   return pack;
+}
+
+// ---------- Routes downloaded to run later ----------
+
+const SAVED_ROUTES_KEY = 'rtt-routes';
+const MAX_SAVED_ROUTES = 12;
+const ROUTE_MARGIN_M = 700; // map kept around the route: room to wander off it and be led back
+
+/** The circle that holds a route ([[lat, lon], …]) with room around it: { lat, lon, radius }. */
+function routeCircle(latlngs, margin = ROUTE_MARGIN_M) {
+  let s = Infinity, n = -Infinity, w = Infinity, e = -Infinity;
+  for (const [la, lo] of latlngs) { s = Math.min(s, la); n = Math.max(n, la); w = Math.min(w, lo); e = Math.max(e, lo); }
+  const lat = (s + n) / 2, lon = (w + e) / 2;
+  let far = 0;
+  for (const [la, lo] of latlngs) far = Math.max(far, haversine(lat, lon, la, lo));
+  return { lat, lon, radius: Math.round(Math.max(1200, far + margin)) };
+}
+
+// The route card as plain data. What the app hangs on a card for the screen (its lines on the
+// map, flags; their names begin with "_") is left out: it cannot be stored and means nothing later.
+const routeData = (route) => JSON.parse(JSON.stringify(route, (k, v) => (k.startsWith('_') ? undefined : v)));
+
+function readSaved(storage) {
+  try {
+    const list = JSON.parse(storage?.getItem(SAVED_ROUTES_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+const fresh = (r, now) => now - r.time < OFFLINE_DAYS * 86400000;
+
+/**
+ * The routes on this phone, newest first: [{ id, name, distance, type, label, time, until,
+ * lat, lon, radius }]. A route is kept as long as its map is: 14 days.
+ */
+function savedRoutes(storage = globalThis.localStorage, now = Date.now()) {
+  return readSaved(storage).filter((r) => fresh(r, now)).map((r) => ({ ...r, until: r.time + OFFLINE_DAYS * 86400000 }));
+}
+
+/**
+ * Downloads a route to run later: the map around it (what the planner needs to lead the
+ * runner back onto it, and the map picture) and the route card itself with its start.
+ * `start`: { lat, lon, label }; `dest`: the finish of a one-way run, or null; `mode`: 'run'
+ * or 'tour'. Resolves to the list entry; throws when the phone already holds
+ * MAX_SAVED_ROUTES or the map could not be downloaded.
+ */
+async function saveRouteForLater({ route, start, dest = null, mode = 'run', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage, store = routeStore, now = Date.now() }) {
+  const all = readSaved(storage);
+  // Routes past their 14 days leave the phone as the list is rewritten.
+  for (const r of all) if (!fresh(r, now)) await store.remove(r.id);
+  const list = all.filter((r) => fresh(r, now));
+  if (list.length >= MAX_SAVED_ROUTES) throw new Error(`You have ${MAX_SAVED_ROUTES} downloaded routes, which is the most the app keeps. Delete one in Settings first.`);
+  const circle = routeCircle(route.latlngs);
+  const pack = await downloadPack({ ...circle, label: route.name, engine, onStatus, fetchImpl, cache, storage, remember: false });
+  const id = `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const entry = { id, name: route.name, distance: route.distance, type: route.type, label: start?.label || '', time: now, ...circle };
+  await store.put(id, { ...entry, mode, start, dest, route: routeData(route) });
+  storage?.setItem(SAVED_ROUTES_KEY, JSON.stringify([entry, ...list]));
+  return { ...entry, until: now + OFFLINE_DAYS * 86400000, missing: pack.missing };
+}
+
+/** A downloaded route, whole: { id, name, mode, start, dest, route, lat, lon, radius, … }, or null. */
+async function loadSavedRoute(id, { storage = globalThis.localStorage, store = routeStore, now = Date.now() } = {}) {
+  if (!savedRoutes(storage, now).some((r) => r.id === id)) return null;
+  return store.get(id);
+}
+
+/**
+ * Deletes a downloaded route: the route, and the map pieces only it needed (a piece that
+ * another downloaded route or a downloaded area also covers stays). Resolves to how many
+ * map pieces were freed.
+ */
+async function deleteSavedRoute(id, { cache = tileCache, storage = globalThis.localStorage, store = routeStore, now = Date.now() } = {}) {
+  const all = readSaved(storage);
+  const gone = all.find((r) => r.id === id);
+  if (!gone) return 0;
+  const rest = all.filter((r) => r.id !== id && fresh(r, now));
+  const needed = new Set();
+  let areas = [];
+  try { areas = JSON.parse(storage?.getItem(OFFLINE_INFO_KEY) || '[]').filter((p) => fresh(p, now)); } catch { /* none */ }
+  for (const other of [...rest, ...areas]) for (const t of packTiles(other.lat, other.lon, other.radius)) needed.add(t.key);
+  let freed = 0;
+  for (const t of packTiles(gone.lat, gone.lon, gone.radius)) {
+    if (needed.has(t.key)) continue;
+    await cache.remove?.(t.key);
+    freed++;
+  }
+  await store.remove(id);
+  storage?.setItem(SAVED_ROUTES_KEY, JSON.stringify(rest));
+  return freed;
 }
 
 // ---- engine.js ----
@@ -6229,6 +6371,54 @@ class RouteEngine {
       g.allowCountry = false;
     }
     return routes;
+  }
+
+  /**
+   * Streets and paths of the map already loaded whose name matches what was typed: the
+   * name, or a word in it, begins with `text` (English or the local name). They need no
+   * connection and no search service, so the search box can offer them at once, and still
+   * offer them when the service is slow or down. `near` ([lat, lon]) puts the closest
+   * first. Returns [{ name, local, lat, lon }] (a point on the street), at most `limit`.
+   */
+  streetsNamed(text, { near = null, limit = 4 } = {}) {
+    const area = this.area;
+    const q = String(text || '').trim().toLowerCase();
+    if (!area || q.length < 2) return [];
+    const g = area.graph;
+    const mid = (e) => [(g.lat[g.ea[e]] + g.lat[g.eb[e]]) / 2, (g.lon[g.ea[e]] + g.lon[g.eb[e]]) / 2];
+    if (!area.streets) {
+      // Once per map: every named street with its stretches.
+      const byName = new Map(); // name id -> its edges
+      for (let e = 0; e < g.m; e++) {
+        const id = g.edgeName[e];
+        if (id < 0) continue;
+        let list = byName.get(id);
+        if (!list) byName.set(id, (list = []));
+        list.push(e);
+      }
+      area.streets = [...byName].map(([id, edges]) => ({ name: g.names[id].name, local: g.names[id].local, edges }));
+    }
+    const begins = (s) => { const t = String(s || '').toLowerCase(); return t.startsWith(q) ? 2 : t.includes(' ' + q) ? 1 : 0; };
+    const hits = [];
+    for (const s of area.streets) {
+      const rank = Math.max(begins(s.name), begins(s.local));
+      if (!rank) continue;
+      // The point of the street to offer: the one nearest the runner (a long street passes
+      // many places; theirs is the stretch by them), or its middle when no place is given.
+      let at = mid(s.edges[s.edges.length >> 1]);
+      let far = 0;
+      if (near) {
+        far = Infinity;
+        for (const e of s.edges) {
+          const p = mid(e);
+          const d = haversine(near[0], near[1], p[0], p[1]);
+          if (d < far) { far = d; at = p; }
+        }
+      }
+      hits.push({ name: s.name, local: s.local, lat: at[0], lon: at[1], rank, far });
+    }
+    hits.sort((a, b) => b.rank - a.rank || a.far - b.far || a.name.localeCompare(b.name));
+    return hits.slice(0, limit).map(({ name, local, lat, lon }) => ({ name, local, lat, lon }));
   }
 
   // Stadiums and athletics tracks within ~8 km, from one quick scan (no map download). Cached per start.
@@ -8649,39 +8839,72 @@ function highlight(text, query) {
 // finish of a one-way run inside the sheet. `onPick(item)` gets the chosen place (or
 // { isLocation: true } for "Your location", offered first in an empty box when
 // `offerLocation` is set); `onClear` runs when the box is emptied with its button.
+// How long the search service is waited for before the list says so and offers a plain
+// look-up instead (our proxy gives it two tries of 3.5 s).
+const SEARCH_WAIT_MS = 8000;
 function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLocation = false }) {
-  const ac = { items: [], active: -1, timer: null, controller: null, query: '' };
+  const ac = { items: [], active: -1, timer: null, controller: null, query: '', pending: false };
   const prefix = input.id;
 
+  // The streets of the map already on the phone that match what was typed: offered at
+  // once, with no connection and no search service (see RouteEngine.streetsNamed).
+  function streetsOnTheMap(q) {
+    const near = state.start ? [state.start.lat, state.start.lon] : null;
+    return engine.streetsNamed(q, { near, limit: 3 }).map((s) => ({ main: isHebrew() ? s.local : s.name, secondary: 'Street on your map', lat: s.lat, lon: s.lon, icon: ICONS.street, isLocal: true }));
+  }
+
+  // Suggestions for what was typed, in two steps. On the keystroke itself (beginSearch) the
+  // runner sees that the search is on its way, with any street of the loaded map that
+  // matches. A moment later (fetchSuggestions, once the typing pauses) the search service
+  // is asked; it gets SEARCH_WAIT_MS, and when it is slow, down or has nothing, the list
+  // still offers a way on: the streets of the map, and a row that looks up exactly what
+  // was typed. The list is never left silent, and never left showing an older answer.
+  function beginSearch(q) {
+    ac.controller?.abort();
+    ac.controller = null;
+    ac.pending = true;
+    renderSuggestions(streetsOnTheMap(q), q, { note: 'Searching…' });
+  }
   async function fetchSuggestions(q) {
     ac.controller?.abort();
-    ac.controller = new AbortController();
+    const ctrl = (ac.controller = new AbortController());
+    const near = streetsOnTheMap(q);
     const c = state.start ? { lat: state.start.lat, lng: state.start.lon } : map.getCenter();
     // The position only leans the suggestions towards where the runner is: to the nearest
     // kilometre is enough, and nothing finer leaves the phone with a search.
     const url = searchUrl(`?q=${encodeURIComponent(q)}&limit=12&lang=en&lat=${c.lat.toFixed(2)}&lon=${c.lng.toFixed(2)}`);
+    let late = false;
+    const limit = setTimeout(() => { late = true; ctrl.abort(); }, SEARCH_WAIT_MS);
     try {
-      const res = await fetch(url, { signal: ac.controller.signal });
+      const res = await fetch(url, { signal: ctrl.signal });
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
       if (input.value.trim() !== q) return; // user kept typing
-      // Long streets come back once per OSM segment: keep one of each.
-      const seen = new Set();
+      // Long streets come back once per OSM segment: keep one of each; a street the map
+      // on the phone already offered is not listed a second time.
+      const seen = new Set(near.map((it) => it.main.toLowerCase()));
       const items = (data.features || []).map(photonToItem).filter((it) => {
         const key = `${it.main}|${it.secondary}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key) || (seen.has(it.main.toLowerCase()) && near.some((n) => n.main.toLowerCase() === it.main.toLowerCase() && haversine(n.lat, n.lon, it.lat, it.lon) < 2000))) return false;
         seen.add(key);
         return true;
       });
-      renderSuggestions(items.slice(0, 6), q);
+      ac.pending = false;
+      renderSuggestions([...near, ...items].slice(0, 6), q, { credit: items.length > 0, manual: !items.length });
     } catch (err) {
-      if (err.name === 'AbortError') return;
-      renderSuggestions([], q, "Suggestions unavailable. Press Enter to search.");
+      if (err.name === 'AbortError' && !late) return; // a newer search took its place
+      if (input.value.trim() !== q) return;
+      ac.pending = false;
+      renderSuggestions(near, q, { note: 'Suggestions are not answering right now.', manual: true });
+    } finally {
+      clearTimeout(limit);
     }
   }
 
-  function renderSuggestions(items, q, emptyText = 'No matching places') {
-    ac.items = items;
+  // The list under the box. `note`: a quiet line at its end ("Searching…"). `manual`: a row
+  // that looks up exactly what was typed. `credit`: the search service's credit line.
+  function renderSuggestions(items, q, { note = '', manual = false, credit = false } = {}) {
+    ac.items = items.slice();
     ac.query = q;
     ac.active = -1;
     list.innerHTML = '';
@@ -8690,22 +8913,22 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
       ac.items = offerLocation ? [{ main: 'Your location', secondary: 'Use GPS', icon: ICONS.loc, isLocation: true }] : [];
       if (!ac.items.length) return closeList();
     }
-    if (!ac.items.length) {
-      list.innerHTML = `<li class="muted">${escapeHtml(emptyText)}</li>`;
-    }
+    if (q && !items.length && !note) list.innerHTML = `<li class="muted">${escapeHtml('No matching places')}</li>`;
+    if (q && manual) ac.items.push({ main: `Search for “${q}”`, secondary: 'Looks up exactly what you typed', icon: ICONS.pin, isManual: true });
     ac.items.forEach((it, i) => {
       const li = document.createElement('li');
       li.id = `${prefix}-sugg-${i}`;
       li.setAttribute('role', 'option');
       li.innerHTML = `<span class="ico${it.isLocation ? ' loc' : ''}">${it.icon}</span>
-        <span class="txt"><span class="main">${it.isLocation ? escapeHtml(it.main) : highlight(it.main, q)}</span>
+        <span class="txt"><span class="main">${it.isLocation || it.isManual ? escapeHtml(it.main) : highlight(it.main, q)}</span>
         <small>${escapeHtml(it.secondary || '')}</small></span>`;
       li.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus in the box
       li.addEventListener('click', () => choose(i));
       li.addEventListener('mousemove', () => setActive(i));
       list.appendChild(li);
     });
-    if (q && items.length) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
+    if (note) list.insertAdjacentHTML('beforeend', `<li class="muted" role="presentation">${escapeHtml(note)}</li>`);
+    if (q && credit) list.insertAdjacentHTML('beforeend', '<li class="powered" role="presentation">Search by Photon · © OpenStreetMap</li>');
     openList();
   }
 
@@ -8727,6 +8950,7 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
   function choose(i) {
     const it = ac.items[i];
     if (!it) return;
+    clearTimeout(ac.timer); // a search about to start for what was typed is no longer wanted
     closeList();
     input.blur();
     if (it.isLocation) {
@@ -8734,25 +8958,48 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
       clearBtn.hidden = true;
       return onPick({ isLocation: true });
     }
+    if (it.isManual) return lookUp(input.value.trim());
     input.value = it.main;
     clearBtn.hidden = false;
     onPick(it);
   }
 
   // Enter: the highlighted suggestion, else the first one, else one plain geocode (Nominatim).
-  async function submit() {
+  // While the suggestions are still on their way, Enter looks up what was typed as it is.
+  function submit() {
     if (ac.active >= 0) return choose(ac.active);
     const q = input.value.trim();
     if (!q) return;
-    if (ac.items.length && ac.query === q && !ac.items[0].isLocation) return choose(0);
+    if (!ac.pending && ac.items.length && ac.query === q && !ac.items[0].isLocation) return choose(0);
+    return lookUp(q);
+  }
+
+  // One plain look-up of exactly what was typed (Nominatim): the first place found is taken.
+  async function lookUp(q) {
+    if (!q) return;
+    clearTimeout(ac.timer);
+    ac.controller?.abort(); // the suggestions for it are no longer waited for
+    ac.pending = false;
+    closeList();
+    input.blur();
+    // The runner is told the look-up is on its way, and it is not waited for for ever.
+    status('Searching\u2026');
+    const ctrl = new AbortController();
+    const limit = setTimeout(() => ctrl.abort(), 2 * SEARCH_WAIT_MS);
     try {
-      const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`));
+      const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`), { signal: ctrl.signal });
       const [hit] = await res.json();
+      status('');
       if (!hit) return toast('No places found for that search.');
-      ac.items = [{ main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon }];
-      choose(0);
+      const it = { main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon };
+      input.value = it.main;
+      clearBtn.hidden = false;
+      onPick(it);
     } catch {
+      status('');
       toast('Search is unavailable right now. Tap the map instead.');
+    } finally {
+      clearTimeout(limit);
     }
   }
 
@@ -8760,8 +9007,9 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
     const q = input.value.trim();
     clearBtn.hidden = !input.value;
     clearTimeout(ac.timer);
-    if (!q) return renderSuggestions([], '');
+    if (!q) { ac.controller?.abort(); ac.pending = false; return renderSuggestions([], ''); }
     if (q.length < 2) return;
+    beginSearch(q);
     ac.timer = setTimeout(() => fetchSuggestions(q), 220);
   });
   input.addEventListener('focus', () => {
@@ -9003,7 +9251,7 @@ function showRoutes(routes, { keep = false } = {}) {
   $('resultsSub').textContent = `${bits.join(' · ')} · from ${state.start.label}${oneWay && state.dest ? ` to ${state.dest.label}` : ''}`;
   // Fewer than three: only the landscape runs are offered (park paths, boardwalks, promenades).
   const note = $('resultsNote');
-  if (note) note.textContent = (routes.length < 3 && !oneWay && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
+  if (note) note.textContent = (routes.length < 3 && !oneWay && !routes[0]?.savedId && routes.every((r) => (r.stats?.landFrac ?? r.stats?.promFrac) >= 0.6) ? 'Only the landscape runs are shown: park paths, boardwalks and promenades for most of the way. ' : '') + 'Tap a route to see it on the map, tap it again to start.';
 
   const cards = $('cards');
   cards.innerHTML = '';
@@ -9426,6 +9674,11 @@ function openRouteAsk(i) {
   $('routeAskUnit').textContent = U.unit;
   $('voiceBtn').textContent = voiceLabelText();
   $('routeAskFacts').innerHTML = r.highlights.map((h) => `<li>${escapeHtml(inUnits(h))}</li>`).join('');
+  // Run it now, or download it for later; a route already on the phone says until when.
+  const kept = r.savedId ? savedRoutes().find((x) => x.id === r.savedId) : null;
+  $('saveRouteBtn').hidden = !!kept;
+  $('saveRouteNote').hidden = !kept;
+  if (kept) $('saveRouteNote').textContent = `Downloaded: on this phone until ${untilDay(kept.until)}`;
   $('routeAsk').hidden = false;
 }
 function closeRouteAsk() {
@@ -9436,6 +9689,74 @@ $('routeAsk').addEventListener('click', (e) => { if (e.target === $('routeAsk'))
 $('startRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: false }); });
 $('demoRunBtn').addEventListener('click', () => { closeRouteAsk(); startRun({ demo: true }); });
 $('reportRouteBtn').addEventListener('click', () => { closeRouteAsk(); openReport(state.routes[state.selected], null); });
+
+// ---------- Routes downloaded to run later ----------
+// On the route sheet the runner chooses: run it now, or download it for later. A downloaded
+// route is the whole route card with its start and the map around it, kept for 14 days
+// (offline.js); it is listed in the planner, where a tap opens it ready to start with no
+// connection, and in Settings, where each can be deleted.
+const untilDay = (ms) => new Date(ms).toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { day: 'numeric', month: 'short' });
+const DOWN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14"/></svg>';
+function renderSavedRoutes() {
+  const list = savedRoutes();
+  const line = (r) => `${U.num(r.distance)} ${U.unit} \u00b7 on this phone until ${untilDay(r.until)}`;
+  $('savedRoutes').hidden = !list.length;
+  $('savedList').innerHTML = list.map((r) => `<button type="button" class="saved-row" data-id="${escapeHtml(r.id)}"><span class="ico">${DOWN_ICON}</span><span class="txt"><b>${escapeHtml(r.name)}</b><small>${escapeHtml(line(r))}</small></span></button>`).join('');
+  $('setRoutesNone').hidden = !!list.length;
+  $('setRoutes').innerHTML = list.map((r) => `<div class="set-row"><span><b>${escapeHtml(r.name)}</b><small>${escapeHtml(line(r))}</small></span><button type="button" class="delete" data-del="${escapeHtml(r.id)}">Delete</button></div>`).join('');
+}
+$('saveRouteBtn').addEventListener('click', async () => {
+  const route = state.routes[state.selected];
+  if (!route || busy || nav.active) return;
+  if (navigator.onLine === false) return toast('You are offline. Download the route while you have a connection.');
+  busy = true;
+  updateGoButton();
+  status('Getting ready\u2026');
+  try {
+    const saved = await saveRouteForLater({ route, start: state.start, dest: route.type === 'oneway' ? state.dest : null, mode: state.mode, engine, onStatus: status });
+    route.savedId = saved.id;
+    toast(`Downloaded with its map, for 14 days. When you are ready to run, open it from Downloaded routes.${saved.missing ? ' A few map pieces did not load; the rest is saved.' : ''}`);
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'The download did not finish. Try again on a better connection.');
+  } finally {
+    busy = false;
+    status(null);
+    updateGoButton();
+    renderSavedRoutes();
+    if (!$('routeAsk').hidden) openRouteAsk(state.selected);
+  }
+});
+// Opening one: its start, the route as it was planned, and its card with Start run. The
+// map around it is read back from the phone, so the runner can be led back onto the route.
+async function openSavedRoute(id) {
+  if (busy || nav.active) return;
+  const rec = await loadSavedRoute(id);
+  if (!rec?.route?.latlngs?.length) { renderSavedRoutes(); return toast('This route is no longer on the phone.'); }
+  setMode(rec.mode === 'tour' ? 'tour' : 'run');
+  setView('app');
+  setStart(rec.start.lat, rec.start.lon, rec.start.label || 'Saved start');
+  if (rec.route.type === 'oneway' && rec.dest) { setRunStyle('oneway'); setDest(rec.dest.lat, rec.dest.lon, rec.dest.label || 'Saved finish'); }
+  setDistanceKm(Math.max(MIN_KM, Math.min(MAX_DISTANCE_KM, rec.route.distance / 1000)));
+  rec.route.savedId = rec.id;
+  state.routes = [rec.route];
+  showRoutes(state.routes);
+  engine.loadArea(rec.lat, rec.lon, rec.radius, () => {}).catch((err) => console.warn('The map of the downloaded route did not load:', err));
+}
+$('savedList').addEventListener('click', (e) => {
+  const row = e.target.closest('.saved-row');
+  if (row) openSavedRoute(row.dataset.id);
+});
+$('setRoutes').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-del]');
+  if (!b) return;
+  b.disabled = true;
+  // The route on screen may be the one going: it stays usable, but is no longer "downloaded".
+  for (const r of state.routes) if (r.savedId === b.dataset.del) delete r.savedId;
+  await deleteSavedRoute(b.dataset.del);
+  renderSavedRoutes();
+  toast('Deleted from this phone.');
+});
 
 // ---------- Settings page ----------
 // Voice (Zoe and Tom, the house voices, plus the phone's others), units, announcements,
@@ -9459,6 +9780,7 @@ function applyUnits() {
   if (state.routes.length) showRoutes(state.routes, { keep: true });
   if (!$('routeAsk').hidden && state.routes[state.selected]) openRouteAsk(state.selected);
   if (state.spots.length && !state.routes.length) drawPlaces(state.spots, $('spotsPrefs'));
+  renderSavedRoutes(); // their distances are written in the runner's units
 }
 
 const voiceLabelText = () => `Voice: ${voice.voices.en?.name?.replace(/\s*\((enhanced|premium|compact)\)/i, '') || 'default'}`;
@@ -9527,6 +9849,7 @@ function setSegment(id, value) {
 }
 function renderSettings() {
   renderVoices();
+  renderSavedRoutes();
   setSegment('setUnits', settings.units);
   setSegment('setWarn', settings.warnM);
   for (const b of $('setWarn').querySelectorAll('button')) b.textContent = U.mi ? `${Math.round(Number(b.dataset.v) / 0.3048 / 10) * 10} ft` : `${b.dataset.v} m`;

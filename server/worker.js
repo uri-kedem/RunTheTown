@@ -29,9 +29,10 @@ const OVERPASS = [
 // Nominatim alone, whose usage policy asks for one; the others get the name.
 const AGENT = 'RunTheTown-proxy/1.0';
 // How long an answer is kept at the edge. Places and streets change slowly.
-// Street data is fresh for three days and kept for thirty: on a day the public servers do
-// not answer, an older copy of the streets and traffic lights is far better than none.
-const TTL = { search: 7 * 86400, nominatim: 30 * 86400, overpass: 3 * 86400, overpassKeep: 30 * 86400 };
+// Each kind of answer is fresh for a while and kept for longer: on a day a public server
+// does not answer, an older copy (of a search, of the streets and traffic lights) is far
+// better than none.
+const TTL = { search: 7 * 86400, searchKeep: 30 * 86400, nominatim: 30 * 86400, nominatimKeep: 90 * 86400, overpass: 3 * 86400, overpassKeep: 30 * 86400 };
 
 export default {
   async fetch(request, env) {
@@ -45,8 +46,8 @@ export default {
     if (!originAllowed(origin, env)) return json({ error: 'origin not allowed' }, 403, cors);
     try {
       if (url.pathname === '/') return new Response('RunTheTown proxy ok\n', { headers: cors });
-      if (url.pathname === '/search') return await proxy(photonUrl(url), TTL.search, cors);
-      if (/^\/nominatim\/(search|reverse|lookup)$/.test(url.pathname)) return await proxy(nominatimUrl(url, env, request), TTL.nominatim, cors, { contact: env.CONTACT_EMAIL });
+      if (url.pathname === '/search') return await proxy(photonUrl(url), TTL.search, cors, { keep: TTL.searchKeep });
+      if (/^\/nominatim\/(search|reverse|lookup)$/.test(url.pathname)) return await proxy(nominatimUrl(url, env, request), TTL.nominatim, cors, { contact: env.CONTACT_EMAIL, keep: TTL.nominatimKeep, waitMs: 6000 });
       if (url.pathname === '/overpass') return await overpass(posted ? new URLSearchParams(await request.text()).get('data') : url.searchParams.get('data'), cors, env);
       return json({ error: 'no such route' }, 404, cors);
     } catch (err) {
@@ -102,18 +103,36 @@ function nominatimUrl(url, env, request) {
   return `${NOMINATIM}/${kind}?${p}`;
 }
 
-// The answer from the edge cache when it is there, else from the provider (and kept).
-async function proxy(upstream, ttl, cors, { contact = '' } = {}) {
+// The answer from the edge cache when it is fresh, else from the provider (and kept). A
+// provider gets a few seconds and, when it fails or does not answer, one more try: the
+// runner is waiting with the keyboard open, and a search service that refuses one
+// connection usually takes the next. When both tries fail, an older answer to the same
+// question is better than none.
+const TRIES = 2;
+async function proxy(upstream, ttl, cors, { contact = '', keep = ttl, waitMs = 3500 } = {}) {
   const cache = caches.default;
   const key = new Request(upstream, { method: 'GET' });
   const hit = await cache.match(key);
-  if (hit) return withCors(hit, cors, 'HIT');
-  const res = await fetch(upstream, { headers: { Accept: 'application/json', 'User-Agent': contact ? `${AGENT} (${contact})` : AGENT } });
-  if (!res.ok) return json({ error: `upstream ${res.status}` }, 502, cors);
-  const body = await res.text();
-  const out = new Response(body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` } });
-  await cache.put(key, out.clone());
-  return withCors(out, cors, 'MISS');
+  const age = hit ? Date.now() - Number(hit.headers.get('X-Fetched') || 0) : Infinity;
+  if (hit && age < ttl * 1000) return withCors(hit, cors, 'HIT');
+  let failure = 'upstream unreachable';
+  for (let attempt = 0; attempt < TRIES; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 250));
+    try {
+      const res = await fetch(upstream, { signal: AbortSignal.timeout(waitMs), headers: { Accept: 'application/json', 'User-Agent': contact ? `${AGENT} (${contact})` : AGENT } });
+      if (res.ok) {
+        const body = await res.text();
+        const out = new Response(body, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${keep}`, 'X-Fetched': String(Date.now()) } });
+        await cache.put(key, out.clone());
+        return withCors(out, cors, 'MISS');
+      }
+      failure = `upstream ${res.status}`;
+      if (res.status < 500 && res.status !== 429) break; // its answer to this very question: asking again changes nothing
+    } catch (err) {
+      failure = err?.name === 'TimeoutError' ? 'upstream did not answer in time' : 'upstream unreachable';
+    }
+  }
+  return hit ? withCors(hit, cors, 'STALE') : json({ error: failure }, 502, cors);
 }
 function withCors(res, cors, cacheState) {
   const h = new Headers(res.headers);

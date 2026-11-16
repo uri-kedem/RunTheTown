@@ -673,6 +673,26 @@ body.native .perks .native-only { display: inline-flex !important; }
 .offline-row .link { color: var(--ink-2); }
 .offline-note { color: var(--ink-3); text-align: center; }
 
+/* ---------- Routes downloaded to run later ---------- */
+/* On the route sheet: the second choice under Start run, and the line that replaces it once
+   the route is on the phone. */
+.route-card-pop .secondary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 8px 0 0; padding: 12px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); font: 700 15px Inter, system-ui, sans-serif; cursor: pointer; }
+.route-card-pop .secondary svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.route-pop-note { margin: 8px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--bg-2); color: var(--ink-2); font-size: 13px; text-align: center; }
+/* In the planner: the list, a tap opens a route. */
+.saved-routes { margin: 0 0 14px; }
+.saved-list { display: grid; gap: 6px; max-height: 172px; overflow-y: auto; }
+.saved-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); padding: 9px 12px; cursor: pointer; font: inherit; }
+.saved-row .ico { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--bg-2); display: grid; place-items: center; }
+.saved-row .ico svg { width: 16px; height: 16px; fill: none; stroke: var(--brand); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.saved-row .txt { min-width: 0; display: grid; gap: 1px; }
+.saved-row b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-row small { font-size: 12px; color: var(--ink-3); }
+body.navigating .saved-routes { display: none; }
+/* In Settings: each with its Delete. */
+.settings .set-row .delete { flex: none; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: #b91c1c; font: 600 13px Inter, system-ui, sans-serif; padding: 7px 12px; cursor: pointer; }
+html[data-theme='dark'] .settings .set-row .delete { color: #f87171; }
+
 /* ---------- Dark theme (Settings, Appearance: Dark) ----------
    The app's surfaces and text come from the variables at the top of this file, so the dark
    look is mostly those eight values. Below them: the places that state a light colour of

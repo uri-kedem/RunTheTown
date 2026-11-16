@@ -152,6 +152,36 @@ export const tileCache = {
       /* storage full or blocked: ignore */
     }
   },
+  async remove(key) {
+    try {
+      await tx(await db(), 'readwrite', (s) => s.delete(key), TILES);
+    } catch {
+      /* best-effort: it expires by itself */
+    }
+  },
+};
+
+// Routes downloaded to run later (see offline.js): each a whole route card with its start,
+// kept by id beside the elevation areas (a plain key-value store, never purged; the list of
+// what is there, and when each expires, is the offline module's).
+export const routeStore = {
+  async put(id, record) {
+    await tx(await db(), 'readwrite', (s) => s.put(record, `route:${id}`));
+  },
+  async get(id) {
+    try {
+      return (await tx(await db(), 'readonly', (s) => s.get(`route:${id}`))) || null;
+    } catch {
+      return null;
+    }
+  },
+  async remove(id) {
+    try {
+      await tx(await db(), 'readwrite', (s) => s.delete(`route:${id}`));
+    } catch {
+      /* best-effort */
+    }
+  },
 };
 
 // The run journal: whole runs by id, newest first. Never purged.

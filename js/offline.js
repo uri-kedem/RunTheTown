@@ -8,11 +8,16 @@
 //   - downloadPack(): the runner's "Download this area": the streets, heights and land
 //     cover the planner needs (through the engine, which keeps them for 14 days anyway) and
 //     the map picture for the same area at every zoom.
+//   - saveRouteForLater(): the runner's "Download for later" on a route they chose: the
+//     route itself, kept whole, with the map around it. It is listed (savedRoutes), opened
+//     again to run with no connection (loadSavedRoute) and deleted from Settings
+//     (deleteSavedRoute), which also frees the map pieces only that route needed.
 //
 // Everything lives in the same on-phone store as the planner's tiles (cache.js) and expires
 // with it after 14 days. OpenFreeMap allows offline copies of up to 3,000 tiles.
 
-import { tileCache } from './cache.js';
+import { tileCache, routeStore } from './cache.js';
+import { haversine } from './geo.js';
 import { vtTilesFor, lonLatToTile, VT_ZOOM } from './vectortiles.js';
 
 const OFM = 'https://tiles.openfreemap.org';
@@ -145,7 +150,7 @@ function rememberPack(pack, storage = globalThis.localStorage) {
  * reports progress. Resolves to { lat, lon, radius, label, time, tiles, missing }; throws
  * when the streets themselves could not be loaded (the pack would be of no use).
  */
-export async function downloadPack({ lat, lon, radius, label = '', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage }) {
+export async function downloadPack({ lat, lon, radius, label = '', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage, remember = true }) {
   const tiles = packTiles(lat, lon, radius);
   if (tiles.length > OFFLINE_MAX_TILES) throw new Error('This area is too large to download in one go. Pick a shorter distance.');
   // 1) The planner's own data: streets, heights, land cover (it keeps them as it loads them).
@@ -181,6 +186,97 @@ export async function downloadPack({ lat, lon, radius, label = '', engine = null
   const missing = await fetchAll(todo.map((t) => () => offlineFetch(template.replace('{z}', t.z).replace('{x}', t.x).replace('{y}', t.y), 'arrayBuffer', { fetchImpl, cache, store: true })), 'Downloading the map…');
   if (todo.length && missing > 0.2 * todo.length) throw new Error('The download did not finish. Try again on a better connection.');
   const pack = { lat, lon, radius: Math.round(radius), label, time: Date.now(), tiles: tiles.length, missing };
-  rememberPack(pack, storage);
+  if (remember) rememberPack(pack, storage); // a route's own download is listed with the route instead
   return pack;
+}
+
+// ---------- Routes downloaded to run later ----------
+
+const SAVED_ROUTES_KEY = 'rtt-routes';
+export const MAX_SAVED_ROUTES = 12;
+const ROUTE_MARGIN_M = 700; // map kept around the route: room to wander off it and be led back
+
+/** The circle that holds a route ([[lat, lon], …]) with room around it: { lat, lon, radius }. */
+export function routeCircle(latlngs, margin = ROUTE_MARGIN_M) {
+  let s = Infinity, n = -Infinity, w = Infinity, e = -Infinity;
+  for (const [la, lo] of latlngs) { s = Math.min(s, la); n = Math.max(n, la); w = Math.min(w, lo); e = Math.max(e, lo); }
+  const lat = (s + n) / 2, lon = (w + e) / 2;
+  let far = 0;
+  for (const [la, lo] of latlngs) far = Math.max(far, haversine(lat, lon, la, lo));
+  return { lat, lon, radius: Math.round(Math.max(1200, far + margin)) };
+}
+
+// The route card as plain data. What the app hangs on a card for the screen (its lines on the
+// map, flags; their names begin with "_") is left out: it cannot be stored and means nothing later.
+const routeData = (route) => JSON.parse(JSON.stringify(route, (k, v) => (k.startsWith('_') ? undefined : v)));
+
+function readSaved(storage) {
+  try {
+    const list = JSON.parse(storage?.getItem(SAVED_ROUTES_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+const fresh = (r, now) => now - r.time < OFFLINE_DAYS * 86400000;
+
+/**
+ * The routes on this phone, newest first: [{ id, name, distance, type, label, time, until,
+ * lat, lon, radius }]. A route is kept as long as its map is: 14 days.
+ */
+export function savedRoutes(storage = globalThis.localStorage, now = Date.now()) {
+  return readSaved(storage).filter((r) => fresh(r, now)).map((r) => ({ ...r, until: r.time + OFFLINE_DAYS * 86400000 }));
+}
+
+/**
+ * Downloads a route to run later: the map around it (what the planner needs to lead the
+ * runner back onto it, and the map picture) and the route card itself with its start.
+ * `start`: { lat, lon, label }; `dest`: the finish of a one-way run, or null; `mode`: 'run'
+ * or 'tour'. Resolves to the list entry; throws when the phone already holds
+ * MAX_SAVED_ROUTES or the map could not be downloaded.
+ */
+export async function saveRouteForLater({ route, start, dest = null, mode = 'run', engine = null, onStatus = () => {}, fetchImpl = (...a) => fetch(...a), cache = tileCache, storage = globalThis.localStorage, store = routeStore, now = Date.now() }) {
+  const all = readSaved(storage);
+  // Routes past their 14 days leave the phone as the list is rewritten.
+  for (const r of all) if (!fresh(r, now)) await store.remove(r.id);
+  const list = all.filter((r) => fresh(r, now));
+  if (list.length >= MAX_SAVED_ROUTES) throw new Error(`You have ${MAX_SAVED_ROUTES} downloaded routes, which is the most the app keeps. Delete one in Settings first.`);
+  const circle = routeCircle(route.latlngs);
+  const pack = await downloadPack({ ...circle, label: route.name, engine, onStatus, fetchImpl, cache, storage, remember: false });
+  const id = `${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const entry = { id, name: route.name, distance: route.distance, type: route.type, label: start?.label || '', time: now, ...circle };
+  await store.put(id, { ...entry, mode, start, dest, route: routeData(route) });
+  storage?.setItem(SAVED_ROUTES_KEY, JSON.stringify([entry, ...list]));
+  return { ...entry, until: now + OFFLINE_DAYS * 86400000, missing: pack.missing };
+}
+
+/** A downloaded route, whole: { id, name, mode, start, dest, route, lat, lon, radius, … }, or null. */
+export async function loadSavedRoute(id, { storage = globalThis.localStorage, store = routeStore, now = Date.now() } = {}) {
+  if (!savedRoutes(storage, now).some((r) => r.id === id)) return null;
+  return store.get(id);
+}
+
+/**
+ * Deletes a downloaded route: the route, and the map pieces only it needed (a piece that
+ * another downloaded route or a downloaded area also covers stays). Resolves to how many
+ * map pieces were freed.
+ */
+export async function deleteSavedRoute(id, { cache = tileCache, storage = globalThis.localStorage, store = routeStore, now = Date.now() } = {}) {
+  const all = readSaved(storage);
+  const gone = all.find((r) => r.id === id);
+  if (!gone) return 0;
+  const rest = all.filter((r) => r.id !== id && fresh(r, now));
+  const needed = new Set();
+  let areas = [];
+  try { areas = JSON.parse(storage?.getItem(OFFLINE_INFO_KEY) || '[]').filter((p) => fresh(p, now)); } catch { /* none */ }
+  for (const other of [...rest, ...areas]) for (const t of packTiles(other.lat, other.lon, other.radius)) needed.add(t.key);
+  let freed = 0;
+  for (const t of packTiles(gone.lat, gone.lon, gone.radius)) {
+    if (needed.has(t.key)) continue;
+    await cache.remove?.(t.key);
+    freed++;
+  }
+  await store.remove(id);
+  storage?.setItem(SAVED_ROUTES_KEY, JSON.stringify(rest));
+  return freed;
 }

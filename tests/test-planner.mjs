@@ -377,6 +377,24 @@ for (const km of [4, 8, 12]) {
   check(/further than the longest run/.test(refused || ''), `a finish 55 km away is refused: ${refused}`);
 }
 
+// The search box's first answers come from the map already on the phone: street names
+// that begin with what was typed, the nearest first, with a point on the street.
+{
+  const ky = 110574, kx = 111320 * Math.cos((CENTER[0] * Math.PI) / 180);
+  await engine.plan({ lat: CENTER[0], lon: CENTER[1], distanceKm: 5, prefs: {}, terrain: 'any' });
+  const oak = engine.streetsNamed('oak', { near: CENTER, limit: 4 });
+  console.log(`\nstreets named "oak": ${oak.map((s) => `${s.name} (${Math.round(Math.hypot((s.lat - CENTER[0]) * ky, (s.lon - CENTER[1]) * kx))} m)`).join(', ')}`);
+  check(oak.length === 4 && oak.every((s) => /^Oak Street/.test(s.name) && Number.isFinite(s.lat) && Number.isFinite(s.lon)), 'four streets whose name begins with what was typed');
+  const far = (s) => Math.hypot((s.lat - CENTER[0]) * ky, (s.lon - CENTER[1]) * kx);
+  check(oak.every((s, i) => !i || far(s) >= far(oak[i - 1]) - 1) && far(oak[0]) < 250, 'the nearest first');
+  const g = engine.area.graph;
+  const on = (s) => { for (let e = 0; e < g.m; e++) if (g.names[g.edgeName[e]]?.name === s.name && Math.abs((g.lat[g.ea[e]] + g.lat[g.eb[e]]) / 2 - s.lat) < 1e-9 && Math.abs((g.lon[g.ea[e]] + g.lon[g.eb[e]]) / 2 - s.lon) < 1e-9) return true; return false; };
+  check(oak.every(on), 'each with a point that lies on that street');
+  check(engine.streetsNamed('prom', { near: CENTER }).some((s) => s.name === 'River Promenade') && engine.streetsNamed('avenue 8', { near: CENTER }).length > 0, 'a word inside the name counts too ("prom" finds River Promenade)');
+  check(engine.streetsNamed('הירק', { near: CENTER })[0]?.local === 'רחוב הירקון', 'the local name is searched as well as the English one');
+  check(engine.streetsNamed('o').length === 0 && engine.streetsNamed('zzz').length === 0 && new RouteEngine({ useCache: false }).streetsNamed('oak').length === 0, 'one letter, no match, or no map loaded: nothing, and no error');
+}
+
 // Is it dark? The sun's height at a place and a moment, against known sunsets.
 {
   const alt = (la, lo, t) => sunAltitude(la, lo, new Date(t));

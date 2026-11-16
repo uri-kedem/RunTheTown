@@ -71,7 +71,7 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
 | `js/i18n.js` | The Hebrew interface: the English → Hebrew table (fixed texts and templates), `tr()`, and the page translator (`applyLanguage`, `watchLanguage`) that turns every text the app writes into Hebrew and the page right to left |
-| `js/offline.js` | Offline: `offlineFetch` answers the map's requests from the phone when it can (through a MapLibre protocol set up in `glmap.js`), `downloadPack` saves an area (planner data, map tiles of every zoom, styles, fonts, icons) for 14 days |
+| `js/offline.js` | Offline: `offlineFetch` answers the map's requests from the phone when it can (through a MapLibre protocol set up in `glmap.js`), `downloadPack` saves an area (planner data, map tiles of every zoom, styles, fonts, icons) for 14 days; routes downloaded to run later (`saveRouteForLater`, `savedRoutes`, `loadSavedRoute`, `deleteSavedRoute`): the route card as data plus the map around it |
 | `js/services.js` | Where search, Nominatim and Overpass live: our proxy (`PROXY`, the Cloudflare Worker at `runthetown-proxy.runthetown.workers.dev`), with the public Overpass servers behind it; the public servers alone when `PROXY` is empty |
 | `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it (`cd server && npx wrangler deploy`; it is not part of `node build.mjs`) |
 | `privacy.html`, `support.html`, the Terms & policy page in `index.html`, `native/APPSTORE.md` | What the app tells people and Apple about data. They must say the same thing: when the app starts or stops sending something anywhere, change all of them (the texts call the proxy "the relay") |
@@ -103,7 +103,11 @@ and `tour` (and "sightseeing"). Do not rename the code.
   outlined runner (taken from `img/install-outline.png`), content in the 190x236 box at (10,10)
   of a 256 canvas. Ask before changing any icon.
 - Cover page text is word for word from Uri's design. Do not rewrite it unasked.
-- No data-clearance setting and no remembered running defaults: he rejected both.
+- No data-clearance setting and no remembered running defaults: he rejected both. The one
+  exception, his own request (Nov 16, 2026): routes downloaded to run later are listed in
+  Settings, each with a Delete.
+- A chosen route offers two things: run it now, or download it for later (the route with its
+  map, 14 days, opened from "Downloaded routes" in the planner).
 
 ## Conventions
 

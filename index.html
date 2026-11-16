@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=3c6b6491" />
+    <link rel="manifest" href="manifest.webmanifest?v=21cc507b" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=3c6b6491" />
+    <link rel="stylesheet" href="css/style.css?v=21cc507b" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -47,7 +47,7 @@
       <button type="button" class="rail-item" data-nav="settings">
         <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="3c6b6491">3c6b6491</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="21cc507b">21cc507b</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -282,6 +282,10 @@
         <label class="set-row native-only"><span><b>Run on the Lock Screen</b><small>The next turn, your distance and pace on the locked screen (iOS 16.1 and later)</small></span><input type="checkbox" id="setLockScreen" class="switch" /></label>
         <label class="set-row native-only"><span><b>Apple Watch</b><small>The run shows on your watch, and each turn taps your wrist</small></span><input type="checkbox" id="setWatch" class="switch" /></label>
 
+        <h2>Downloaded routes</h2>
+        <p class="set-hint" id="setRoutesNone">None on this phone. To keep a route for a run without a connection, choose it and tap Download for later.</p>
+        <div id="setRoutes"></div>
+
         <h2>About</h2>
         <div class="set-row"><span><b>RunTheTown</b><small>Version <span id="settingsBuild"></span> · Map data © OpenStreetMap contributors</small></span><button type="button" class="ghost" id="setUpdate">Check for update</button></div>
         <p class="set-hint"><button type="button" class="link" data-nav="terms">Terms &amp; policy</button></p>
@@ -299,7 +303,7 @@
       <form class="search" id="searchForm" autocomplete="off">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         <input id="searchInput" type="text" placeholder="Search hotel, address or place" aria-label="Search for a start point"
-          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" spellcheck="false" />
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchResults" spellcheck="false" autocomplete="off" enterkeyhint="search" />
         <button type="button" id="clearBtn" class="clear-btn" aria-label="Clear search" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
         </button>
@@ -323,6 +327,12 @@
       <div id="prefsView">
         <div class="start-line" id="startLine">Tap the map or search to set your start point</div>
 
+        <!-- Routes downloaded to run later: a tap opens one, ready to start, with no connection -->
+        <div class="saved-routes" id="savedRoutes" hidden>
+          <div class="field-head"><label>Downloaded routes</label></div>
+          <div class="saved-list" id="savedList"></div>
+        </div>
+
         <!-- Running mode: streets (loops from here), laps (a track, stadium or park loop nearby) or one way (to a place) -->
         <div class="field" id="runStyleField">
           <div class="field-head"><label>How do you want to run?</label></div>
@@ -345,7 +355,7 @@
           <div class="search in-sheet" id="destSearch">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input id="destInput" type="text" placeholder="Search a place, or tap the map" aria-label="Search for the finish"
-              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destResults" spellcheck="false" autocomplete="off" />
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destResults" spellcheck="false" autocomplete="off" enterkeyhint="search" />
             <button type="button" id="destClear" class="clear-btn" aria-label="Clear the finish" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
@@ -421,6 +431,11 @@
         <button type="button" class="primary" id="startRunBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>Start run with voice guidance
         </button>
+        <!-- Or keep it for later: the route and the map around it go onto the phone -->
+        <button type="button" class="secondary" id="saveRouteBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14" /></svg>Download for later
+        </button>
+        <div class="route-pop-note" id="saveRouteNote" hidden></div>
         <div class="route-pop-foot">
           <button type="button" class="link" id="routeAskClose">Back to the routes</button>
           <button type="button" class="link" id="voiceBtn" data-nav="settings">Voice</button>
@@ -559,6 +574,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=3c6b6491"></script>
+    <script src="js/bundle.js?v=21cc507b"></script>
   </body>
 </html>

@@ -49,6 +49,9 @@ def route(r):
     if nomi=='lookup':
         ids=urllib.parse.parse_qs(urllib.parse.urlparse(u).query).get('osm_ids',[''])[0]
         return r.fulfill(body=json.dumps(SCAN_LOOKUP if 'W777' in ids else []), content_type='application/json')
+    if nomi=='search' and 'zzfail' in u:
+        # The plain look-up of exactly what was typed.
+        return r.fulfill(body=json.dumps([{'display_name':'Zz Place, Testville','lat':str(lat0+0.004),'lon':str(lon0+0.004)}]), content_type='application/json')
     if nomi=='search' and 'viewbox' in u:
         q=urllib.parse.unquote(urllib.parse.parse_qs(urllib.parse.urlparse(u).query)['q'][0])
         if q in SCAN: return r.fulfill(body=json.dumps(SCAN[q]), content_type='application/json')
@@ -57,6 +60,8 @@ def route(r):
         return r.fulfill(body=json.dumps(hits.get(q,[])), content_type='application/json')
     if nomi=='reverse': return r.fulfill(body=json.dumps({'error':'none'}), content_type='application/json')
     if 'photon.komoot.io' in u or 'workers.dev/search' in u:
+        # For the SEARCH step: a search the service refuses (the one it never answers is in INIT).
+        if 'zzfail' in u: return r.fulfill(status=502, body=json.dumps({'error':'upstream 521'}), content_type='application/json')
         # The search box (Photon): the synthetic stadium answers to its name, nothing else is known.
         q=urllib.parse.parse_qs(urllib.parse.urlparse(u).query).get('q',[''])[0]; st=SCAN['stadium'][0]
         feats=[{'type':'Feature','geometry':{'type':'Point','coordinates':[float(st['lon']),float(st['lat'])]},'properties':{'name':'Central Stadium','osm_key':'leisure','osm_value':'stadium','city':'Testville','country':'Testland'}}] if 'stadium' in q.lower() else []
@@ -72,6 +77,8 @@ def route(r):
     return r.abort()
 INIT='''
 window.__spoken=[]; window.__wake=0;
+// A search service that never answers (the SEARCH step types "oakhang"): the request stays open until the app gives up on it.
+(() => { const real = window.fetch.bind(window); window.fetch = (url, opts = {}) => (String(url).includes('oakhang') ? new Promise((res, rej) => opts.signal && opts.signal.addEventListener('abort', () => rej(new DOMException('Aborted', 'AbortError')))) : real(url, opts)); })();
 class U { constructor(t){ this.text=t; this.lang=''; } }
 window.SpeechSynthesisUtterance=U;
 Object.defineProperty(window,'speechSynthesis',{value:{
@@ -351,6 +358,70 @@ with sync_playwright() as p:
     # Hebrew: the page turns right to left, the texts and the spoken directions are Hebrew, and English comes back intact.
     pg.set_viewport_size({'width':390,'height':844}); pg.goto('http://127.0.0.1:8766/index.html'); pg.wait_for_timeout(1200)
     if pg.is_visible('#profile'): pg.click('#profileBack') if pg.is_visible('#profileBack') else pg.click('#profileSkip'); pg.wait_for_timeout(200)
+    # SEARCH: the list is never left silent. Streets of the loaded map show at once with a "Searching…" line;
+    # a service that does not answer is given up on; a failed search leaves a row that looks up what was typed.
+    pg.evaluate("window.__rtt.navigate('run')"); pg.wait_for_timeout(400)
+    pg.evaluate("document.getElementById('startLine').click()"); pg.wait_for_timeout(300)
+    rows=lambda: pg.eval_on_selector_all('#searchResults li', "e=>e.map(x=>(x.getAttribute('role')==='option'?'* ':'  ')+x.textContent.trim().replace(/\\s+/g,' '))")
+    pg.fill('#searchInput', 'oakhang'); pg.wait_for_timeout(500); pending=rows()
+    pg.fill('#searchInput', 'oak'); pg.wait_for_timeout(120); pg.fill('#searchInput', 'oakhang'); pg.wait_for_timeout(450); typing=rows()
+    print('SEARCH while waiting:', pending)
+    assert pending==['  Searching\u2026'], pending
+    pg.fill('#searchInput', 'Oak Street'); pg.wait_for_timeout(600); streets=rows()
+    print('SEARCH streets of the map:', streets)
+    assert len([x for x in streets if x.startswith('* Oak Street') and 'Street on your map' in x])==3, streets
+    pg.fill('#searchInput', 'zzfail'); pg.wait_for_timeout(700); failed=rows()
+    print('SEARCH service refused:', failed)
+    assert failed[0].startswith('* Search for \u201czzfail\u201d') and 'Suggestions are not answering right now.' in failed[-1], failed
+    pg.click('#searchResults li[role=option]'); pg.wait_for_function("document.getElementById('startLine').textContent.includes('Zz Place')", timeout=5000)
+    print('SEARCH look-up of what was typed:', pg.text_content('#startLine'))
+    pg.evaluate("document.getElementById('startLine').click()"); pg.wait_for_timeout(300)
+    pg.fill('#searchInput', 'oakhang'); pg.wait_for_timeout(8900); gaveup=rows()
+    print('SEARCH no answer in 8 s:', gaveup)
+    assert any(x.startswith('* Search for') for x in gaveup) and 'Suggestions are not answering right now.' in gaveup[-1], gaveup
+    pg.fill('#searchInput', 'Oak Street'); pg.wait_for_timeout(600); pg.click('#searchResults li[role=option]'); pg.wait_for_timeout(400)
+    print('SEARCH picked a street of the map:', pg.text_content('#startLine'))
+    assert 'Oak Street' in pg.text_content('#startLine')
+    # LATER: on the route sheet the runner runs now or downloads the route for later. A downloaded route is listed
+    # in the planner, survives closing the app, opens ready to start, and is deleted from Settings.
+    if pg.is_visible('#resultsView'): pg.click('#backBtn'); pg.wait_for_timeout(200)
+    assert pg.is_hidden('#savedRoutes'), 'no route was downloaded yet, but the list shows'
+    pg.click('#goBtn'); pg.wait_for_selector('#resultsView:not([hidden]) .card', timeout=40000); pg.wait_for_timeout(300)
+    pg.click('.card:nth-child(1)'); pg.wait_for_timeout(200); pg.click('.card:nth-child(1)'); pg.wait_for_timeout(300)
+    name=pg.text_content('#routeAskName')
+    assert pg.is_visible('#startRunBtn') and pg.is_visible('#saveRouteBtn') and pg.is_hidden('#saveRouteNote'), 'the route sheet must offer Start run and Download for later'
+    pg.click('#saveRouteBtn'); pg.wait_for_selector('#saveRouteNote:not([hidden])', timeout=40000)
+    print('LATER downloaded:', name, '|', pg.text_content('#saveRouteNote'), '| button gone:', pg.is_hidden('#saveRouteBtn'))
+    assert 'on this phone until' in pg.text_content('#saveRouteNote') and pg.is_hidden('#saveRouteBtn')
+    pg.click('#routeAskClose'); pg.wait_for_timeout(200)
+    # The app is closed and opened again: the route is still there, in the planner.
+    pg.goto('http://127.0.0.1:8766/index.html'); pg.wait_for_timeout(1200)
+    if pg.is_visible('#profile'): pg.click('#profileBack') if pg.is_visible('#profileBack') else pg.click('#profileSkip'); pg.wait_for_timeout(200)
+    pg.evaluate("window.__rtt.navigate('run')"); pg.wait_for_timeout(500)
+    listed=pg.eval_on_selector_all('#savedList .saved-row', "e=>e.map(x=>x.textContent.trim().replace(/\\s+/g,' '))")
+    print('LATER listed after reopening:', listed)
+    assert pg.is_visible('#savedRoutes') and len(listed)==1 and listed[0].startswith(name) and 'on this phone until' in listed[0], listed
+    pg.click('#savedList .saved-row'); pg.wait_for_selector('#resultsView:not([hidden]) .card', timeout=10000); pg.wait_for_timeout(400)
+    cards=pg.eval_on_selector_all('.card .card-name','e=>e.map(x=>x.textContent)')
+    assert cards==[name], cards
+    pg.click('.card:nth-child(1)'); pg.wait_for_timeout(300)
+    if pg.is_hidden('#routeAsk'): pg.click('.card:nth-child(1)'); pg.wait_for_timeout(300)
+    assert pg.is_visible('#saveRouteNote') and pg.is_hidden('#saveRouteBtn'), 'an opened downloaded route must say it is on the phone'
+    n_before=len(spoken(pg)); pg.click('#demoRunBtn'); pg.wait_for_timeout(1500)
+    said=[x['text'] for x in spoken(pg)[n_before:n_before+2]]
+    print('LATER opened and running:', cards, '| navigating:', pg.evaluate("document.body.classList.contains('navigating')"), '| said:', said)
+    assert pg.evaluate("document.body.classList.contains('navigating')") and said and 'Starting your' in said[0], said
+    pg.click('#endBtn'); pg.click('#endBtn'); pg.wait_for_timeout(400); pg.click('#finishDone'); pg.wait_for_timeout(400)
+    # Settings lists it with a Delete; after that it is gone from both lists.
+    pg.evaluate("window.__rtt.navigate('settings')"); pg.wait_for_timeout(300)
+    rows=pg.eval_on_selector_all('#setRoutes .set-row b','e=>e.map(x=>x.textContent)')
+    assert rows==[name] and pg.is_hidden('#setRoutesNone'), rows
+    pg.click('#setRoutes [data-del]'); pg.wait_for_function("document.querySelectorAll('#setRoutes .set-row').length===0", timeout=5000)
+    print('LATER deleted in Settings:', pg.is_visible('#setRoutesNone'), '| still stored:', pg.evaluate("JSON.parse(localStorage.getItem('rtt-routes')||'[]').length"))
+    assert pg.is_visible('#setRoutesNone') and pg.evaluate("JSON.parse(localStorage.getItem('rtt-routes')||'[]').length")==0
+    pg.evaluate("window.__rtt.navigate('run')"); pg.wait_for_timeout(300)
+    if pg.is_visible('#resultsView'): pg.click('#backBtn'); pg.wait_for_timeout(200)
+    assert pg.is_hidden('#savedRoutes'), 'the deleted route is still listed in the planner'
     # TERMS: not in the menu any more; reached from the bottom of Settings, and it says what the relay is.
     assert pg.query_selector('.rail [data-nav="terms"]') is None, 'Terms & policy is still in the menu'
     pg.evaluate("window.__rtt.navigate('settings')"); pg.wait_for_timeout(300)

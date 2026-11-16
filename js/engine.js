@@ -312,6 +312,54 @@ export class RouteEngine {
     return routes;
   }
 
+  /**
+   * Streets and paths of the map already loaded whose name matches what was typed: the
+   * name, or a word in it, begins with `text` (English or the local name). They need no
+   * connection and no search service, so the search box can offer them at once, and still
+   * offer them when the service is slow or down. `near` ([lat, lon]) puts the closest
+   * first. Returns [{ name, local, lat, lon }] (a point on the street), at most `limit`.
+   */
+  streetsNamed(text, { near = null, limit = 4 } = {}) {
+    const area = this.area;
+    const q = String(text || '').trim().toLowerCase();
+    if (!area || q.length < 2) return [];
+    const g = area.graph;
+    const mid = (e) => [(g.lat[g.ea[e]] + g.lat[g.eb[e]]) / 2, (g.lon[g.ea[e]] + g.lon[g.eb[e]]) / 2];
+    if (!area.streets) {
+      // Once per map: every named street with its stretches.
+      const byName = new Map(); // name id -> its edges
+      for (let e = 0; e < g.m; e++) {
+        const id = g.edgeName[e];
+        if (id < 0) continue;
+        let list = byName.get(id);
+        if (!list) byName.set(id, (list = []));
+        list.push(e);
+      }
+      area.streets = [...byName].map(([id, edges]) => ({ name: g.names[id].name, local: g.names[id].local, edges }));
+    }
+    const begins = (s) => { const t = String(s || '').toLowerCase(); return t.startsWith(q) ? 2 : t.includes(' ' + q) ? 1 : 0; };
+    const hits = [];
+    for (const s of area.streets) {
+      const rank = Math.max(begins(s.name), begins(s.local));
+      if (!rank) continue;
+      // The point of the street to offer: the one nearest the runner (a long street passes
+      // many places; theirs is the stretch by them), or its middle when no place is given.
+      let at = mid(s.edges[s.edges.length >> 1]);
+      let far = 0;
+      if (near) {
+        far = Infinity;
+        for (const e of s.edges) {
+          const p = mid(e);
+          const d = haversine(near[0], near[1], p[0], p[1]);
+          if (d < far) { far = d; at = p; }
+        }
+      }
+      hits.push({ name: s.name, local: s.local, lat: at[0], lon: at[1], rank, far });
+    }
+    hits.sort((a, b) => b.rank - a.rank || a.far - b.far || a.name.localeCompare(b.name));
+    return hits.slice(0, limit).map(({ name, local, lat, lon }) => ({ name, local, lat, lon }));
+  }
+
   // Stadiums and athletics tracks within ~8 km, from one quick scan (no map download). Cached per start.
   scanSpots(lat, lon) {
     if (!this.cityScan) return Promise.resolve([]);

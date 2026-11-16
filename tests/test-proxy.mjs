@@ -48,6 +48,39 @@ const fromHost = (a) => new URL(a.url).host;
   check(asked.length === 1, 'so two runners a few hundred metres apart share one answer');
 }
 
+// A search service having a bad minute (what left a runner's suggestions empty on Nov 16):
+// a refused connection is tried once more, a server that hangs is given a few seconds and
+// not for ever, and when it will not answer an older answer to the same question is used.
+{
+  const realTimeout = globalThis.setTimeout;
+  const realAbortTimeout = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => realAbortTimeout.call(AbortSignal, Math.max(20, ms / 100)); // the suite does not wait out real seconds
+  asked.length = 0;
+  let n = 0;
+  upstream = async () => (++n === 1 ? new Response('down', { status: 521 }) : okJson({ features: [{ properties: { name: 'Hartglas' } }] }));
+  const again = await call('/search?q=hart&lat=32.18&lon=34.84');
+  check(again.status === 200 && (await again.json()).features[0].properties.name === 'Hartglas' && asked.length === 2, 'a refused connection is tried once more, and the runner gets the suggestions');
+  asked.length = 0;
+  // (Node lets a process end while only a time limit is pending: the ticking keeps it alive.)
+  upstream = (url, init) => new Promise((resolve, reject) => { const tick = setInterval(() => {}, 10); init.signal?.addEventListener('abort', () => { clearInterval(tick); reject(Object.assign(new Error('timed out'), { name: 'TimeoutError' })); }); });
+  const t = Date.now();
+  const hung = await call('/search?q=hartz&lat=32.18&lon=34.84');
+  check(hung.status === 502 && /did not answer in time/.test((await hung.json()).error) && asked.length === 2 && Date.now() - t < 3000, 'a search service that hangs is given up on after two short tries');
+  asked.length = 0;
+  upstream = async () => new Response('not found', { status: 400 });
+  check((await call('/search?q=hartx&lat=32.18&lon=34.84')).status === 502 && asked.length === 1, 'an answer that says the question itself is wrong is not asked twice');
+  // Eight days on, the kept answer for "hart" is no longer fresh; the service is down.
+  const realNow = Date.now;
+  Date.now = () => realNow() + 8 * 86400 * 1000;
+  asked.length = 0;
+  upstream = async () => new Response('down', { status: 521 });
+  const stale = await call('/search?q=hart&lat=32.18&lon=34.84');
+  check(stale.status === 200 && stale.headers.get('X-Cache') === 'STALE' && (await stale.json()).features[0].properties.name === 'Hartglas' && asked.length === 2, 'the service down: last week\'s answer to the same search is served');
+  Date.now = realNow;
+  AbortSignal.timeout = realAbortTimeout;
+  globalThis.setTimeout = realTimeout;
+}
+
 // Nominatim: contact address, the phone's language, a long list of tracks kept whole.
 {
   asked.length = 0;
