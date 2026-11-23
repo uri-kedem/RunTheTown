@@ -480,5 +480,40 @@ check(!bad.offRoute && bad.odometer === 0, 'inaccurate fixes are ignored');
   check(!said.some((s) => /back at the start/.test(s.text)), 'nothing about being back at the start');
 }
 
+// The iPhone app asks the phone itself where the runner is (the web view's own question
+// would name the page's address, "localhost", instead of the app): one foreground watcher,
+// let go as soon as it has answered.
+{
+  const { nativeLocateOnce, isNative } = await import('../js/native.js');
+  const made = [], removed = [];
+  let behave = () => {};
+  const geo = {
+    addWatcher: async (opts, cb) => { const id = `w${made.length + 1}`; made.push({ id, opts }); behave(cb, id); return id; },
+    removeWatcher: async ({ id }) => { removed.push(id); },
+  };
+  check(!isNative() && (await nativeLocateOnce().then(() => 'found', () => 'refused')) === 'refused', 'on the website there is no phone plugin to ask (the browser is asked there)');
+  globalThis.Capacitor = { isNativePlatform: () => true, registerPlugin: (name) => (name === 'BackgroundGeolocation' ? geo : null) };
+  behave = (cb) => setTimeout(() => cb({ latitude: 32.0853, longitude: 34.7818, accuracy: 12 }), 5);
+  const at = await nativeLocateOnce();
+  check(at.lat === 32.0853 && at.lon === 34.7818 && at.accuracy === 12, 'the position comes from the phone\'s own location service');
+  check(made[0].opts.requestPermissions === true && !('backgroundMessage' in made[0].opts) && made[0].opts.stale === true, 'asked for while the app is open only, and a recent position will do');
+  await new Promise((r) => setTimeout(r, 5));
+  check(removed.join() === 'w1', 'the watcher is let go once it has answered');
+  behave = (cb) => cb({ latitude: 1, longitude: 2, accuracy: 3 }); // the answer comes before addWatcher has returned its id
+  await nativeLocateOnce();
+  await new Promise((r) => setTimeout(r, 5));
+  check(removed.join() === 'w1,w2', 'also when the answer comes before the watcher has a name');
+  behave = (cb) => setTimeout(() => cb(null, { code: 'NOT_AUTHORIZED', message: 'Location permission denied' }), 5);
+  const refused = await nativeLocateOnce().then(() => null, (e) => e);
+  await new Promise((r) => setTimeout(r, 5));
+  check(refused?.code === 'NOT_AUTHORIZED' && removed.length === 3, 'a refusal is passed on, and the watcher let go');
+  behave = () => {};
+  const t = Date.now();
+  const late = await nativeLocateOnce({ timeoutMs: 40 }).then(() => null, (e) => e);
+  await new Promise((r) => setTimeout(r, 5));
+  check(/in time/.test(late?.message || '') && Date.now() - t < 1000 && removed.length === 4, 'no position at all: given up on, not waited for for ever');
+  delete globalThis.Capacitor;
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nAll navigation tests passed');
 process.exit(failures ? 1 : 0);

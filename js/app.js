@@ -7,7 +7,7 @@ import { haversine, darkForRun } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue, spokenLength } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
-import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch } from './native.js';
+import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch, nativeLocateOnce } from './native.js';
 import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
 import { fallbackLinks, findStory } from './details.js';
 import { searchUrl, nominatimUrl, PROXY } from './services.js';
@@ -320,19 +320,24 @@ $('offlineBtn').addEventListener('click', async () => {
 
 // ---------- Location ----------
 function locate({ quiet = false } = {}) {
+  const found = (lat, lon) => {
+    $('locateBtn').classList.remove('busy');
+    setStart(lat, lon, 'Your location');
+  };
+  const failed = () => {
+    $('locateBtn').classList.remove('busy');
+    if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.");
+  };
+  // In the iPhone app the phone itself is asked, so the permission question is the app's
+  // ("Allow RunTheTown…") and not the web view's, which would say "localhost".
+  if (isNative()) {
+    $('locateBtn').classList.add('busy');
+    nativeLocateOnce().then((p) => found(p.lat, p.lon), failed);
+    return;
+  }
   if (!navigator.geolocation) return quiet || toast('Location is not available in this browser.');
   $('locateBtn').classList.add('busy');
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      $('locateBtn').classList.remove('busy');
-      setStart(pos.coords.latitude, pos.coords.longitude, 'Your location');
-    },
-    () => {
-      $('locateBtn').classList.remove('busy');
-      if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.");
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-  );
+  navigator.geolocation.getCurrentPosition((pos) => found(pos.coords.latitude, pos.coords.longitude), failed, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 $('locateBtn').addEventListener('click', () => {
   showPrefs();

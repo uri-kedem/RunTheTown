@@ -7606,10 +7606,18 @@ function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' } = {})
       g.font = '500 34px Inter, -apple-system, Helvetica, Arial, sans-serif';
       g.fillStyle = '#94a3b8';
       g.fillText([who, new Date(run.time).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '), 60, 915, W - 120);
+      // One size for all the figures: the largest that lets the widest one (a time over an
+      // hour, "1:03:34") fit its column with a gap, so the figures never run into each other.
+      const col = (W - 120) / Math.max(1, stats.length);
+      const figure = (px) => `800 ${px}px Inter, -apple-system, Helvetica, Arial, sans-serif`;
+      let size = 88;
+      g.font = figure(size);
+      const widest = Math.max(0, ...stats.map(([value]) => g.measureText(String(value)).width));
+      if (widest > col - 36) size = Math.max(48, Math.floor((size * (col - 36)) / widest));
       stats.forEach(([value, label], i) => {
-        const x = 60 + i * ((W - 120) / stats.length);
+        const x = 60 + i * col;
         g.fillStyle = '#fff';
-        g.font = '800 88px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.font = figure(size);
         g.fillText(value, x, 1090);
         g.fillStyle = '#94a3b8';
         g.font = '500 32px Inter, -apple-system, Helvetica, Arial, sans-serif';
@@ -7756,7 +7764,8 @@ const journal = {
 //     speaking on while the screen is locked (UIBackgroundModes audio);
 //   - NativeGps: a background location watcher, so fixes keep coming with the screen off
 //     or the app behind another (UIBackgroundModes location);
-//   - NativeScreenLock: keep-awake while the run screen is on.
+//   - NativeScreenLock: keep-awake while the run screen is on;
+//   - nativeLocateOnce: where the runner is, asked of the phone itself and not of the web view.
 // Plugins are reached through the bridge (Capacitor.registerPlugin), so the bundle needs
 // no npm imports; the native side is added by `npx cap sync ios`.
 
@@ -7900,6 +7909,41 @@ class NativeGps {
     if (this.id != null) this.geo?.removeWatcher({ id: this.id }).catch(() => {});
     this.id = null;
   }
+}
+
+/**
+ * The runner's position, once, through the phone's own location service. Asked the web
+ * way (navigator.geolocation), the question iOS puts to the runner comes from the web view
+ * and names the page's address: "localhost would like to use your current location". Asked
+ * here it is the app's own: "Allow RunTheTown to use your location?", with our reason, and
+ * it is the one question the run itself needs later. Resolves to { lat, lon, accuracy };
+ * rejects when location is refused or switched off, or no position comes in `timeoutMs`
+ * (generous: the first time, the runner is reading that question while the clock runs).
+ */
+function nativeLocateOnce({ timeoutMs = 45000 } = {}) {
+  const geo = plugin('BackgroundGeolocation');
+  if (!geo) return Promise.reject(new Error('No location plugin'));
+  return new Promise((resolve, reject) => {
+    let id = null;
+    let done = false;
+    const finish = (settle, value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (id != null) geo.removeWatcher({ id }).catch(() => {});
+      settle(value);
+    };
+    const timer = setTimeout(() => finish(reject, new Error('No position in time')), timeoutMs);
+    // No background message: a watcher for while the app is open, which asks for location
+    // "while using the app". A recent position the phone already has will do for a start point.
+    Promise.resolve(geo.addWatcher({ requestPermissions: true, stale: true }, (loc, err) => {
+      if (err) return finish(reject, err);
+      if (loc) finish(resolve, { lat: loc.latitude, lon: loc.longitude, accuracy: loc.accuracy });
+    })).then((watcher) => {
+      id = watcher;
+      if (done) geo.removeWatcher({ id }).catch(() => {}); // the answer came before the watcher's own id
+    }, (err) => finish(reject, err));
+  });
 }
 
 /** Keeps the screen on while the run screen is up (the guide itself goes on with the screen off). */
@@ -8774,19 +8818,24 @@ $('offlineBtn').addEventListener('click', async () => {
 
 // ---------- Location ----------
 function locate({ quiet = false } = {}) {
+  const found = (lat, lon) => {
+    $('locateBtn').classList.remove('busy');
+    setStart(lat, lon, 'Your location');
+  };
+  const failed = () => {
+    $('locateBtn').classList.remove('busy');
+    if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.");
+  };
+  // In the iPhone app the phone itself is asked, so the permission question is the app's
+  // ("Allow RunTheTown…") and not the web view's, which would say "localhost".
+  if (isNative()) {
+    $('locateBtn').classList.add('busy');
+    nativeLocateOnce().then((p) => found(p.lat, p.lon), failed);
+    return;
+  }
   if (!navigator.geolocation) return quiet || toast('Location is not available in this browser.');
   $('locateBtn').classList.add('busy');
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      $('locateBtn').classList.remove('busy');
-      setStart(pos.coords.latitude, pos.coords.longitude, 'Your location');
-    },
-    () => {
-      $('locateBtn').classList.remove('busy');
-      if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.");
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-  );
+  navigator.geolocation.getCurrentPosition((pos) => found(pos.coords.latitude, pos.coords.longitude), failed, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 $('locateBtn').addEventListener('click', () => {
   showPrefs();

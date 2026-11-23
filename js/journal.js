@@ -182,10 +182,18 @@ export function drawShareCard(run, { title = 'RunTheTown', stats = [], who = '' 
       g.font = '500 34px Inter, -apple-system, Helvetica, Arial, sans-serif';
       g.fillStyle = '#94a3b8';
       g.fillText([who, new Date(run.time).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })].filter(Boolean).join(' · '), 60, 915, W - 120);
+      // One size for all the figures: the largest that lets the widest one (a time over an
+      // hour, "1:03:34") fit its column with a gap, so the figures never run into each other.
+      const col = (W - 120) / Math.max(1, stats.length);
+      const figure = (px) => `800 ${px}px Inter, -apple-system, Helvetica, Arial, sans-serif`;
+      let size = 88;
+      g.font = figure(size);
+      const widest = Math.max(0, ...stats.map(([value]) => g.measureText(String(value)).width));
+      if (widest > col - 36) size = Math.max(48, Math.floor((size * (col - 36)) / widest));
       stats.forEach(([value, label], i) => {
-        const x = 60 + i * ((W - 120) / stats.length);
+        const x = 60 + i * col;
         g.fillStyle = '#fff';
-        g.font = '800 88px Inter, -apple-system, Helvetica, Arial, sans-serif';
+        g.font = figure(size);
         g.fillText(value, x, 1090);
         g.fillStyle = '#94a3b8';
         g.font = '500 32px Inter, -apple-system, Helvetica, Arial, sans-serif';

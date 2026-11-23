@@ -33,11 +33,15 @@
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>RunTheTown keeps guiding your run while the phone is locked or in your pocket.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RunTheTown follows your position along the route to read the turns and count your distance.</string>
+	<string>RunTheTown uses your position to set the start of a run, and follows it along the route to read the turns and count your distance.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>To tell running from standing still.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>To pick a profile photo.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>To take a profile photo, if you choose the camera instead of your photo library.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>To save the picture of a run to your photos when you choose Save Image while sharing it.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
