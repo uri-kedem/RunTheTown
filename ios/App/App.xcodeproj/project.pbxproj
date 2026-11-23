@@ -17,7 +17,6 @@
 		42307B087D4994230F438BCD /* RunTheTownWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4BC18DE50FCA596C23A89A98 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C3B92DDBFC3F39540E4FDDDA /* Foundation.framework */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
-		7C1E5A912EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C1E5A902EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
@@ -26,6 +25,7 @@
 		62BF4EDE206FD470E64F0EB7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B281CB97086E4D783A57E2DF /* WidgetKit.framework */; };
 		7324987DB09312A0311A7100 /* RunTheTownWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDC7B3FE4C38897DEDFCFB8 /* RunTheTownWatchApp.swift */; };
 		738033CEA53DE8B5B1D7A388 /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79122385025A786F30F4B6AC /* RunActivityAttributes.swift */; };
+		7C1E5A912EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7C1E5A902EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy */; };
 		7C680EB33DE8B7C2F7392277 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B1DD2AE2222F0DD03E8447 /* SceneDelegate.swift */; };
 		80C431E4E3D431FCF0593CDC /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79122385025A786F30F4B6AC /* RunActivityAttributes.swift */; };
 		817C0375EDFCE9B3BCA3A4DC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 544F3CD5245D9543760A374C /* SwiftUI.framework */; };
@@ -87,7 +87,6 @@
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		4FDC7B3FE4C38897DEDFCFB8 /* RunTheTownWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunTheTownWatchApp.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
-		7C1E5A902EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -98,6 +97,7 @@
 		544F3CD5245D9543760A374C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 		6E9B93F3136269855BF6A10A /* RunSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunSession.swift; sourceTree = "<group>"; };
 		79122385025A786F30F4B6AC /* RunActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunActivityAttributes.swift; sourceTree = "<group>"; };
+		7C1E5A902EC3F10000A1B2C3 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		912B9C5964BECFBDF0C0A11F /* WatchPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchPlugin.swift; sourceTree = "<group>"; };
 		9ACBA72BCC0ED0C8ADB13C5E /* RunView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunView.swift; sourceTree = "<group>"; };
 		9F342A3CF324B65093DFEDC9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };

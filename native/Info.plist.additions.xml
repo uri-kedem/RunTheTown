@@ -1,6 +1,6 @@
 <!-- Merge into ios/App/App/Info.plist (inside the top-level <dict>). -->
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>RunTheTown follows your position along the route to read the turns and count your distance.</string>
+<string>RunTheTown uses your position to set the start of a run, and follows it along the route to read the turns and count your distance.</string>
 <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 <string>RunTheTown keeps guiding your run while the phone is locked or in your pocket.</string>
 <key>NSLocationAlwaysUsageDescription</key>
