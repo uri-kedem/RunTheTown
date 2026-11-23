@@ -104,14 +104,21 @@ and `tour` (and "sightseeing"). Do not rename the code.
   of a 256 canvas. Ask before changing any icon.
 - Cover page text is word for word from Uri's design. Do not rewrite it unasked.
 - The cover's background is a still picture, not a video: he tried the video and did not like
-  it (Nov 23, 2026). On a wide screen it is `img/cover-runners.jpg`, shown whole and in its own
-  proportions, the runners beneath the headline and the route beside them, as in his design;
-  never crop or stretch it there. On both layouts the sunset sky continues to the top of the
-  page with the writing in front of it: no blurred copy, no solid block over the sky.
+  it (Nov 23, 2026). On a wide screen it is `img/cover-runners.jpg`, his picture of the
+  runners seen from the side (not the more head-on frame, which he rejected), extended at his
+  request with more sky above and more paving below so that it is square and fills the panel
+  (made with Gemini in his own account, Nov 23, 2026; the unextended original and Gemini's
+  full-size file are in `Claude outputs/`). It is shown across the panel at its own
+  proportions, never enlarged, cropped at the sides or stretched; the sky behind the headline,
+  the runners beneath it; its right edge cut along the map's diagonal so it meets the orange
+  line. Only where a window leaves the picture short of the panel's top or foot do the colours
+  of its own sky and paving go on, the picture fading into them. He rejected, in turn: a
+  blurred copy as fill, a zoomed picture, hard-edged colour blocks, plain dark blocks, and
+  colour fills as the main answer ("generate the two blocks like they continue the photo").
   On a phone (the iPhone app, and the website under 900 px) the cover is `img/cover-phone.jpg`,
   a runner on a boardwalk at sunset that he chose on Nov 23, 2026 ("Person running on dock" by
   Josiah Weiss, Unsplash License; source and date in `docs/mvp-status.md`). Ask before replacing
-  either picture.
+  either picture, and show him the result before it is published.
 - No data-clearance setting and no remembered running defaults: he rejected both. The one
   exception, his own request (Nov 16, 2026): routes downloaded to run later are listed in
   Settings, each with a Delete.

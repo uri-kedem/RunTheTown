@@ -473,18 +473,35 @@ body[data-view='app'] .home { display: none; }
   .home { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 28vw, 460px); }
   .hero { --photo-top: 0px; padding: 0 0 28px; min-height: 100%; }
   .hero-photo { position: absolute; left: 0; right: 0; top: var(--photo-top); bottom: 0; height: auto; margin: 0; }
-  /* On a wide screen the picture is shown whole, across the panel, in its own proportions
-     (Uri's design: the runners beneath the headline, the route beside them); it is never
-     cropped or stretched to fill. Above it the sunset simply goes on: the colours of the
-     picture's own top edge, left to right, carried up the panel (the veil over it darkens
-     them towards the top, as the evening sky does). Below it the promenade goes on the
-     same way, in the colours of its bottom edge. No blurred copy: the sky is plain sky. */
-  .hero-photo { background:
-    linear-gradient(90deg, #7b6436 0%, #7a6237 20%, #85663a 40%, #8d6b3e 60%, #b48753 80%, #b47f40 100%) top / 100% 56% no-repeat,
-    linear-gradient(90deg, #674430 0%, #5a3a28 20%, #5e3d2b 40%, #734c39 60%, #644333 80%, #674638 100%) bottom / 100% 46% no-repeat,
-    #0f172a; }
-  .hero-photo .hero-shot { top: 50%; bottom: auto; height: auto; object-fit: contain; transform: translateY(-42%); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 88%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 88%, transparent 100%); }
-  .hero-photo::before { background: linear-gradient(180deg, rgba(15, 23, 42, 0.75) 0%, rgba(15, 23, 42, 0.3) 26%, rgba(15, 23, 42, 0) 44%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a lighter veil: the faces show beside the headline */
+  /* On a wide screen (Uri's design: the runners beneath the headline, the route beside
+     them) the picture is his runners seen from the side, with the sky above them and the
+     paving below them drawn on (Nov 23, 2026: he asked for the space above and below to
+     continue the photograph, and the picture was extended for him), so it is square and
+     fills the panel by itself. It is shown across the panel at its own proportions: never
+     enlarged to fill (that costs sharpness), never cropped at the sides, never stretched,
+     and with no blurred copy behind it.
+     - The panel runs on under the map's slanted edge and is cut along the same diagonal,
+       so the picture meets the orange line instead of stopping short of it (--slant is
+       the width of that slant: 14% of the map column).
+     - It is placed so that the runners' faces come just under the writing whatever the
+       window: the heads are 32.2% of the way down the picture, and stay 272px down the
+       panel. In an ordinary window that leaves sky to spare above and paving below.
+     - Only a window much taller than it is wide, or a very narrow one, leaves the picture
+       short of the top or the foot of the panel. There the sky goes on in the colours of
+       the picture's own top edge and the paving in those of its bottom edge, and that edge
+       of the picture fades into them so no rectangle shows (--fade-top and --fade-foot are
+       the length of the fade: nothing at all when the picture reaches past the edge). */
+  .home { --slant: calc(0.14 * clamp(240px, 28vw, 460px)); }
+  .hero-photo { right: calc(-1 * var(--slant)); clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%); container-type: size; background:
+    linear-gradient(90deg, #978674 0%, #968777 12%, #94877a 25%, #8f857b 38%, #8a847d 50%, #838280 62%, #7f8183 75%, #7c7e82 88%, #797b80 100%) top / 100% 50% no-repeat,
+    linear-gradient(90deg, #704d3d 0%, #754f3b 12%, #78513d 25%, #734e3c 38%, #6c4939 50%, #6e4b3a 62%, #654637 75%, #5b4237 88%, #6e4f42 100%) bottom / 100% 50% no-repeat; }
+  .hero-photo img { top: 0; height: auto; object-fit: fill; }
+  @supports (top: 1cqw) {
+    .hero-photo img { --top: calc(272px - 32.2cqw); --fade-top: clamp(0px, calc(var(--top) * 1000), 7cqw); --fade-foot: clamp(0px, calc((100cqh - var(--top) - 100cqw) * 1000), 12cqw); top: var(--top);
+      -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.55) calc(var(--fade-top) * 0.45), #000 var(--fade-top), #000 calc(100% - var(--fade-foot)), rgba(0, 0, 0, 0.5) calc(100% - var(--fade-foot) * 0.45), transparent 100%);
+      mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.55) calc(var(--fade-top) * 0.45), #000 var(--fade-top), #000 calc(100% - var(--fade-foot)), rgba(0, 0, 0, 0.5) calc(100% - var(--fade-foot) * 0.45), transparent 100%); }
+  }
+  .hero-photo::before { background: linear-gradient(180deg, rgba(36, 26, 16, 0.86) 0, rgba(36, 26, 16, 0.74) 150px, rgba(36, 26, 16, 0.38) 232px, rgba(36, 26, 16, 0) 292px, rgba(15, 23, 42, 0) 62%, rgba(15, 23, 42, 0.5) 86%, rgba(15, 23, 42, 0.88) 100%); } /* dusk over the sky behind the writing; the foot of the panel darkened for the small print */
   .hero-copy { padding: 44px 48px 0; }
   .hero h1 { font-size: clamp(36px, 3.9vw, 58px); }
   .modes { grid-template-columns: minmax(0, 560px); gap: 16px; padding: 0 48px; margin: auto 0 16px; padding-top: 24vh; }

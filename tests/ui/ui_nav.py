@@ -457,16 +457,28 @@ with sync_playwright() as p:
     pg.click('#settingsBack'); pg.wait_for_timeout(200)
     # desktop look
     pg.set_viewport_size({'width':1280,'height':800}); pg.wait_for_timeout(400); pg.screenshot(path=f'{S}/nav-5-desktop.png')
-    # COVER: a still picture, no video, no blurred copy. On a wide screen the runners are shown whole, in their own
-    # proportions, beneath the headline; a phone has an upright picture of its own that starts at the very top of the
-    # page, its sky behind the words.
+    # COVER: a still picture, no video, no blurred copy. On a wide screen the runners (the side view, with the sky above
+    # and the paving below drawn on so the picture is square) are shown across the panel at their own proportions, up to
+    # the map's diagonal, never enlarged; the sky is behind the headline and the runners' heads come beneath the writing.
+    # In a window as wide as a computer's the picture covers the panel from top to bottom by itself: no colour blocks.
+    # A phone has an upright picture of its own that starts at the very top of the page, its sky behind the words.
     pg.evaluate("window.__rtt.navigate('home')"); pg.wait_for_timeout(400)
-    cover=pg.evaluate("(() => { const s=document.querySelector('.hero-shot'), r=s.getBoundingClientRect(), p=document.querySelector('.hero-photo').getBoundingClientRect(), c=document.querySelector('.hero-copy h1').getBoundingClientRect(); return { video: document.querySelectorAll('video').length, shown: r.width/r.height, own: s.naturalWidth/s.naturalHeight, across: r.width/p.width, top: r.top, headline: c.top, blurred: document.querySelectorAll('.hero-fill').length, src: s.currentSrc.split('/').pop().split('.')[0], map: getComputedStyle(document.querySelector('.home-map')).display }; })()")
+    cover=pg.evaluate("(() => { const s=document.querySelector('.hero-shot'), r=s.getBoundingClientRect(), p=document.querySelector('.hero-photo').getBoundingClientRect(), c=document.querySelector('.hero-copy h1').getBoundingClientRect(); return { video: document.querySelectorAll('video').length, shown: r.width/r.height, own: s.naturalWidth/s.naturalHeight, across: r.width/p.width, top: r.top, headline: c.top, blurred: document.querySelectorAll('.hero-fill').length, src: s.currentSrc.split('/').pop().split('.')[0], map: getComputedStyle(document.querySelector('.home-map')).display, natural: s.naturalWidth, width: r.width, edge: p.right - (document.querySelector('.home-map').getBoundingClientRect().left + 0.14*document.querySelector('.home-map').getBoundingClientRect().width), textBottom: document.querySelector('.hero-copy').getBoundingClientRect().bottom, heads: r.top + 0.322*r.height, panelTop: p.top, blurFilter: getComputedStyle(s).filter !== 'none', fades: getComputedStyle(s).maskImage !== 'none' || getComputedStyle(s).webkitMaskImage !== 'none' }; })()")
     print('COVER wide:', {k:(round(v,2) if isinstance(v,float) else v) for k,v in cover.items()})
     assert cover['video']==0, 'the cover still has a video'
     assert abs(cover['shown']-cover['own'])/cover['own']<0.02 and cover['across']>0.98, 'on a wide screen the picture must be whole and in its own proportions'
-    assert cover['top']>cover['headline'] and cover['map']=='block' and cover['src']=='cover-runners', 'the runners sit beneath the headline, the route beside them'
-    assert cover['blurred']==0, 'the sky above the runners is plain sky, not a blurred copy of the picture'
+    assert cover['top']<cover['headline'] and cover['map']=='block' and cover['src']=='cover-runners', 'the sky of the picture is behind the headline, the route beside it'
+    assert abs(cover['own']-1)<0.02 and cover['natural']>=1600, 'the wide cover is the square picture: the runners with sky above and paving below'
+    assert cover['blurred']==0 and not cover['blurFilter'], 'nothing on the cover is blurred: no blurred copy of the picture, no blur on the picture'
+    assert cover['fades'], 'where the picture stops short of the panel its edge fades into the colours beyond: no rectangle edge'
+    assert cover['width']<=cover['natural'], 'the picture must not be enlarged beyond its own size (that costs sharpness)'
+    assert abs(cover['edge'])<2, 'the picture must run right up to the diagonal line of the map, with no wedge between them'
+    assert cover['heads']>=cover['textBottom'], 'the runners come beneath the writing'
+    pg.set_viewport_size({'width':1920,'height':1080}); pg.wait_for_timeout(400)
+    full=pg.evaluate("(() => { const r=document.querySelector('.hero-shot').getBoundingClientRect(), p=document.querySelector('.hero-photo').getBoundingClientRect(); return { above: r.top - p.top, below: r.bottom - p.bottom, across: r.width/p.width, shown: r.width/r.height, width: r.width, natural: document.querySelector('.hero-shot').naturalWidth }; })()")
+    print('COVER full screen:', {k:(round(v,2) if isinstance(v,float) else v) for k,v in full.items()})
+    assert full['above']<=0 and full['below']>=0, 'on a computer screen the picture covers the panel from top to bottom: nothing but the picture behind the page'
+    assert full['across']>0.98 and abs(full['shown']-1)<0.02 and full['width']<=full['natural'], 'full screen: the picture whole across the panel, in proportion, not enlarged'
     pg.set_viewport_size({'width':390,'height':844}); pg.wait_for_timeout(400)
     phone=pg.evaluate("(() => { const s=document.querySelector('.hero-shot'), r=s.getBoundingClientRect(), h=document.querySelector('.hero-copy h1').getBoundingClientRect(); return { fit: getComputedStyle(s).objectFit, src: s.currentSrc.split('/').pop().split('.')[0], top: r.top, bottom: r.bottom/innerHeight, headline: h.top, upright: s.naturalHeight>s.naturalWidth }; })()")
     print('COVER phone:', phone)
