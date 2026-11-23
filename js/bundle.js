@@ -9635,19 +9635,6 @@ function escapeHtml(s) {
 // ---------- Live navigation ----------
 // Inside the native app (Capacitor) the phone's own speech engine, background GPS and
 // keep-awake take over from the browser pieces.
-// The cover's moving picture fades in once it really plays (autoplay can be refused; the photo stays then).
-{
-  const v = document.querySelector('.hero-video');
-  if (v) {
-    const show = () => { if (!v.paused && v.readyState >= 3) v.classList.add('playing'); };
-    v.addEventListener('playing', show);
-    v.addEventListener('timeupdate', show); // it may have started before this script ran
-    v.addEventListener('pause', () => v.classList.remove('playing'));
-    v.play?.().catch(() => {});
-    show();
-  }
-}
-
 const voice = isNative() ? new NativeVoice() : new Voice();
 // Directions are spoken in the interface language: in Hebrew when it is on and the device has
 // a Hebrew voice. Without one they stay in English, which beats silence.

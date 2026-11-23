@@ -457,6 +457,21 @@ with sync_playwright() as p:
     pg.click('#settingsBack'); pg.wait_for_timeout(200)
     # desktop look
     pg.set_viewport_size({'width':1280,'height':800}); pg.wait_for_timeout(400); pg.screenshot(path=f'{S}/nav-5-desktop.png')
+    # COVER: a still picture, no video, no blurred copy. On a wide screen the runners are shown whole, in their own
+    # proportions, beneath the headline; a phone has an upright picture of its own that starts at the very top of the
+    # page, its sky behind the words.
+    pg.evaluate("window.__rtt.navigate('home')"); pg.wait_for_timeout(400)
+    cover=pg.evaluate("(() => { const s=document.querySelector('.hero-shot'), r=s.getBoundingClientRect(), p=document.querySelector('.hero-photo').getBoundingClientRect(), c=document.querySelector('.hero-copy h1').getBoundingClientRect(); return { video: document.querySelectorAll('video').length, shown: r.width/r.height, own: s.naturalWidth/s.naturalHeight, across: r.width/p.width, top: r.top, headline: c.top, blurred: document.querySelectorAll('.hero-fill').length, src: s.currentSrc.split('/').pop().split('.')[0], map: getComputedStyle(document.querySelector('.home-map')).display }; })()")
+    print('COVER wide:', {k:(round(v,2) if isinstance(v,float) else v) for k,v in cover.items()})
+    assert cover['video']==0, 'the cover still has a video'
+    assert abs(cover['shown']-cover['own'])/cover['own']<0.02 and cover['across']>0.98, 'on a wide screen the picture must be whole and in its own proportions'
+    assert cover['top']>cover['headline'] and cover['map']=='block' and cover['src']=='cover-runners', 'the runners sit beneath the headline, the route beside them'
+    assert cover['blurred']==0, 'the sky above the runners is plain sky, not a blurred copy of the picture'
+    pg.set_viewport_size({'width':390,'height':844}); pg.wait_for_timeout(400)
+    phone=pg.evaluate("(() => { const s=document.querySelector('.hero-shot'), r=s.getBoundingClientRect(), h=document.querySelector('.hero-copy h1').getBoundingClientRect(); return { fit: getComputedStyle(s).objectFit, src: s.currentSrc.split('/').pop().split('.')[0], top: r.top, bottom: r.bottom/innerHeight, headline: h.top, upright: s.naturalHeight>s.naturalWidth }; })()")
+    print('COVER phone:', phone)
+    assert phone['fit']=='cover' and phone['src']=='cover-phone' and phone['upright'], phone
+    assert phone['top']<=0 and phone['top']<phone['headline'] and phone['bottom']>=1, 'on a phone the picture runs from the very top of the page to the bottom, behind the words'
     ctx.close(); b.close()
 srv.shutdown()
 print('\n'.join(logs) or 'no console errors')

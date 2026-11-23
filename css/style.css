@@ -422,11 +422,9 @@ body[data-view='app'] .home { display: none; }
    dark above the runners, the two cards lie over the promenade in front of them. */
 .hero-copy { order: 0; } .hero-photo { order: 1; } .modes { order: 2; } .perks { order: 3; } .home-foot { order: 4; } /* the picture is first in the markup (it is the backdrop on wide screens) */
 .hero-photo { position: absolute; left: 0; right: 0; top: calc(-68px - env(safe-area-inset-top, 0px)); bottom: 0; overflow: hidden; z-index: 0; } /* the picture is the whole opening page: from behind the top bar to the bottom, the words and the card on it */
-.hero-photo img, .hero-video { position: absolute; left: 0; right: 0; bottom: 0; top: auto; width: 100%; height: 76%; object-fit: cover; object-position: 50% 50%; display: block; }
-.hero-video { opacity: 0; transition: opacity 0.8s; } /* the photo shows until the clip is playing; both are the same scene */
-.hero-video.playing { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .hero-video { display: none; } }
-.hero-photo::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, #0f172a 0%, #0f172a 22%, rgba(15, 23, 42, 0.85) 32%, rgba(15, 23, 42, 0.35) 44%, rgba(15, 23, 42, 0) 56%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a light veil at the top for the words, darker at the foot for the perks */
+/* The picture starts at the very top of the page: its evening sky is behind the words, which are written in front of it. It is a fixed, generous height (and never shorter than the page), so the sun and the runner come out just under the words on a small phone and a large one alike. */
+.hero-photo img { position: absolute; left: 0; right: 0; top: 0; bottom: auto; width: 100%; height: max(118%, 1100px); object-fit: cover; object-position: 50% 0; display: block; }
+.hero-photo::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.62) 16%, rgba(15, 23, 42, 0.3) 30%, rgba(15, 23, 42, 0) 42%, rgba(15, 23, 42, 0) 56%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a light veil at the top for the words, darker at the foot for the perks */
 .hero-copy { position: relative; z-index: 1; padding: 6px 20px 0; } /* the words at the top of the page, on the darkened top of the picture */
 .hero h1 { font-size: clamp(38px, 10.5vw, 76px); line-height: 0.96; letter-spacing: -0.035em; font-weight: 900; text-transform: uppercase; margin: 0 0 14px; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35); }
 .hero h1 span { display: block; }
@@ -475,7 +473,17 @@ body[data-view='app'] .home { display: none; }
   .home { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 28vw, 460px); }
   .hero { --photo-top: 0px; padding: 0 0 28px; min-height: 100%; }
   .hero-photo { position: absolute; left: 0; right: 0; top: var(--photo-top); bottom: 0; height: auto; margin: 0; }
-  .hero-photo img, .hero-video { top: 0; height: 100%; } /* on a wide screen the picture fills its panel */
+  /* On a wide screen the picture is shown whole, across the panel, in its own proportions
+     (Uri's design: the runners beneath the headline, the route beside them); it is never
+     cropped or stretched to fill. Above it the sunset simply goes on: the colours of the
+     picture's own top edge, left to right, carried up the panel (the veil over it darkens
+     them towards the top, as the evening sky does). Below it the promenade goes on the
+     same way, in the colours of its bottom edge. No blurred copy: the sky is plain sky. */
+  .hero-photo { background:
+    linear-gradient(90deg, #7b6436 0%, #7a6237 20%, #85663a 40%, #8d6b3e 60%, #b48753 80%, #b47f40 100%) top / 100% 56% no-repeat,
+    linear-gradient(90deg, #674430 0%, #5a3a28 20%, #5e3d2b 40%, #734c39 60%, #644333 80%, #674638 100%) bottom / 100% 46% no-repeat,
+    #0f172a; }
+  .hero-photo .hero-shot { top: 50%; bottom: auto; height: auto; object-fit: contain; transform: translateY(-42%); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 88%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 88%, transparent 100%); }
   .hero-photo::before { background: linear-gradient(180deg, rgba(15, 23, 42, 0.75) 0%, rgba(15, 23, 42, 0.3) 26%, rgba(15, 23, 42, 0) 44%, rgba(15, 23, 42, 0.5) 85%, rgba(15, 23, 42, 0.9) 100%); } /* a lighter veil: the faces show beside the headline */
   .hero-copy { padding: 44px 48px 0; }
   .hero h1 { font-size: clamp(36px, 3.9vw, 58px); }

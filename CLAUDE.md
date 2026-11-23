@@ -103,6 +103,15 @@ and `tour` (and "sightseeing"). Do not rename the code.
   outlined runner (taken from `img/install-outline.png`), content in the 190x236 box at (10,10)
   of a 256 canvas. Ask before changing any icon.
 - Cover page text is word for word from Uri's design. Do not rewrite it unasked.
+- The cover's background is a still picture, not a video: he tried the video and did not like
+  it (Nov 23, 2026). On a wide screen it is `img/cover-runners.jpg`, shown whole and in its own
+  proportions, the runners beneath the headline and the route beside them, as in his design;
+  never crop or stretch it there. On both layouts the sunset sky continues to the top of the
+  page with the writing in front of it: no blurred copy, no solid block over the sky.
+  On a phone (the iPhone app, and the website under 900 px) the cover is `img/cover-phone.jpg`,
+  a runner on a boardwalk at sunset that he chose on Nov 23, 2026 ("Person running on dock" by
+  Josiah Weiss, Unsplash License; source and date in `docs/mvp-status.md`). Ask before replacing
+  either picture.
 - No data-clearance setting and no remembered running defaults: he rejected both. The one
   exception, his own request (Nov 16, 2026): routes downloaded to run later are listed in
   Settings, each with a Delete.
@@ -124,7 +133,6 @@ and `tour` (and "sightseeing"). Do not rename the code.
   drives a `Navigator` with a `SimulatedRun`, the planner suites plan in the synthetic city.
 - After editing anything the page loads, run `node build.mjs` and the relevant suites before
   telling Uri it is done. For anything on the run screen also run `tests/ui/ui_nav.py`.
-- The test browser has no H.264: the cover clip plays there from the `.webm` copy.
 - Xcode log lines that are normal and need no fix: the UIScene notice, "Could not create a
   sandbox extension", MobileAsset voice queries failing with 2, the keyboard toolbar's
   "Unable to simultaneously satisfy constraints", RTIInputSystemClient, debugger hangs.
