@@ -56,9 +56,28 @@ e-mail, with Google and with Apple (never a password), and a copy of the runner'
 run journal. The data lives in a Cloudflare D1 database (`schema.sql`). The whole thing is
 exercised without a network by `node tests/test-accounts.mjs`.
 
-**Nothing is switched on until it is set up here.** The app asks `/account/ways` which ways of
-signing in are available and offers only those; with none, the app has no sign-in at all. So
-a way is switched on (or off) on the server, with no new version of the app.
+**A way of signing in is on only when it is set up here.** The app asks `/account/ways` which
+ways of signing in are available and offers only those; with none, the app has no sign-in at
+all. So a way is switched on (or off) on the server, with no new version of the app.
+
+**Live since Nov 24, 2026:** the e-mail code (everywhere) and Google (on the website). Not yet:
+Apple (waits for the Apple Developer enrolment), and with it Google in the iPhone app.
+
+- Database: D1 `runthetown`, id `20d690ad-7c0f-4a86-a9f6-5215631c8ae3`, region WEUR.
+- Domain: `runthetown.app`, registered at Cloudflare Registrar on Nov 24, 2026 (renews yearly),
+  DNS at Cloudflare. It carries the mail records only; the website is still on github.io.
+- Mail: Resend (Uri's account), domain `runthetown.app` verified, region eu-west-1, sender
+  `RunTheTown <signin@runthetown.app>`. DNS: TXT `resend._domainkey`, CNAME `rsend` and `send`
+  (DNS only), TXT `_dmarc`. The key is the Worker secret `RESEND_API_KEY` (sending access
+  only); Uri put it in himself through the Cloudflare dashboard. Free plan: 3,000 e-mails a
+  month, 100 a day.
+- Google: Cloud project `runthetown` in Uri's Google account, sign-in screen "In production"
+  (no logo, basic scopes: no verification needed). Clients "RunTheTown website" (origins
+  `https://uri-kedem.github.io`, `http://localhost:8080`) and "RunTheTown iPhone app" (bundle
+  id). If the website moves to another address, add it to the website client's origins and to
+  `ALLOWED_ORIGINS`.
+- To switch a way off: remove its setting from `wrangler.toml` (or the secret, for e-mail) and
+  deploy. Phones ask again within a day.
 
 ### 1. The database (once)
 

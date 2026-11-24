@@ -1,10 +1,10 @@
 # The store listing once sign-in is switched on
 
-`APPSTORE.md` describes the app as it is in the store's eyes today: no account, no data
-collected. That stays true for as long as the server offers no way of signing in (see
-`server/README.md`, "Accounts"). **On the day a way of signing in is switched on, the answers
-below replace the matching ones in `APPSTORE.md`**, and the privacy page, the support page and
-the Terms & policy page in the app already say the same (changed Nov 24, 2026).
+`APPSTORE.md` still describes the app without accounts: no sign-in, no data collected. **That
+is out of date since Nov 24, 2026**, when signing in by an e-mail code was switched on (it
+shows in the iPhone app too; Google and Apple do not yet). **The answers below now replace the
+matching ones in `APPSTORE.md`.** The privacy page, the support page, the Terms & policy page
+in the app and the app's privacy manifest already say the same.
 
 Uri decides and files these; they are written here so nothing has to be worked out then.
 
@@ -26,8 +26,8 @@ declared. For every type below: purpose **App Functionality** only; **linked to 
 | Health & Fitness → Fitness | Each saved run: distance, time, pace |
 | Identifiers → User ID | The account's id, and Apple's or Google's id for the person |
 
-The same list goes into the app's privacy manifest, `ios/App/App/PrivacyInfo.xcprivacy`
-(`NSPrivacyCollectedDataTypes`), which today says nothing is collected.
+The same list is in the app's privacy manifest, `ios/App/App/PrivacyInfo.xcprivacy`
+(`NSPrivacyCollectedDataTypes`), since Nov 24, 2026.
 
 Not collected, as before: search history tied to a person, usage data, diagnostics,
 advertising data. The relay still keeps answers and not who asked.
@@ -43,7 +43,7 @@ Add to the notes for the reviewer:
 > everything kept on the device. A runner may sign in with Apple, with Google, or with a
 > six-digit code sent by e-mail (there is no password) to back up the profile and the run
 > journal to the developer's server and see them on another device. No demo account is
-> needed: use "Continue as a guest", or Sign in with Apple.
+> needed: use "Continue as a guest", or sign in with any e-mail address you can read.
 > Account deletion: Menu → the profile row → "Delete my account" (tap twice). It removes the
 > account and everything in it from the server at once.
 
@@ -52,7 +52,8 @@ Add to the notes for the reviewer:
 - **5.1.1(v)**: the app is usable without a login (guest), and account deletion is offered
   inside the app.
 - **4.8**: the iPhone app offers Google only when Sign in with Apple is offered beside it
-  (`googleWay` in `js/app.js`).
+  (`googleWay` in `js/app.js`). Today it offers the e-mail code alone, which is the app's own
+  account system and needs no second sign-in service.
 - Sign in with Apple and deletion: Apple asks that deleting an account also revokes the
   Sign in with Apple grant. Not built yet; see `server/README.md`. Check Apple's wording when
   the Developer Program enrolment is done.

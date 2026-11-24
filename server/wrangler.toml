@@ -9,17 +9,22 @@ compatibility_date = "2026-10-01"
 CONTACT_EMAIL = "uri.kedem1@gmail.com"
 # Who may call the proxy from a browser (comma-separated). Empty: anyone (testing).
 ALLOWED_ORIGINS = "https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"
+# Sign in with Google (Google Cloud project "runthetown", created Nov 24, 2026). These ids are
+# public: they only say which app is asking. The website's client allows the origins
+# https://uri-kedem.github.io and http://localhost:8080; the iPhone one is tied to the bundle id.
+GOOGLE_WEB_CLIENT_ID = "831114732553-tkaumpd82buehojmikrcun7c1cdf00hc.apps.googleusercontent.com"
+GOOGLE_IOS_CLIENT_ID = "831114732553-tubndcffnl5uhv3502ltfkstovgtfc40.apps.googleusercontent.com"
+# Sign-in codes by e-mail: sent through Resend from our own domain (runthetown.app, bought
+# Nov 24, 2026; its DKIM, SPF and DMARC records are in Cloudflare DNS). The e-mail way is on
+# once the secret RESEND_API_KEY exists as well: `npx wrangler secret put RESEND_API_KEY`.
+MAIL_FROM = "RunTheTown <signin@runthetown.app>"
 
 # ---- Accounts (the optional sign-in; see README.md, "Accounts") ----
-# The database. Create it once with `npx wrangler d1 create runthetown`, put the id it
-# prints here and take the # off the four lines. Until then the app offers no sign-in.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "runthetown"
-# database_id = ""
-#
+# The database (created Nov 24, 2026 with `npx wrangler d1 create runthetown`, region WEUR).
+[[d1_databases]]
+binding = "DB"
+database_name = "runthetown"
+database_id = "20d690ad-7c0f-4a86-a9f6-5215631c8ae3"
+
 # Each way of signing in is on when its setting is filled in (in [vars] above):
-#   MAIL_FROM = "RunTheTown <signin@our-domain>"   and the secret RESEND_API_KEY
-#   GOOGLE_WEB_CLIENT_ID = "....apps.googleusercontent.com"
-#   GOOGLE_IOS_CLIENT_ID = "....apps.googleusercontent.com"
 #   APPLE_APP_ID = "com.urikedem.runthetown"

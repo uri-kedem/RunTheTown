@@ -602,7 +602,9 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
    mark; on the website Google draws the button itself), e-mail in the app's own look.
    "Continue as a guest" is a full button too, not small print: nobody has to sign in. */
 .welcome-lead { font-size: 16px; color: var(--ink); margin: 6px 0 18px; }
-.sign-ways { display: grid; gap: 10px; }
+/* Google draws its own button on the website and makes it 400px wide at most: the column of
+   ways in and the guest button keep to that width, so the buttons line up on a wide screen. */
+.sign-ways { display: grid; gap: 10px; max-width: 400px; margin: 0 auto; }
 .sign-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 50px; border-radius: 25px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 .sign-btn svg { width: 19px; height: 19px; flex: none; }
 .sign-apple { background: #000; border-color: #000; color: #fff; }
@@ -614,7 +616,7 @@ html[data-theme='dark'] .sign-apple svg { fill: #000; }
 .sign-form { margin-top: 4px; }
 .sign-form .route-pop-foot { margin-top: 4px; }
 .code-input { letter-spacing: 0.4em; font-size: 24px !important; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
-.guest-btn { display: block; width: 100%; height: 50px; margin: 18px 0 10px; border-radius: 25px; border: 0; background: var(--bg-2); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+.guest-btn { display: block; width: 100%; max-width: 400px; height: 50px; margin: 18px auto 10px; border-radius: 25px; border: 0; background: var(--bg-2); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 .welcome-small { font-size: 12.5px; color: var(--ink-3); text-align: center; }
 #welcome.busy .sign-ways, #welcome.busy .sign-form, #welcome.busy .guest-btn { opacity: 0.5; pointer-events: none; }
 .welcome #signMsg { text-align: center; min-height: 1.4em; margin-top: 10px; }
