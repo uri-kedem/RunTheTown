@@ -74,7 +74,11 @@ Apple (waits for the Apple Developer enrolment), and with it Google in the iPhon
   only); Uri put it in himself through the Cloudflare dashboard. Free plan: 3,000 e-mails a
   month, 100 a day.
 - Google: Cloud project `runthetown` in Uri's Google account, sign-in screen "In production"
-  (no logo, basic scopes: no verification needed). Clients "RunTheTown website" (origins
+  (no logo, basic scopes). Its branding is verified and published since Nov 24, 2026, so
+  Google's window names the app "RunTheTown": home page `https://runthetown.app/`, privacy
+  link `https://runthetown.app/privacy.html`, and the domain proved to Google in Search
+  Console by the TXT record `google-site-verification=...` on `runthetown.app` (keep that
+  record: Google re-checks it; changing the app's name or those links means verifying again). Clients "RunTheTown website" (origins
   `https://runthetown.app`, `https://uri-kedem.github.io`, `http://localhost:8080`) and "RunTheTown iPhone app" (bundle
   id). If the website moves to another address, add it to the website client's origins and to
   `ALLOWED_ORIGINS`.
