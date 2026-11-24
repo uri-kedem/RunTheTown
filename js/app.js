@@ -7,7 +7,8 @@ import { haversine, darkForRun } from './geo.js';
 import { Navigator, Voice, ScreenLock, GpsSource, SimulatedRun, paceShort, lenText, MILE, wristCue, spokenLength } from './navigation.js';
 import { loadSettings, saveSettings, houseVoices } from './settings.js';
 import { loadProfile, saveProfile, makeRun, drawRunPicture, drawShareCard, runGpx, usualPace, journal } from './journal.js';
-import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch, nativeLocateOnce } from './native.js';
+import { Account, accountMessage } from './account.js';
+import { isNative, NativeVoice, NativeGps, NativeScreenLock, nativeShare, nativeHealthSave, nativeChime, NativeLiveActivity, NativeWatch, nativeLocateOnce, nativeAppleSignIn, nativeGoogleSignIn } from './native.js';
 import { glCreateMap, glMarker, glPolyline, glCircleMarker, glLayerGroup, glBounds, glDivIcon, glSnapshot } from './glmap.js';
 import { fallbackLinks, findStory } from './details.js';
 import { searchUrl, nominatimUrl, PROXY } from './services.js';
@@ -1959,6 +1960,7 @@ async function saveRun(n, { finished }) {
   try {
     await journal.save(run);
     n.savedRun = run;
+    account.runSaved(); // signed in: the run goes to the account too (now, or when next online)
     refreshRailUser();
     refreshPace();
     toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
@@ -2185,7 +2187,7 @@ function navigate(target) {
     $('terms').hidden = true;
     $('install').hidden = true;
     $('settings').hidden = true;
-    for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
+    for (const id of ['profile', 'welcome', 'runs', 'runPage']) $(id).hidden = true;
     setView('home');
     highlightNav(null);
     return;
@@ -2263,12 +2265,15 @@ function previewPhoto(draft, name) {
   label.style.backgroundImage = draft?.photo ? `url(${draft.photo})` : '';
   span.textContent = draft?.photo ? '' : initials(name);
 }
-function openProfile({ first = false } = {}) {
+function openProfile({ first = false, name = '' } = {}) {
   openDrawer(false);
-  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage']) $(id).hidden = true;
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage', 'welcome']) $(id).hidden = true;
   $('profileTitle').textContent = first ? 'Welcome to RunTheTown' : 'Your profile';
   $('profileIntro').hidden = !first && !!profile?.name;
-  $('profileName').value = profile?.name || '';
+  // What the introduction promises depends on whether there is an account.
+  $('profileIntro').textContent = account.signedIn ? 'Tell RunTheTown who you are. Your name, your photo and your runs are saved to your account.' : 'Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.';
+  $('profileName').value = profile?.name || name || '';
+  refreshAccountBox({ first });
   photoDraft = profile?.photo ? { photo: profile.photo, photoFull: profile.photoFull || profile.photo } : null;
   previewPhoto(photoDraft, profile?.name);
   $('profileMsg').textContent = '';
@@ -2393,6 +2398,7 @@ $('profileSave').addEventListener('click', () => {
   const name = $('profileName').value.trim();
   if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
   profile = saveProfile({ ...(profile || {}), name, photo: photoDraft?.photo || null, photoFull: photoDraft?.photoFull || null, skipped: false });
+  account.profileChanged(); // signed in: the account gets the new name and photo
   refreshRailUser();
   $('profile').hidden = true;
   highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
@@ -2404,6 +2410,195 @@ $('profileSkip').addEventListener('click', () => {
   highlightNav(null);
 });
 $('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+
+// ---------- The account: an optional sign-in (js/account.js, server/accounts.js) ----------
+// A guest uses the whole app and nothing leaves the phone. Signing in (Apple, Google, or a
+// code sent by e-mail: never a password) keeps the profile and the run journal in an
+// account as well. Only the ways the server has switched on are offered; with none, there
+// is no sign-in anywhere in the app.
+const account = new Account({ device: isNative() ? 'iPhone app' : 'website' });
+let signWays = { email: false, google: null, apple: null }; // what the server has switched on
+// In the iPhone app Sign in with Apple is offered wherever Google is (Apple's rule for
+// apps with another company's sign-in), so Google waits for Apple there. On the website
+// Apple's sign-in is not built yet.
+const appleWay = () => isNative() && !!signWays.apple?.app;
+const googleWay = () => (isNative() ? (appleWay() && signWays.google?.ios) || null : signWays.google?.web || null);
+const anyWay = () => !!(signWays.email || appleWay() || googleWay());
+let signEmailAddress = ''; // where the code was sent
+let welcomeFirst = false; // the first open of the app (a guest may go on) or from the profile page
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function openWelcome({ first = false } = {}) {
+  welcomeFirst = first;
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage', 'profile']) $(id).hidden = true;
+  $('welcomeBack').hidden = first;
+  $('welcomeTitle').textContent = first ? 'Welcome to RunTheTown' : 'Sign in';
+  $('signGuest').hidden = !first;
+  $('welcomeSmall').hidden = !first;
+  showSignStep('ways');
+  $('welcome').hidden = false;
+  $('welcome').scrollTop = 0;
+  highlightNav('profile');
+}
+// One step of signing in at a time: the ways in, the e-mail address, the code.
+function showSignStep(step) {
+  $('signWays').hidden = step !== 'ways';
+  $('signEmailForm').hidden = step !== 'email';
+  $('signCodeForm').hidden = step !== 'code';
+  $('signMsg').textContent = '';
+  if (step === 'ways') {
+    $('signApple').hidden = !appleWay();
+    $('signGoogle').hidden = !(isNative() && googleWay());
+    $('signEmail').hidden = !signWays.email;
+    showGoogleOnWeb();
+  }
+  if (step === 'email') setTimeout(() => $('signEmailInput').focus(), 50);
+  if (step === 'code') { $('signCodeInput').value = ''; setTimeout(() => $('signCodeInput').focus(), 50); }
+}
+const signBusy = (on) => { $('welcome').classList.toggle('busy', on); };
+
+// On the website Google draws its own button (its rule for this kind of sign-in), from a
+// script that can only come from Google. It is fetched when the sign-in page opens and not
+// before; with no connection there is simply no Google button.
+let gsiScript = null;
+function loadGsi() {
+  if (globalThis.google?.accounts?.id) return Promise.resolve(true);
+  if (!gsiScript) {
+    gsiScript = new Promise((resolve) => {
+      const tag = document.createElement('script');
+      tag.src = 'https://accounts.google.com/gsi/client';
+      tag.async = true;
+      tag.onload = () => resolve(!!globalThis.google?.accounts?.id);
+      tag.onerror = () => { gsiScript = null; resolve(false); };
+      document.head.appendChild(tag);
+    });
+  }
+  return gsiScript;
+}
+async function showGoogleOnWeb() {
+  const slot = $('signGoogleWeb');
+  slot.hidden = true;
+  const clientId = isNative() ? null : googleWay();
+  if (!clientId || !(await loadGsi())) return;
+  const g = globalThis.google.accounts.id;
+  g.initialize({ client_id: clientId, ux_mode: 'popup', auto_select: false, callback: (answer) => finishSignIn(() => account.withGoogle(answer.credential), 'Google') });
+  slot.textContent = '';
+  slot.hidden = $('signWays').hidden;
+  g.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', logo_alignment: 'center', width: Math.max(200, Math.min(400, Math.round($('signWays').getBoundingClientRect().width) || 320)), locale: isHebrew() ? 'he' : 'en' });
+}
+
+/**
+ * The end of every way in. `attempt()` signs in (and resolves nothing when the runner
+ * closed Apple's or Google's sheet). Then the account's profile and runs are fetched; a
+ * runner whose account has no name yet is asked for one on the profile page.
+ */
+async function finishSignIn(attempt, service = '') {
+  if ($('welcome').classList.contains('busy')) return;
+  $('signMsg').textContent = '';
+  signBusy(true);
+  try {
+    const who = await attempt();
+    if (!who) return;
+    $('signMsg').textContent = 'Signing you in…';
+    await Promise.race([account.sync(), pause(10000)]);
+    profile = loadProfile();
+    refreshRailUser();
+    $('welcome').hidden = true;
+    if (!profile?.name) openProfile({ first: true, name: who.givenName });
+    else {
+      highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
+      toast('Signed in. Your runs are backed up to your account.');
+    }
+  } catch (err) {
+    $('signMsg').textContent = err?.reason !== undefined ? accountMessage(err) : `Could not sign in with ${service}. Please try again.`;
+  } finally {
+    signBusy(false);
+  }
+}
+$('signApple').addEventListener('click', () => finishSignIn(async () => { const a = await nativeAppleSignIn(); return a ? account.withApple(a.identityToken, a.name) : null; }, 'Apple'));
+$('signGoogle').addEventListener('click', () => finishSignIn(async () => { const g = await nativeGoogleSignIn(googleWay()); return g ? account.withGoogle(g.idToken) : null; }, 'Google'));
+$('signEmail').addEventListener('click', () => showSignStep('email'));
+$('signEmailBack').addEventListener('click', () => showSignStep('ways'));
+$('signCodeBack').addEventListener('click', () => showSignStep('email'));
+// The address: a code is sent to it, and the page moves on to the code.
+async function sendSignCode(email, { again = false } = {}) {
+  if ($('welcome').classList.contains('busy')) return;
+  $('signMsg').textContent = '';
+  signBusy(true);
+  try {
+    await account.emailStart(email, isHebrew() ? 'he' : 'en');
+    signEmailAddress = email;
+    showSignStep('code');
+    $('signCodeNote').textContent = `We sent a 6-digit code to ${email}. Type it here; it works for 10 minutes.`;
+    if (again) toast('A new code is on its way.');
+  } catch (err) {
+    $('signMsg').textContent = accountMessage(err);
+  } finally {
+    signBusy(false);
+  }
+}
+$('signEmailForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = $('signEmailInput').value.trim();
+  if (!email) { $('signMsg').textContent = 'Please type your e-mail address.'; return; }
+  sendSignCode(email);
+});
+$('signCodeAgain').addEventListener('click', () => sendSignCode(signEmailAddress, { again: true }));
+const typedCode = () => $('signCodeInput').value.replace(/\D/g, '');
+function submitSignCode() {
+  if (typedCode().length !== 6) { $('signMsg').textContent = 'Please type the 6 digits of the code.'; return; }
+  finishSignIn(() => account.emailVerify(signEmailAddress, typedCode()));
+}
+$('signCodeForm').addEventListener('submit', (e) => { e.preventDefault(); submitSignCode(); });
+// The sixth digit is the last thing to type: no need to press the button as well.
+$('signCodeInput').addEventListener('input', () => { if (typedCode().length === 6) submitSignCode(); });
+$('signGuest').addEventListener('click', () => { $('welcome').hidden = true; openProfile({ first: true }); });
+$('welcomeBack').addEventListener('click', () => { $('welcome').hidden = true; openProfile(); });
+
+// The account on the profile page: who is signed in, or the offer to sign in; signing out;
+// deleting the account (asked twice, like deleting a run).
+function refreshAccountBox({ first = false } = {}) {
+  const who = account.who;
+  $('accountBox').hidden = first || (!who && !anyWay());
+  $('accountState').textContent = who ? (who.email ? `Signed in as ${who.email}` : 'Signed in') : 'Not signed in';
+  $('accountNote').textContent = who ? 'Your profile and your runs are saved to your account, and stay on this phone too.' : 'Your runs are only on this phone. Sign in to back them up and to see them on your other devices.';
+  $('accountSignIn').hidden = !!who;
+  $('accountSignedRow').hidden = !who;
+  delete $('accountDelete').dataset.armed;
+  $('accountDelete').textContent = 'Delete my account';
+}
+$('accountSignIn').addEventListener('click', () => { $('profile').hidden = true; openWelcome(); });
+$('accountSignOut').addEventListener('click', async () => {
+  await account.signOut();
+  toast('Signed out. Your runs stay on this phone.');
+});
+$('accountDelete').addEventListener('click', async () => {
+  const btn = $('accountDelete');
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Tap again to delete your account';
+    $('accountNote').textContent = 'This deletes your account and the runs saved in it from our server. The runs on this phone stay.';
+    setTimeout(() => { if (btn.dataset.armed) refreshAccountBox(); }, 8000);
+    return;
+  }
+  try {
+    await account.deleteAccount();
+    toast('Your account was deleted. The runs on this phone are still here.');
+  } catch (err) {
+    refreshAccountBox();
+    toast(accountMessage(err));
+  }
+});
+// Signed in or out, or a sync brought a run or a new name from the runner's other phone:
+// whatever is on screen is drawn again.
+account.onChange = () => {
+  profile = loadProfile();
+  refreshRailUser();
+  refreshAccountBox({ first: !$('profileSkip').hidden });
+  if (!$('profile').hidden && !$('profileName').matches(':focus')) { $('profileName').value = profile?.name || $('profileName').value; }
+  if (!$('runs').hidden) openRuns();
+};
 
 const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(isHebrew() ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' }); };
 async function openRuns() {
@@ -2437,6 +2632,15 @@ async function openRun(id) {
   const pic = $('runPic');
   $('runPicBtn').hidden = !r.picture;
   if (r.picture) pic.src = r.picture;
+  // A run that arrived from the account has no map picture (each phone draws its own), and
+  // a run saved with no connection may have none either: it is drawn now, once, and kept.
+  if (!r.picture && ((r.track?.length || 0) > 1 || (r.latlngs?.length || 0) > 1)) {
+    drawRunPicture(r, { snapshot: glSnapshot }).then(async (picture) => {
+      if (!picture) return;
+      await journal.save({ ...r, picture });
+      if (openRunId === id && !$('runPage').hidden) { pic.src = picture; $('runPicBtn').hidden = false; }
+    }).catch(() => {});
+  }
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
   const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.dest ? `One way to ${r.dest.label || 'the finish'}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
     r.onPlan != null && r.onPlan < 0.9 ? `${Math.round(r.onPlan * 100)}% of the run on the planned line; the picture shows where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
@@ -2477,6 +2681,7 @@ $('runDelete').addEventListener('click', async () => {
   if (!openRunId) return;
   if (!$('runDelete').dataset.armed) { $('runDelete').dataset.armed = '1'; $('runDelete').textContent = 'Tap again to delete'; setTimeout(() => { delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run'; }, 3000); return; }
   await journal.remove(openRunId).catch(() => {});
+  account.runDeleted(openRunId); // signed in: the account forgets it too, and so does the runner's other phone
   delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run';
   refreshRailUser();
   $('runPage').hidden = true;
@@ -2521,16 +2726,29 @@ $('runsExport').addEventListener('click', async () => {
   }
 });
 refreshRailUser();
-// First open of the app: the profile page, once (Skip is remembered too).
+// First open of the app, once: the sign-in page when the server offers a way to sign in
+// (with "Continue as a guest"), else straight to the profile page as before there were
+// accounts (Skip is remembered too). The server is given a moment to say; a slow or absent
+// answer never holds the runner up.
 openFromLink();
-if (!profile) setTimeout(() => openProfile({ first: true }), 400);
+const waysAsked = account.ways().then((ways) => { signWays = ways; });
+Promise.all([Promise.race([waysAsked, pause(1500)]), pause(400)]).then(() => {
+  if (!profile && !account.signedIn) { if (anyWay()) openWelcome({ first: true }); else openProfile({ first: true }); }
+});
+// A late answer still counts for the profile page's offer to sign in.
+waysAsked.then(() => refreshAccountBox({ first: !$('profile').hidden && !$('profileSkip').hidden }));
+// Signed in: the phone and the account are brought level when the app opens, when it comes
+// back to the front after a while, and when the connection returns.
+if (account.signedIn) setTimeout(() => account.sync(), 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && account.signedIn && Date.now() - account.state().last > 10 * 60000) account.sync(); });
+window.addEventListener('online', () => account.sync());
 
 // Expose for testing/debugging.
 applyUnits();
 // The page in the chosen language, and every text written from now on.
 applyLanguage();
 watchLanguage();
-window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
+window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, account, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
 if (!state.linkStart) locate({ quiet: true });

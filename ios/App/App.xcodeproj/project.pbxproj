@@ -34,6 +34,7 @@
 		9A24A59BCDEE5D8EE7ED8860 /* RunSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9B93F3136269855BF6A10A /* RunSession.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
 		A861FCA178B6C217AA450D47 /* RunActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BBF51E1CFBBBA6E69CF867D5 /* RunActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B25359F9CE627EF4DEA758C9 /* SignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96E1ED6B669597A324179B9 /* SignInPlugin.swift */; };
 		D07E5E362C8894F0EE1028AC /* ChimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6FBFA8307E728DFD5A981A /* ChimePlugin.swift */; };
 /* End PBXBuildFile section */
 
@@ -112,6 +113,7 @@
 		CB001BDB94700CEA980F601C /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D8E9306B0A19D24F748D1334 /* RunTheTownWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunTheTownWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9B1DD2AE2222F0DD03E8447 /* SceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		F96E1ED6B669597A324179B9 /* SignInPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInPlugin.swift; sourceTree = "<group>"; };
 		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		FD3C780814E4057D084512B7 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -206,6 +208,7 @@
 				A9863A6ED0EC32D088B36D4A /* LiveActivityPlugin.swift */,
 				79122385025A786F30F4B6AC /* RunActivityAttributes.swift */,
 				912B9C5964BECFBDF0C0A11F /* WatchPlugin.swift */,
+				F96E1ED6B669597A324179B9 /* SignInPlugin.swift */,
 			);
 			name = Plugins;
 			path = Plugins;
@@ -460,6 +463,7 @@
 				80C431E4E3D431FCF0593CDC /* RunActivityAttributes.swift in Sources */,
 				7C680EB33DE8B7C2F7392277 /* SceneDelegate.swift in Sources */,
 				3FB69ED5A7AB086DA67968C0 /* WatchPlugin.swift in Sources */,
+				B25359F9CE627EF4DEA758C9 /* SignInPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

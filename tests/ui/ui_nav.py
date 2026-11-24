@@ -484,6 +484,103 @@ with sync_playwright() as p:
     print('COVER phone:', phone)
     assert phone['fit']=='cover' and phone['src']=='cover-phone' and phone['upright'], phone
     assert phone['top']<=0 and phone['top']<phone['headline'] and phone['bottom']>=1, 'on a phone the picture runs from the very top of the page to the bottom, behind the words'
-    ctx.close(); b.close()
+    ctx.close()
+    # ACCOUNT: the optional sign-in, against the account server on this computer (tests/account-dev-server.mjs: the real
+    # worker over a database in memory, a list instead of the mail service). Everywhere above, the server offers no way
+    # to sign in and the app is as it was before accounts; here it offers the e-mail code.
+    import urllib.request, urllib.error
+    PROXY='https://runthetown-proxy.runthetown.workers.dev'; DEV='http://127.0.0.1:8791'
+    dev=subprocess.Popen(['node', ROOT+'/tests/account-dev-server.mjs', '8791'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL); dev.stdout.readline()
+    def account_route(r):
+        q=r.request; H={'content-type':'application/json','access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'*'}
+        if q.method=='OPTIONS': return r.fulfill(status=204, headers=H)
+        req=urllib.request.Request(DEV+q.url[len(PROXY):], method=q.method, data=q.post_data_buffer, headers={k:v for k,v in q.headers.items() if k in ('authorization','content-type')})
+        try:
+            with urllib.request.urlopen(req) as a: r.fulfill(status=a.status, body=a.read(), headers=H)
+        except urllib.error.HTTPError as e: r.fulfill(status=e.code, body=e.read(), headers=H)
+    sent_code=lambda email: urllib.request.urlopen(DEV+'/__test/code?email='+email).read().decode()
+    def phone_page():
+        c=b.new_context(viewport={'width':390,'height':844}, geolocation={'latitude':lat0,'longitude':lon0}, permissions=['geolocation'], device_scale_factor=2)
+        c.add_init_script(INIT); q=c.new_page(); q.route('**/*', route); q.route(PROXY+'/account**', account_route)
+        q.on('pageerror', lambda e: logs.append(f'PAGEERROR (account): {e}'))
+        q.goto('http://127.0.0.1:8766/index.html'); q.wait_for_selector('#welcome:not([hidden])', timeout=8000); q.wait_for_timeout(300)
+        return c,q
+    def sign_in(q, email):
+        q.click('#signEmail'); q.fill('#signEmailInput', email); q.click('#signEmailSend'); q.wait_for_selector('#signCodeForm:not([hidden])'); q.wait_for_timeout(200)
+        q.fill('#signCodeInput', sent_code(email))
+    shown=lambda q: q.evaluate("['signApple','signGoogle','signGoogleWeb','signEmail','signGuest','welcomeBack'].filter(i=>!document.getElementById(i).hidden)")
+    on_server=lambda q, path: q.evaluate("(p) => fetch(p, {headers: {Authorization: 'Bearer ' + JSON.parse(localStorage.getItem('rtt-account')).token}}).then(r => r.json())", PROXY+path)
+    try:
+        # A guest: one tap and the app is as it always was; nothing is stored about an account.
+        cg,g=phone_page()
+        print('ACCOUNT first open:', g.text_content('#welcomeTitle'), '| offered:', shown(g))
+        assert shown(g)==['signEmail','signGuest'], 'the first open offers the ways the server has on (here e-mail) and "Continue as a guest", and no way that is not set up'
+        g.screenshot(path=f'{S}/nav-9-welcome.png')
+        g.click('#signGuest'); g.wait_for_timeout(300)
+        assert g.is_visible('#profile') and g.is_visible('#profileSkip') and g.evaluate("document.getElementById('accountBox').hidden") and g.evaluate("localStorage.getItem('rtt-account')") is None, 'a guest goes on to the profile page as before, with no account'
+        g.click('#profileSkip'); g.wait_for_timeout(200); g.evaluate("window.__rtt.navigate('profile')"); g.wait_for_timeout(300)
+        assert g.text_content('#accountState')=='Not signed in' and g.is_visible('#accountSignIn') and not g.is_visible('#accountSignOut'), 'later, the profile page offers the guest to sign in'
+        print('ACCOUNT guest:', g.text_content('#accountState'), '|', g.text_content('#accountNote')[:50])
+        cg.close()
+        # E-mail and a code: a wrong address, a wrong code, then in.
+        c1,p1=phone_page()
+        p1.click('#signEmail'); p1.fill('#signEmailInput','no address'); p1.click('#signEmailSend'); p1.wait_for_timeout(500)
+        assert p1.text_content('#signMsg')=='That does not look like an e-mail address.'
+        p1.fill('#signEmailInput','ruth@example.org'); p1.click('#signEmailSend'); p1.wait_for_selector('#signCodeForm:not([hidden])'); p1.wait_for_timeout(200)
+        assert 'ruth@example.org' in p1.text_content('#signCodeNote')
+        real=sent_code('ruth@example.org'); p1.fill('#signCodeInput','111111' if real!='111111' else '222222'); p1.wait_for_timeout(700)
+        assert p1.text_content('#signMsg')=='That code is not right. 4 tries left.', p1.text_content('#signMsg')
+        p1.fill('#signCodeInput', real); p1.wait_for_selector('#profile:not([hidden])', timeout=15000); p1.wait_for_timeout(300)
+        assert p1.text_content('#profileTitle')=='Welcome to RunTheTown' and 'saved to your account' in p1.text_content('#profileIntro'), 'a new account is asked for a name, and told where it is kept'
+        p1.fill('#profileName','Ruth'); p1.click('#profileSave'); p1.wait_for_timeout(900)
+        # A run saved on this phone reaches the account.
+        p1.evaluate("(async () => { const j = window.__rtt.journal; await j.save({ id: '2026-11-20T06:00:00.000Z-ui0001', time: '2026-11-20T06:00:00.000Z', endedAt: '2026-11-20T06:25:00.000Z', distance: 5000, elapsed: 1500000, pace: 300, finished: true, name: 'Sea loop', type: 'loop', planned: 5000, units: 'km', latlngs: [[32.08,34.78],[32.081,34.781]], track: [[32.08,34.78,0],[32.081,34.781,60]], picture: 'data:image/jpeg;base64,AAAA' }); await window.__rtt.account.runSaved(); })()")
+        acct=on_server(p1,'/account'); runs=on_server(p1,'/account/runs')['runs']
+        print('ACCOUNT signed in:', acct['account']['email'], '| profile on the server:', acct['profile']['name'], '| runs on the server:', len(runs))
+        assert acct['profile']['name']=='Ruth' and len(runs)==1 and not runs[0]['deleted'], 'the name and the run are in the account'
+        p1.evaluate("window.__rtt.navigate('profile')"); p1.wait_for_timeout(300)
+        assert p1.text_content('#accountState')=='Signed in as ruth@example.org' and p1.is_visible('#accountSignOut') and not p1.is_visible('#accountSignIn')
+        p1.evaluate("document.getElementById('accountBox').scrollIntoView()"); p1.screenshot(path=f'{S}/nav-9-account.png'); p1.click('#profileBack')
+        # A second phone, the same address. A second code at once is refused in plain words; a minute later it is sent,
+        # and the name and the run arrive on that phone.
+        c2,p2=phone_page()
+        p2.click('#signEmail'); p2.fill('#signEmailInput','ruth@example.org'); p2.click('#signEmailSend'); p2.wait_for_timeout(600)
+        assert p2.text_content('#signMsg')=='Too many tries. Try again in a minute.', p2.text_content('#signMsg')
+        urllib.request.urlopen(DEV+'/__test/clock?add=120000').read()
+        p2.click('#signEmailSend'); p2.wait_for_selector('#signCodeForm:not([hidden])'); p2.wait_for_timeout(200)
+        p2.fill('#signCodeInput', sent_code('ruth@example.org')); p2.wait_for_selector('#welcome', state='hidden', timeout=15000); p2.wait_for_timeout(600)
+        got=p2.evaluate("(async () => ({ name: JSON.parse(localStorage.getItem('rtt-profile')).name, rail: document.getElementById('railName').textContent, runs: (await window.__rtt.journal.list()).map(r => r.name), profilePage: !document.getElementById('profile').hidden }))()")
+        print('ACCOUNT second phone:', got)
+        assert got['name']=='Ruth' and got['rail']=='Ruth' and got['runs']==['Sea loop'] and not got['profilePage'], 'the second phone has the name and the run, and is not asked for a name again'
+        # The run deleted on the second phone goes from the first; a new name on the first reaches the second.
+        p2.evaluate("(async () => { await window.__rtt.journal.remove('2026-11-20T06:00:00.000Z-ui0001'); await window.__rtt.account.runDeleted('2026-11-20T06:00:00.000Z-ui0001'); })()")
+        p1.evaluate("window.__rtt.navigate('profile')"); p1.wait_for_timeout(200); p1.fill('#profileName','Ruth B'); p1.click('#profileSave'); p1.wait_for_timeout(900)
+        p1.evaluate("window.__rtt.account.sync()"); p1.wait_for_timeout(700); p2.evaluate("window.__rtt.account.sync()"); p2.wait_for_timeout(700)
+        both=[q.evaluate("(async () => ({ runs: (await window.__rtt.journal.list()).length, rail: document.getElementById('railName').textContent }))()") for q in (p1,p2)]
+        print('ACCOUNT both phones after a delete and a new name:', both)
+        assert both[0]=={'runs':0,'rail':'Ruth B'} and both[1]=={'runs':0,'rail':'Ruth B'}, 'the two phones agree: the run is gone from both and both show the new name'
+        # Signing out: a guest again, the profile stays on the phone.
+        p2.evaluate("window.__rtt.navigate('profile')"); p2.wait_for_timeout(300); p2.click('#accountSignOut'); p2.wait_for_timeout(600)
+        assert p2.text_content('#accountState')=='Not signed in' and p2.input_value('#profileName')=='Ruth B' and p2.evaluate("localStorage.getItem('rtt-account')") is None, 'signed out: a guest with the profile still on the phone'
+        # Deleting the account: asked twice, then gone from the server; the phone is a guest.
+        p1.evaluate("window.__rtt.navigate('profile')"); p1.wait_for_timeout(300)
+        token=p1.evaluate("JSON.parse(localStorage.getItem('rtt-account')).token")
+        p1.click('#accountDelete'); p1.wait_for_timeout(200)
+        assert p1.text_content('#accountDelete')=='Tap again to delete your account' and 'from our server' in p1.text_content('#accountNote') and p1.evaluate("!!localStorage.getItem('rtt-account')"), 'the first tap only asks'
+        p1.click('#accountDelete'); p1.wait_for_timeout(900)
+        gone=p1.evaluate("(a) => fetch(a[0], {headers: {Authorization: 'Bearer ' + a[1]}}).then(r => r.status)", [PROXY+'/account', token])
+        print('ACCOUNT deleted:', p1.text_content('#accountState'), '| the old key on the server:', gone)
+        assert gone==401 and p1.text_content('#accountState')=='Not signed in' and p1.input_value('#profileName')=='Ruth B', 'the account is gone from the server; the phone is a guest and keeps its profile'
+        # In Hebrew the sign-in page has no English left on it (the names of Apple and Google excepted).
+        p1.click('#accountSignIn'); p1.wait_for_timeout(300)
+        assert shown(p1)==['signEmail','welcomeBack'] and p1.text_content('#welcomeTitle')=='Sign in', 'from the profile page the sign-in page has a way back and no guest button'
+        p1.evaluate("window.__rtt.setLanguage('he'); window.__rtt.applyLanguage()"); p1.wait_for_timeout(300)
+        english=p1.evaluate("[...document.querySelectorAll('#welcome *')].filter(e => e.children.length === 0 && e.offsetParent && /[A-Za-z]{3,}/.test(e.textContent) && !/Apple|Google|RunTheTown/.test(e.textContent)).map(e => e.textContent.trim())")
+        print('ACCOUNT Hebrew sign-in page, left in English:', english)
+        assert english==[], english
+        c1.close(); c2.close()
+    finally:
+        dev.terminate()
+    b.close()
 srv.shutdown()
 print('\n'.join(logs) or 'no console errors')

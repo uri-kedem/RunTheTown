@@ -12,9 +12,14 @@
 //   /overpass?data=<query>                 street data (the Overpass mirrors, in turn);
 //                                          also POST with the form body data=<query>, as the app sends it
 //   /                                      a one-line "ok" for monitoring
+//   /account, /account/...                 the optional sign-in and what an account keeps
+//                                          (accounts.js, which lists its own routes)
 //
 // Secrets and settings come from wrangler.toml / the dashboard: CONTACT_EMAIL (sent only with
-// Nominatim requests, as its policy asks), ALLOWED_ORIGINS (who may call us).
+// Nominatim requests, as its policy asks), ALLOWED_ORIGINS (who may call us), and those of
+// the accounts (accounts.js).
+
+import { accounts } from './accounts.js';
 
 const PHOTON = 'https://photon.komoot.io/api/';
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
@@ -40,6 +45,12 @@ export default {
     const origin = request.headers.get('Origin') || '';
     const cors = corsHeaders(origin, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    // Accounts: the runner's own data, never cached, and only for the app itself.
+    if (url.pathname === '/account' || url.pathname.startsWith('/account/')) {
+      const answer = (body, status = 200) => json(body, status, { ...cors, 'Cache-Control': 'no-store' });
+      if (!originAllowed(origin, env)) return answer({ error: 'origin not allowed' }, 403);
+      return accounts(request, env, url, answer);
+    }
     // Street-data queries are long: the app posts them as a form, like Overpass itself takes them.
     const posted = request.method === 'POST' && url.pathname === '/overpass';
     if (request.method !== 'GET' && !posted) return json({ error: 'GET only' }, 405, cors);
@@ -65,8 +76,8 @@ function originAllowed(origin, env) {
 function corsHeaders(origin, env) {
   return {
     'Access-Control-Allow-Origin': originAllowed(origin, env) && origin ? origin : '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Accept, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Accept, Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };

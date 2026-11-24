@@ -283,3 +283,23 @@ export class NativeWatch {
     this.w.end(state).catch(() => {});
   }
 }
+
+/**
+ * Signing in with Apple or Google on the iPhone, through the app's own plugin (SignIn): the
+ * phone shows the system's sheet and hands back the signed note our server checks.
+ * `nativeAppleSignIn()` resolves {identityToken, name}; `nativeGoogleSignIn(clientId)`
+ * resolves {idToken}. Both resolve null when the runner closes the sheet, and throw when
+ * the sign-in fails.
+ */
+async function nativeSignIn(method, options) {
+  const p = plugin('SignIn');
+  if (!p) throw new Error('not available');
+  try {
+    return await p[method](options || {});
+  } catch (err) {
+    if (err?.code === 'cancelled' || err?.message === 'cancelled') return null;
+    throw err;
+  }
+}
+export const nativeAppleSignIn = () => nativeSignIn('apple');
+export const nativeGoogleSignIn = (clientId) => nativeSignIn('google', { clientId });

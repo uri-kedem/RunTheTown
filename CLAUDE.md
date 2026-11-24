@@ -24,6 +24,7 @@ npm test                                   # all Node test suites, about 12 minu
 node tests/test-navigation.mjs             # one suite (each tests/test-*.mjs runs alone)
 python3 tests/ui/ui_nav.py                 # browser walk-through (needs: pip install playwright; playwright install chromium)
 node tests/ui/lights_check.mjs             # by hand, needs the network: guessed traffic lights against the mapped ones of a real city
+node tests/account-dev-server.mjs          # the account server on this Mac (database in memory, codes kept in a list): the walk-through starts it itself
 node build.mjs                             # build: bundle, version stamp, fingerprints, dist/
 npm run ios                                # build + plugin patch + project config + cap sync + open Xcode
 node build.mjs && node native/patch-plugins.mjs && node native/configure-ios.mjs && npx cap sync ios   # sync to Xcode without opening it
@@ -70,16 +71,19 @@ phone gets a new version only through `npx cap sync ios` and Run in Xcode.
 | `js/cues.js` | A path becomes turn-by-turn cues |
 | `js/places.js`, `js/spots.js`, `js/details.js` | Running tracks, stadiums, park loops and facts about them |
 | `js/journal.js`, `js/cache.js`, `js/settings.js` | Profile and run journal, on-phone storage (IndexedDB), settings |
+| `js/account.js` | The optional account: `Account` (signing in, signing out, deleting the account, and `sync()`, which keeps the profile and the run journal the same on the phone and on our server), `accountMessage` (the words for a refusal). A guest never touches it |
 | `js/i18n.js` | The Hebrew interface: the English → Hebrew table (fixed texts and templates), `tr()`, and the page translator (`applyLanguage`, `watchLanguage`) that turns every text the app writes into Hebrew and the page right to left |
 | `js/offline.js` | Offline: `offlineFetch` answers the map's requests from the phone when it can (through a MapLibre protocol set up in `glmap.js`), `downloadPack` saves an area (planner data, map tiles of every zoom, styles, fonts, icons) for 14 days; routes downloaded to run later (`saveRouteForLater`, `savedRoutes`, `loadSavedRoute`, `deleteSavedRoute`): the route card as data plus the map around it |
 | `js/services.js` | Where search, Nominatim and Overpass live: our proxy (`PROXY`, the Cloudflare Worker at `runthetown-proxy.runthetown.workers.dev`), with the public Overpass servers behind it; the public servers alone when `PROXY` is empty |
 | `server/` | The Cloudflare Worker proxy (`worker.js`), its settings and how to deploy it (`cd server && npx wrangler deploy`; it is not part of `node build.mjs`) |
-| `privacy.html`, `support.html`, the Terms & policy page in `index.html`, `native/APPSTORE.md` | What the app tells people and Apple about data. They must say the same thing: when the app starts or stops sending something anywhere, change all of them (the texts call the proxy "the relay") |
+| `server/accounts.js`, `server/schema.sql` | The `/account` routes of the same Worker: sign-in by a code sent by e-mail, with Google and with Apple (no password anywhere), the profile and the runs of an account in a Cloudflare D1 database. `/account/ways` tells the app which ways of signing in are switched on; with none (as now) the app has no sign-in. Setting one up: `server/README.md`, "Accounts" |
+| `native/APPSTORE-accounts.md` | The store answers (App Privacy, reviewer notes) that replace those of `APPSTORE.md` on the day a way of signing in is switched on |
+| `privacy.html`, `support.html`, the Terms & policy page in `index.html`, `native/APPSTORE.md` (and `native/APPSTORE-accounts.md`) | What the app tells people and Apple about data. They must say the same thing: when the app starts or stops sending something anywhere, change all of them (the texts call the proxy "the relay") |
 | `js/glmap.js` | The map: MapLibre GL over OpenFreeMap vector tiles behind a small Leaflet-shaped API (markers, polylines, layer groups, bearing, day/night style, a snapshot for the run picture); the dark style is repainted here so its streets and paths can be read (`DARK_MAP_PAINT`) |
 | `index.html`, `css/style.css`, `sw.js` | The page, the look (bright, and the dark theme of Settings: `html[data-theme='dark']` over the colour variables; dark panels with white writing use `--panel`), the offline cache |
 | `tests/` | Node suites over a synthetic city (`synthetic-city.mjs`), a MapLibre stub (`maplibre-stub.js`), and `tests/ui/` browser scripts |
 | `native/` | iOS notes (`README-ios.md`), the store listing (`APPSTORE.md`), the plugin patch, `configure-ios.mjs/.rb` (adds the app's own plugins, the HealthKit entitlement and the Lock Screen extension to the Xcode project; rerunnable) |
-| `ios/App/App/Plugins/`, `ios/App/RunActivity/`, `ios/App/RunTheTownWatch/` | The app's own Swift plugins (Apple Health, the chime, the Live Activity, the Watch link), registered in `RTTViewController.swift`; the Lock Screen widget extension; the Apple Watch app (shows the run, taps the wrist at turns) |
+| `ios/App/App/Plugins/`, `ios/App/RunActivity/`, `ios/App/RunTheTownWatch/` | The app's own Swift plugins (Apple Health, the chime, the Live Activity, the Watch link, signing in with Apple and Google), registered in `RTTViewController.swift`; the Lock Screen widget extension; the Apple Watch app (shows the run, taps the wrist at turns) |
 
 Mode names: the interface says **Free-flow run** and **Explorer tour**; the code says `run`
 and `tour` (and "sightseeing"). Do not rename the code.
@@ -124,6 +128,14 @@ and `tour` (and "sightseeing"). Do not rename the code.
   Settings, each with a Delete.
 - A chosen route offers two things: run it now, or download it for later (the route with its
   map, 14 days, opened from "Downloaded routes" in the planner).
+- Accounts (his decisions, Nov 23, 2026): signing in is optional. The first open offers the
+  ways of signing in and "Continue as a guest", and a guest uses the whole app with nothing
+  leaving the phone; the cover's "No sign-up required" stays true. Three ways in: Apple,
+  Google, or a six-digit code sent by e-mail. There is no password anywhere. An account keeps
+  the profile and the run journal; settings and routes downloaded for later stay on the
+  phone. The profile page has Sign out and Delete my account (two taps; it removes
+  everything from the server, the phone keeps its runs). Do not make sign-in compulsory and
+  do not add a password without asking him.
 
 ## Conventions
 

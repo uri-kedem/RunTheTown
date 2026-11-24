@@ -9,3 +9,17 @@ compatibility_date = "2026-10-01"
 CONTACT_EMAIL = "uri.kedem1@gmail.com"
 # Who may call the proxy from a browser (comma-separated). Empty: anyone (testing).
 ALLOWED_ORIGINS = "https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"
+
+# ---- Accounts (the optional sign-in; see README.md, "Accounts") ----
+# The database. Create it once with `npx wrangler d1 create runthetown`, put the id it
+# prints here and take the # off the four lines. Until then the app offers no sign-in.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "runthetown"
+# database_id = ""
+#
+# Each way of signing in is on when its setting is filled in (in [vars] above):
+#   MAIL_FROM = "RunTheTown <signin@our-domain>"   and the secret RESEND_API_KEY
+#   GOOGLE_WEB_CLIENT_ID = "....apps.googleusercontent.com"
+#   GOOGLE_IOS_CLIENT_ID = "....apps.googleusercontent.com"
+#   APPLE_APP_ID = "com.urikedem.runthetown"

@@ -26,7 +26,7 @@ end
 plugins = app_group['Plugins'] || app_group.new_group('Plugins', 'Plugins')
 add_file(app_group, app, File.join(root, 'App/RTTViewController.swift'), root)
 add_file(app_group, app, File.join(root, 'App/SceneDelegate.swift'), root)
-%w[HealthPlugin ChimePlugin LiveActivityPlugin RunActivityAttributes WatchPlugin].each do |name|
+%w[HealthPlugin ChimePlugin LiveActivityPlugin RunActivityAttributes WatchPlugin SignInPlugin].each do |name|
   add_file(plugins, app, File.join(root, "App/Plugins/#{name}.swift"), root)
 end
 

@@ -94,9 +94,12 @@ const HE_TEXT = {
   'Run at your own risk': 'הריצה על אחריותך',
   'Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.': 'המסלולים נבנים אוטומטית מנתוני OpenStreetMap, שעלולים להיות שגויים או לא מעודכנים. שביל עשוי להיות סגור, לא מואר, לא בטוח או פרטי, ומסלול ריצה או אצטדיון עשויים להיות סגורים לקהל. בדוק שהמסלול הגיוני לפני היציאה, ציית לחוקי התנועה ולרמזורים והפעל שיקול דעת בכל עת. ההנחיה הקולית היא נוחות, לא תחליף להסתכלות לאן אתה רץ. השימוש ב-RunTheTown הוא על אחריותך בלבד, ללא כל אחריות מצדנו.',
   'Your location': 'המיקום שלך',
-  "Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never stored by us and never tied to a name or an account: there is no account. To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.": 'המיקום שלך משמש במכשיר כדי לקבוע את נקודת ההתחלה, לעקוב אחריך לאורך המסלול ולמצוא מקומות ריצה סביבך. הוא לעולם לא נשמר אצלנו ולא מקושר לשם או לחשבון: אין חשבון. כדי להביא נתוני מפה ולחפש מקומות, האפליקציה שולחת את האזור שאתה מסתכל עליו, ואת מה שהקלדת בתיבת החיפוש, לשירותים שלמטה. החיפוש, איתור המקומות והבקשה לרמזורים עוברים דרך שרת התיווך של RunTheTown, שרת קטן ב-Cloudflare שמעביר אותם לשירותים הציבוריים ואינו שומר רישום של מי ששאל.',
-  'Your profile and your runs stay on the device': 'הפרופיל והריצות שלך נשארים במכשיר',
-  'Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. None of it is sent to us, and there is no account. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.': 'השם והתמונה שלך, וכל ריצה ביומן (מרחק, זמן, המסלול, מסלול ה-GPS ותמונה שלו) נשמרים במכשיר הזה בלבד. דבר מהם לא נשלח אלינו, ואין חשבון. באפליקציית האייפון, ריצה ששמרת נשמרת גם ב-Apple Health אם אישרת זאת, ומוצגת ב-Apple Watch שלך אם אתה משתמש בו. מחק ריצה מהדף שלה, ייצא את כולן כקובץ, או מחק את האפליקציה כדי להסיר הכול. חלקי מפה, נתוני גובה ופרטי מקומות שהורדו נשמרים עד 14 יום כדי שעיר תיטען מהר יותר בפעם הבאה.',
+  "Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. While you run it is not sent to us. As a guest, nothing about where you run is stored by us; if you have signed in, the runs you save, with their GPS tracks, are kept in your account (see below). To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.": 'המיקום שלך משמש במכשיר כדי לקבוע את נקודת ההתחלה, לעקוב אחריך לאורך המסלול ולמצוא מקומות ריצה סביבך. בזמן הריצה הוא לא נשלח אלינו. כאורח, שום דבר על המקומות שבהם אתה רץ לא נשמר אצלנו; אם נכנסת לחשבון, הריצות ששמרת, עם מסלולי ה-GPS שלהן, נשמרות בחשבון שלך (ראה למטה). כדי להביא נתוני מפה ולחפש מקומות, האפליקציה שולחת את האזור שאתה מסתכל עליו, ואת מה שהקלדת בתיבת החיפוש, לשירותים שלמטה. החיפוש, איתור המקומות והבקשה לרמזורים עוברים דרך שרת התיווך של RunTheTown, שרת קטן ב-Cloudflare שמעביר אותם לשירותים הציבוריים ואינו שומר רישום של מי ששאל.',
+  'Your profile and your runs': 'הפרופיל והריצות שלך',
+  'If you sign in': 'אם נכנסת לחשבון',
+  'You can sign in with Apple, with Google, or with a code sent to your e-mail address; there is no password. Your account then keeps, on RunTheTown\'s own server at Cloudflare: your e-mail address, the name and photo of your profile, and the runs in your journal (distance, time, the route and the GPS track, without the map picture). It is kept so that your runs are backed up and appear on your other devices, and for nothing else: it is not shared, not sold and not used for advertising. When you sign in with Apple or Google we receive from them your e-mail address, your name and their identifier for you, and never your password. Settings and routes downloaded for later stay on the device. "Delete my account" on the profile page removes the account and everything in it from the server at once. Signing out leaves the account as it is and leaves your runs on the device.': 'אפשר להיכנס עם Apple, עם Google, או עם קוד שנשלח לכתובת הדוא"ל שלך; אין סיסמה. החשבון שלך שומר אז, בשרת של RunTheTown עצמה אצל Cloudflare: את כתובת הדוא"ל שלך, את השם והתמונה שבפרופיל, ואת הריצות שביומן (מרחק, זמן, המסלול ומסלול ה-GPS, בלי תמונת המפה). הם נשמרים כדי שהריצות שלך יהיו מגובות ויופיעו במכשירים האחרים שלך, ולא לשום מטרה אחרת: הם לא משותפים, לא נמכרים ולא משמשים לפרסום. כשאתה נכנס עם Apple או Google אנחנו מקבלים מהן את כתובת הדוא"ל שלך, את שמך ואת המזהה שלהן עבורך, ולעולם לא את הסיסמה שלך. ההגדרות והמסלולים שהורדו לריצה מאוחרת נשארים במכשיר. "מחק את החשבון שלי" בדף הפרופיל מסיר מיד מהשרת את החשבון ואת כל מה שבו. יציאה מהחשבון משאירה את החשבון כפי שהוא ומשאירה את הריצות שלך במכשיר.',
+  'Apple and Google confirm who you are when you sign in with them, and Resend delivers the sign-in code when you sign in by e-mail. They are used only if you sign in.': 'Apple ו-Google מאשרות מי אתה כשאתה נכנס דרכן, ו-Resend מעבירה את קוד הכניסה כשאתה נכנס בדוא"ל. הן בשימוש רק אם אתה נכנס לחשבון.',
+  'Signing in is optional, and the app works fully without it. As a guest, your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device, and none of it is sent to us. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.': 'הכניסה לחשבון היא רשות, והאפליקציה פועלת במלואה גם בלעדיה. כאורח, השם והתמונה שלך, וכל ריצה ביומן (מרחק, זמן, המסלול, מסלול ה-GPS ותמונה שלו) נשמרים במכשיר הזה בלבד, ודבר מהם לא נשלח אלינו. באפליקציית האייפון, ריצה ששמרת נשמרת גם ב-Apple Health אם אישרת זאת, ומוצגת ב-Apple Watch שלך אם אתה משתמש בו. מחק ריצה מהדף שלה, ייצא את כולן כקובץ, או מחק את האפליקציה כדי להסיר הכול. חלקי מפה, נתוני גובה ופרטי מקומות שהורדו נשמרים עד 14 יום כדי שעיר תיטען מהר יותר בפעם הבאה.',
   'No tracking': 'ללא מעקב',
   'No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.': 'ללא אנליטיקה, ללא פרסום וללא מעקב מכל סוג. "דווח על בעיה" פותח את אפליקציית הדוא"ל שלך עם הודעה אלינו; היא נשלחת רק אם תלחץ שלח.',
   'Services used': 'שירותים בשימוש',
@@ -157,6 +160,49 @@ const HE_TEXT = {
   'Save': 'שמור',
   'Start running': 'צא לרוץ',
   'Skip for now': 'דלג בינתיים',
+  // The account (optional sign-in)
+  'Sign in': 'כניסה',
+  'Sign in to keep your runs safe: they are backed up and follow you to a new phone and to the website.': 'היכנס כדי לשמור על הריצות שלך: הן מגובות ועוברות איתך לטלפון חדש ולאתר.',
+  'Sign in with Apple': 'כניסה עם Apple',
+  'Sign in with Google': 'כניסה עם Google',
+  'Continue with e-mail': 'המשך עם דוא"ל',
+  'E-mail': 'דוא"ל',
+  'Send me a code': 'שלח לי קוד',
+  'Sign in another way': 'כניסה בדרך אחרת',
+  'Code': 'קוד',
+  'Send a new code': 'שלח קוד חדש',
+  'Use another address': 'כתובת אחרת',
+  'Continue as a guest': 'המשך כאורח',
+  'As a guest everything stays on this phone, and you can sign in later from your profile. No password is ever asked for.': 'כאורח הכול נשאר בטלפון הזה, ואפשר להיכנס מאוחר יותר מהפרופיל. אף פעם לא מבקשים סיסמה.',
+  'Sign out': 'יציאה',
+  'Delete my account': 'מחק את החשבון שלי',
+  'We sent a 6-digit code to {a}. Type it here; it works for 10 minutes.': 'שלחנו קוד בן 6 ספרות אל {a}. הקלד אותו כאן; הוא תקף למשך 10 דקות.',
+  'A new code is on its way.': 'קוד חדש בדרך אליך.',
+  'Please type your e-mail address.': 'נא להקליד את כתובת הדוא"ל שלך.',
+  'Please type the 6 digits of the code.': 'נא להקליד את 6 הספרות של הקוד.',
+  'Signing you in…': 'מתחברים…',
+  'Signed in. Your runs are backed up to your account.': 'נכנסת. הריצות שלך מגובות בחשבון.',
+  'Could not sign in with {a}. Please try again.': 'הכניסה עם {a} לא הצליחה. נסה שוב.',
+  'Signed in as {a}': 'מחובר בתור {a}',
+  'Signed in': 'מחובר',
+  'Not signed in': 'לא מחובר',
+  'Your profile and your runs are saved to your account, and stay on this phone too.': 'הפרופיל והריצות שלך שמורים בחשבון, ונשארים גם בטלפון הזה.',
+  'Your runs are only on this phone. Sign in to back them up and to see them on your other devices.': 'הריצות שלך נמצאות רק בטלפון הזה. היכנס כדי לגבות אותן ולראות אותן במכשירים האחרים שלך.',
+  'Tell RunTheTown who you are. Your name, your photo and your runs are saved to your account.': 'ספר ל-RunTheTown מי אתה. השם, התמונה והריצות שלך נשמרים בחשבון.',
+  'Signed out. Your runs stay on this phone.': 'יצאת מהחשבון. הריצות נשארות בטלפון הזה.',
+  'Tap again to delete your account': 'הקש שוב כדי למחוק את החשבון',
+  'This deletes your account and the runs saved in it from our server. The runs on this phone stay.': 'הפעולה מוחקת מהשרת שלנו את החשבון ואת הריצות השמורות בו. הריצות שבטלפון הזה נשארות.',
+  'Your account was deleted. The runs on this phone are still here.': 'החשבון נמחק. הריצות שבטלפון הזה עדיין כאן.',
+  'No connection. Try again when you are online.': 'אין חיבור. נסה שוב כשתהיה מחובר לרשת.',
+  'That does not look like an e-mail address.': 'זה לא נראה כמו כתובת דוא"ל.',
+  'Too many tries. Try again in a minute.': 'יותר מדי ניסיונות. נסה שוב בעוד דקה.',
+  'Too many tries. Try again in {n} minutes.': 'יותר מדי ניסיונות. נסה שוב בעוד {n} דקות.',
+  'That code is not right. One try left.': 'הקוד לא נכון. נשאר ניסיון אחד.',
+  'That code is not right. {n} tries left.': 'הקוד לא נכון. נשארו {n} ניסיונות.',
+  'This code no longer works. Ask for a new one.': 'הקוד הזה כבר לא תקף. בקש קוד חדש.',
+  'The code could not be sent. Try again in a minute.': 'לא ניתן היה לשלוח את הקוד. נסה שוב בעוד דקה.',
+  'This way of signing in is not available right now.': 'דרך הכניסה הזאת אינה זמינה כרגע.',
+  'Something went wrong. Please try again.': 'משהו השתבש. נסה שוב.',
   'Please type your name.': 'אנא הקלד את שמך.',
   'Welcome, {a}. Your runs will be saved to your journal.': 'ברוך הבא, {a}. הריצות שלך יישמרו ביומן.',
   'runs': 'ריצות',
@@ -7757,6 +7803,283 @@ const journal = {
   },
 };
 
+// ---- account.js ----
+// The optional account: signing in, and keeping the profile and the run journal on our
+// server (server/accounts.js) as well as on the phone.
+//
+// A guest has no account and nothing here runs for them: the profile and the journal stay
+// on the phone, as they always have. A signed-in runner's phone still holds everything and
+// works with no network; the server holds a second copy, so the journal survives a lost
+// phone and appears on the runner's other phone and on the website. Settings and routes
+// downloaded for later are not part of the account: they stay on the phone (Uri's decision).
+//
+// What is on the phone (localStorage):
+//   rtt-account  the phone's key and whose account it is
+//   rtt-sync     what has already been exchanged with that account: which runs it has,
+//                which runs deleted here it has yet to be told about, when the profile was
+//                last changed here
+//   rtt-ways     which ways of signing in the server offers (asked once a day)
+
+
+
+
+const ACCOUNT_KEY = 'rtt-account';
+const SYNC_KEY = 'rtt-sync';
+const WAYS_KEY = 'rtt-ways';
+const WAYS_FRESH_MS = 24 * 3600 * 1000;
+const NO_WAYS = Object.freeze({ email: false, google: null, apple: null });
+
+/** What the server (or the lack of a connection: status 0) said when it refused. */
+class AccountError extends Error {
+  constructor(status, reason, more = {}) { super(reason); this.status = status; this.reason = reason; this.wait = more.wait || 0; this.left = more.left; }
+}
+
+/**
+ * The words for a refusal, for the runner. Written here, in one place, so the sign-in
+ * page and the profile page say the same thing (and the Hebrew table has one set to carry).
+ */
+function accountMessage(err) {
+  const reason = err?.reason || '';
+  if (!err || err.status === 0) return 'No connection. Try again when you are online.';
+  if (reason === 'not an e-mail address') return 'That does not look like an e-mail address.';
+  if (err.status === 429) return err.wait > 90 ? `Too many tries. Try again in ${Math.ceil(err.wait / 60)} minutes.` : 'Too many tries. Try again in a minute.';
+  if (reason === 'wrong code') return err.left === 1 ? 'That code is not right. One try left.' : `That code is not right. ${err.left} tries left.`;
+  if (err.status === 410) return 'This code no longer works. Ask for a new one.';
+  if (reason === 'the code could not be sent') return 'The code could not be sent. Try again in a minute.';
+  if (err.status === 503) return 'This way of signing in is not available right now.';
+  return 'Something went wrong. Please try again.';
+}
+
+class Account {
+  /**
+   * Everything the account touches can be handed in (the tests do): the server's address,
+   * the storage, `fetch`, the journal, the clock.
+   */
+  constructor({ server = PROXY, storage = globalThis.localStorage, fetch = (...a) => globalThis.fetch(...a), runs = journal, now = () => Date.now(), device = '' } = {}) {
+    this.server = server;
+    this.storage = storage;
+    this.fetch = fetch;
+    this.runs = runs;
+    this.now = now;
+    this.device = device;
+    this.onChange = () => {}; // signed in or out, or a sync brought something: the page redraws
+    this.syncing = null;
+    this.again = false;
+  }
+
+  // ---- What the phone remembers ----
+
+  read(key, fallback) {
+    try { const v = JSON.parse(this.storage?.getItem(key) || 'null'); return v && typeof v === 'object' ? v : fallback; } catch { return fallback; }
+  }
+  write(key, value) {
+    try { if (value == null) this.storage?.removeItem(key); else this.storage?.setItem(key, JSON.stringify(value)); } catch { /* storage full: the next sync finds its way again */ }
+  }
+  /** Whose account this phone is signed in to: {id, email, google, apple}, or null for a guest. */
+  get who() { const a = this.read(ACCOUNT_KEY, null); return a?.token ? { id: a.id, email: a.email, google: !!a.google, apple: !!a.apple } : null; }
+  get signedIn() { return !!this.who; }
+  get token() { return this.read(ACCOUNT_KEY, null)?.token || ''; }
+  state() { const s = this.read(SYNC_KEY, {}); return { id: s.id || null, synced: s.synced || {}, foreign: s.foreign || {}, deletes: s.deletes || [], profileAt: s.profileAt || 0, profileForeign: !!s.profileForeign, last: s.last || 0 }; }
+
+  // ---- Talking to the server ----
+
+  async api(method, path, body, { auth = true } = {}) {
+    if (!this.server) throw new AccountError(503, 'accounts are not set up');
+    const headers = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (auth) headers.Authorization = `Bearer ${this.token}`;
+    let res;
+    try {
+      res = await this.fetch(`${this.server}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: globalThis.AbortSignal?.timeout ? AbortSignal.timeout(25000) : undefined });
+    } catch {
+      throw new AccountError(0, 'offline');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) return data;
+    // The server no longer knows this phone's key (signed out everywhere, or the account
+    // was deleted from another phone): the phone becomes a guest again, with its runs.
+    if (res.status === 401 && auth) this.forget();
+    throw new AccountError(res.status, data.error || 'failed', data);
+  }
+
+  /**
+   * Which ways of signing in to offer: {email, google: {web, ios} | null, apple: {app, web} | null}.
+   * Asked of the server at most once a day; with no answer, the last one known (none, the
+   * first time: the app then simply has no sign-in, as before there were accounts).
+   */
+  async ways({ fresh = false } = {}) {
+    const kept = this.read(WAYS_KEY, null);
+    if (kept && !fresh && this.now() - kept.at < WAYS_FRESH_MS) return kept.ways;
+    try {
+      const ways = await this.api('GET', '/account/ways', undefined, { auth: false });
+      const clean = { email: !!ways.email, google: ways.google || null, apple: ways.apple || null };
+      this.write(WAYS_KEY, { at: this.now(), ways: clean });
+      return clean;
+    } catch {
+      return kept?.ways || NO_WAYS;
+    }
+  }
+
+  // ---- Signing in and out ----
+
+  emailStart(email, lang) { return this.api('POST', '/account/email/start', { email, lang }, { auth: false }); }
+  async emailVerify(email, code) { return this.arrive(await this.api('POST', '/account/email/verify', { email, code, device: this.device }, { auth: false })); }
+  async withGoogle(credential) { return this.arrive(await this.api('POST', '/account/google', { credential, device: this.device }, { auth: false })); }
+  async withApple(identityToken, name) { return this.arrive(await this.api('POST', '/account/apple', { identityToken, name, device: this.device }, { auth: false })); }
+
+  // Signed in: the key is kept, and what this phone exchanged with ANOTHER account before
+  // (somebody else's runs, on a shared phone) is set aside so it is not handed to this one.
+  arrive(answer) {
+    const a = answer.account;
+    this.write(ACCOUNT_KEY, { token: answer.token, id: a.id, email: a.email, google: a.google, apple: a.apple });
+    const s = this.state();
+    if (s.id && s.id !== a.id) this.write(SYNC_KEY, { id: a.id, synced: {}, foreign: { ...s.foreign, ...s.synced }, deletes: [], profileAt: 0, profileForeign: true, last: 0 });
+    else this.write(SYNC_KEY, { ...s, id: a.id });
+    this.onChange();
+    return { isNew: !!answer.isNew, givenName: answer.givenName || '', email: a.email };
+  }
+
+  // The phone forgets its key. The runs and the profile stay on the phone.
+  forget() {
+    if (!this.read(ACCOUNT_KEY, null)) return;
+    this.write(ACCOUNT_KEY, null);
+    this.onChange();
+  }
+
+  async signOut() {
+    try { await this.api('POST', '/account/signout'); } catch { /* offline: the phone forgets the key all the same */ }
+    this.forget();
+  }
+
+  /** Deletes the account and everything in it from the server. What is on the phone stays. */
+  async deleteAccount() {
+    await this.api('DELETE', '/account');
+    this.write(SYNC_KEY, null);
+    this.forget();
+  }
+
+  // ---- Keeping the two copies the same ----
+
+  /** The profile was changed on this phone: remembered with the time, and sent. */
+  profileChanged() {
+    const s = this.state();
+    this.write(SYNC_KEY, { ...s, profileAt: this.now(), profileForeign: false });
+    return this.sync();
+  }
+  /** A run was saved on this phone. */
+  runSaved() { return this.sync(); }
+  /** A run was deleted on this phone: the account is told (now, or when next online and signed in). */
+  runDeleted(id) {
+    const s = this.state();
+    if (s.synced[id]) {
+      delete s.synced[id];
+      this.write(SYNC_KEY, { ...s, deletes: [...new Set([...s.deletes, id])] });
+    }
+    return this.sync();
+  }
+
+  /**
+   * Brings the phone and the account level with each other; safe to call at any time and
+   * as often as one likes (calls made while one is running are folded into one more run).
+   * Never throws: with no connection it does nothing and the next call tries again.
+   * Returns what changed on the phone: {down, removed, profile}, or null when nothing ran.
+   */
+  sync() {
+    if (!this.signedIn) return Promise.resolve(null);
+    if (this.syncing) { this.again = true; return this.syncing; }
+    this.syncing = (async () => {
+      let total = null;
+      do {
+        this.again = false;
+        let got = null;
+        try { got = await this.syncOnce(); } catch { /* no connection, or signed out meanwhile */ }
+        if (got) total = { down: (total?.down || 0) + got.down, removed: (total?.removed || 0) + got.removed, profile: !!(total?.profile || got.profile) };
+      } while (this.again && this.signedIn);
+      this.syncing = null;
+      if (total && (total.down || total.removed || total.profile)) this.onChange();
+      return total;
+    })();
+    return this.syncing;
+  }
+
+  async syncOnce() {
+    const who = this.who;
+    const changed = { down: 0, removed: 0, profile: false };
+
+    // The profile: whichever copy was changed last is the profile.
+    const remote = await this.api('GET', '/account');
+    let s = this.state();
+    const local = loadProfile(this.storage);
+    const hasLocal = !!local?.name && !s.profileForeign;
+    // A profile made before the phone kept the time of its changes dates from its "since".
+    const localAt = hasLocal ? s.profileAt || Date.parse(local.since || '') || 1 : 0;
+    if (hasLocal && localAt > (remote.profileUpdated || 0)) {
+      const kept = await this.api('PUT', '/account/profile', { profile: { name: local.name, photo: local.photo, photoFull: local.photoFull, since: local.since }, updated: localAt });
+      s = { ...this.state(), profileAt: kept.profileUpdated };
+      this.write(SYNC_KEY, s);
+    } else if (remote.profile?.name && (remote.profileUpdated > localAt || !hasLocal)) {
+      saveProfile({ ...remote.profile, skipped: false }, this.storage);
+      s = { ...this.state(), profileAt: remote.profileUpdated, profileForeign: false };
+      this.write(SYNC_KEY, s);
+      changed.profile = true;
+    }
+
+    // The runs. The account lists what it has; the phone lists what it has.
+    const index = (await this.api('GET', '/account/runs')).runs || [];
+    const there = new Map(index.map((r) => [r.id, r]));
+    const here = new Set((await this.runs.list()).map((r) => r.id));
+    const note = (fn) => { const st = this.state(); fn(st); this.write(SYNC_KEY, st); };
+
+    // Runs deleted here since the account last heard from this phone.
+    for (const id of this.state().deletes) {
+      if (this.who?.id !== who.id) return changed;
+      await this.api('DELETE', `/account/runs/${encodeURIComponent(id)}`);
+      note((st) => { st.deletes = st.deletes.filter((d) => d !== id); });
+      there.set(id, { id, deleted: true });
+    }
+    // Runs deleted on another phone: deleted here too.
+    for (const r of index) {
+      if (r.deleted && here.has(r.id)) {
+        await this.runs.remove(r.id);
+        here.delete(r.id);
+        note((st) => { delete st.synced[r.id]; });
+        changed.removed++;
+      }
+    }
+    // Runs the account does not have: sent (never another account's, on a shared phone).
+    for (const id of here) {
+      if (this.who?.id !== who.id) return changed;
+      if (there.has(id)) { if (!this.state().synced[id]) note((st) => { st.synced[id] = 1; }); continue; }
+      if (this.state().foreign[id]) continue;
+      const run = await this.runs.get(id);
+      if (!run) continue;
+      let answer;
+      try {
+        answer = await this.api('PUT', `/account/runs/${encodeURIComponent(id)}`, { run: { ...run, picture: null } });
+      } catch (err) {
+        if (err.status === 413 || err.status === 400 || err.status === 507) continue; // this one run cannot be kept there; the rest still can
+        throw err;
+      }
+      if (answer.deleted) { await this.runs.remove(id); changed.removed++; } else note((st) => { st.synced[id] = 1; });
+    }
+    // Runs the phone does not have: fetched. They arrive without a map picture; the page
+    // draws one when the run is first looked at.
+    for (const r of index) {
+      if (this.who?.id !== who.id) return changed;
+      if (r.deleted || here.has(r.id) || there.get(r.id)?.deleted) continue;
+      let got;
+      try { got = await this.api('GET', `/account/runs/${encodeURIComponent(r.id)}`); } catch (err) { if (err.status === 404) continue; throw err; }
+      if (got.run?.id === r.id) {
+        await this.runs.save({ ...got.run, picture: null });
+        note((st) => { st.synced[r.id] = 1; });
+        changed.down++;
+      }
+    }
+    note((st) => { st.last = this.now(); });
+    return changed;
+  }
+}
+
 // ---- native.js ----
 // The native shell (Capacitor, iPhone first). The same web app runs inside the app; these
 // adapters replace the browser pieces that a web page cannot do well on a phone:
@@ -8043,6 +8366,26 @@ class NativeWatch {
     this.w.end(state).catch(() => {});
   }
 }
+
+/**
+ * Signing in with Apple or Google on the iPhone, through the app's own plugin (SignIn): the
+ * phone shows the system's sheet and hands back the signed note our server checks.
+ * `nativeAppleSignIn()` resolves {identityToken, name}; `nativeGoogleSignIn(clientId)`
+ * resolves {idToken}. Both resolve null when the runner closes the sheet, and throw when
+ * the sign-in fails.
+ */
+async function nativeSignIn(method, options) {
+  const p = plugin('SignIn');
+  if (!p) throw new Error('not available');
+  try {
+    return await p[method](options || {});
+  } catch (err) {
+    if (err?.code === 'cancelled' || err?.message === 'cancelled') return null;
+    throw err;
+  }
+}
+const nativeAppleSignIn = () => nativeSignIn('apple');
+const nativeGoogleSignIn = (clientId) => nativeSignIn('google', { clientId });
 
 // ---- glmap.js ----
 // The map, drawn by MapLibre GL from OpenFreeMap's vector tiles (the same tiles the planner
@@ -8497,6 +8840,7 @@ function glSnapshot(pts, { width = 640, height = 400, pad = 36, dark = false, ti
 
 // ---- app.js ----
 // UI: map, start point, preferences and route results.
+
 
 
 
@@ -10457,6 +10801,7 @@ async function saveRun(n, { finished }) {
   try {
     await journal.save(run);
     n.savedRun = run;
+    account.runSaved(); // signed in: the run goes to the account too (now, or when next online)
     refreshRailUser();
     refreshPace();
     toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
@@ -10683,7 +11028,7 @@ function navigate(target) {
     $('terms').hidden = true;
     $('install').hidden = true;
     $('settings').hidden = true;
-    for (const id of ['profile', 'runs', 'runPage']) $(id).hidden = true;
+    for (const id of ['profile', 'welcome', 'runs', 'runPage']) $(id).hidden = true;
     setView('home');
     highlightNav(null);
     return;
@@ -10761,12 +11106,15 @@ function previewPhoto(draft, name) {
   label.style.backgroundImage = draft?.photo ? `url(${draft.photo})` : '';
   span.textContent = draft?.photo ? '' : initials(name);
 }
-function openProfile({ first = false } = {}) {
+function openProfile({ first = false, name = '' } = {}) {
   openDrawer(false);
-  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage']) $(id).hidden = true;
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage', 'welcome']) $(id).hidden = true;
   $('profileTitle').textContent = first ? 'Welcome to RunTheTown' : 'Your profile';
   $('profileIntro').hidden = !first && !!profile?.name;
-  $('profileName').value = profile?.name || '';
+  // What the introduction promises depends on whether there is an account.
+  $('profileIntro').textContent = account.signedIn ? 'Tell RunTheTown who you are. Your name, your photo and your runs are saved to your account.' : 'Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.';
+  $('profileName').value = profile?.name || name || '';
+  refreshAccountBox({ first });
   photoDraft = profile?.photo ? { photo: profile.photo, photoFull: profile.photoFull || profile.photo } : null;
   previewPhoto(photoDraft, profile?.name);
   $('profileMsg').textContent = '';
@@ -10891,6 +11239,7 @@ $('profileSave').addEventListener('click', () => {
   const name = $('profileName').value.trim();
   if (!name) { $('profileMsg').textContent = 'Please type your name.'; return; }
   profile = saveProfile({ ...(profile || {}), name, photo: photoDraft?.photo || null, photoFull: photoDraft?.photoFull || null, skipped: false });
+  account.profileChanged(); // signed in: the account gets the new name and photo
   refreshRailUser();
   $('profile').hidden = true;
   highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
@@ -10902,6 +11251,195 @@ $('profileSkip').addEventListener('click', () => {
   highlightNav(null);
 });
 $('profileBack').addEventListener('click', () => { $('profile').hidden = true; highlightNav(document.body.dataset.view === 'app' ? state.mode : null); });
+
+// ---------- The account: an optional sign-in (js/account.js, server/accounts.js) ----------
+// A guest uses the whole app and nothing leaves the phone. Signing in (Apple, Google, or a
+// code sent by e-mail: never a password) keeps the profile and the run journal in an
+// account as well. Only the ways the server has switched on are offered; with none, there
+// is no sign-in anywhere in the app.
+const account = new Account({ device: isNative() ? 'iPhone app' : 'website' });
+let signWays = { email: false, google: null, apple: null }; // what the server has switched on
+// In the iPhone app Sign in with Apple is offered wherever Google is (Apple's rule for
+// apps with another company's sign-in), so Google waits for Apple there. On the website
+// Apple's sign-in is not built yet.
+const appleWay = () => isNative() && !!signWays.apple?.app;
+const googleWay = () => (isNative() ? (appleWay() && signWays.google?.ios) || null : signWays.google?.web || null);
+const anyWay = () => !!(signWays.email || appleWay() || googleWay());
+let signEmailAddress = ''; // where the code was sent
+let welcomeFirst = false; // the first open of the app (a guest may go on) or from the profile page
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function openWelcome({ first = false } = {}) {
+  welcomeFirst = first;
+  openDrawer(false);
+  for (const id of ['terms', 'install', 'settings', 'runs', 'runPage', 'profile']) $(id).hidden = true;
+  $('welcomeBack').hidden = first;
+  $('welcomeTitle').textContent = first ? 'Welcome to RunTheTown' : 'Sign in';
+  $('signGuest').hidden = !first;
+  $('welcomeSmall').hidden = !first;
+  showSignStep('ways');
+  $('welcome').hidden = false;
+  $('welcome').scrollTop = 0;
+  highlightNav('profile');
+}
+// One step of signing in at a time: the ways in, the e-mail address, the code.
+function showSignStep(step) {
+  $('signWays').hidden = step !== 'ways';
+  $('signEmailForm').hidden = step !== 'email';
+  $('signCodeForm').hidden = step !== 'code';
+  $('signMsg').textContent = '';
+  if (step === 'ways') {
+    $('signApple').hidden = !appleWay();
+    $('signGoogle').hidden = !(isNative() && googleWay());
+    $('signEmail').hidden = !signWays.email;
+    showGoogleOnWeb();
+  }
+  if (step === 'email') setTimeout(() => $('signEmailInput').focus(), 50);
+  if (step === 'code') { $('signCodeInput').value = ''; setTimeout(() => $('signCodeInput').focus(), 50); }
+}
+const signBusy = (on) => { $('welcome').classList.toggle('busy', on); };
+
+// On the website Google draws its own button (its rule for this kind of sign-in), from a
+// script that can only come from Google. It is fetched when the sign-in page opens and not
+// before; with no connection there is simply no Google button.
+let gsiScript = null;
+function loadGsi() {
+  if (globalThis.google?.accounts?.id) return Promise.resolve(true);
+  if (!gsiScript) {
+    gsiScript = new Promise((resolve) => {
+      const tag = document.createElement('script');
+      tag.src = 'https://accounts.google.com/gsi/client';
+      tag.async = true;
+      tag.onload = () => resolve(!!globalThis.google?.accounts?.id);
+      tag.onerror = () => { gsiScript = null; resolve(false); };
+      document.head.appendChild(tag);
+    });
+  }
+  return gsiScript;
+}
+async function showGoogleOnWeb() {
+  const slot = $('signGoogleWeb');
+  slot.hidden = true;
+  const clientId = isNative() ? null : googleWay();
+  if (!clientId || !(await loadGsi())) return;
+  const g = globalThis.google.accounts.id;
+  g.initialize({ client_id: clientId, ux_mode: 'popup', auto_select: false, callback: (answer) => finishSignIn(() => account.withGoogle(answer.credential), 'Google') });
+  slot.textContent = '';
+  slot.hidden = $('signWays').hidden;
+  g.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', logo_alignment: 'center', width: Math.max(200, Math.min(400, Math.round($('signWays').getBoundingClientRect().width) || 320)), locale: isHebrew() ? 'he' : 'en' });
+}
+
+/**
+ * The end of every way in. `attempt()` signs in (and resolves nothing when the runner
+ * closed Apple's or Google's sheet). Then the account's profile and runs are fetched; a
+ * runner whose account has no name yet is asked for one on the profile page.
+ */
+async function finishSignIn(attempt, service = '') {
+  if ($('welcome').classList.contains('busy')) return;
+  $('signMsg').textContent = '';
+  signBusy(true);
+  try {
+    const who = await attempt();
+    if (!who) return;
+    $('signMsg').textContent = 'Signing you in…';
+    await Promise.race([account.sync(), pause(10000)]);
+    profile = loadProfile();
+    refreshRailUser();
+    $('welcome').hidden = true;
+    if (!profile?.name) openProfile({ first: true, name: who.givenName });
+    else {
+      highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
+      toast('Signed in. Your runs are backed up to your account.');
+    }
+  } catch (err) {
+    $('signMsg').textContent = err?.reason !== undefined ? accountMessage(err) : `Could not sign in with ${service}. Please try again.`;
+  } finally {
+    signBusy(false);
+  }
+}
+$('signApple').addEventListener('click', () => finishSignIn(async () => { const a = await nativeAppleSignIn(); return a ? account.withApple(a.identityToken, a.name) : null; }, 'Apple'));
+$('signGoogle').addEventListener('click', () => finishSignIn(async () => { const g = await nativeGoogleSignIn(googleWay()); return g ? account.withGoogle(g.idToken) : null; }, 'Google'));
+$('signEmail').addEventListener('click', () => showSignStep('email'));
+$('signEmailBack').addEventListener('click', () => showSignStep('ways'));
+$('signCodeBack').addEventListener('click', () => showSignStep('email'));
+// The address: a code is sent to it, and the page moves on to the code.
+async function sendSignCode(email, { again = false } = {}) {
+  if ($('welcome').classList.contains('busy')) return;
+  $('signMsg').textContent = '';
+  signBusy(true);
+  try {
+    await account.emailStart(email, isHebrew() ? 'he' : 'en');
+    signEmailAddress = email;
+    showSignStep('code');
+    $('signCodeNote').textContent = `We sent a 6-digit code to ${email}. Type it here; it works for 10 minutes.`;
+    if (again) toast('A new code is on its way.');
+  } catch (err) {
+    $('signMsg').textContent = accountMessage(err);
+  } finally {
+    signBusy(false);
+  }
+}
+$('signEmailForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = $('signEmailInput').value.trim();
+  if (!email) { $('signMsg').textContent = 'Please type your e-mail address.'; return; }
+  sendSignCode(email);
+});
+$('signCodeAgain').addEventListener('click', () => sendSignCode(signEmailAddress, { again: true }));
+const typedCode = () => $('signCodeInput').value.replace(/\D/g, '');
+function submitSignCode() {
+  if (typedCode().length !== 6) { $('signMsg').textContent = 'Please type the 6 digits of the code.'; return; }
+  finishSignIn(() => account.emailVerify(signEmailAddress, typedCode()));
+}
+$('signCodeForm').addEventListener('submit', (e) => { e.preventDefault(); submitSignCode(); });
+// The sixth digit is the last thing to type: no need to press the button as well.
+$('signCodeInput').addEventListener('input', () => { if (typedCode().length === 6) submitSignCode(); });
+$('signGuest').addEventListener('click', () => { $('welcome').hidden = true; openProfile({ first: true }); });
+$('welcomeBack').addEventListener('click', () => { $('welcome').hidden = true; openProfile(); });
+
+// The account on the profile page: who is signed in, or the offer to sign in; signing out;
+// deleting the account (asked twice, like deleting a run).
+function refreshAccountBox({ first = false } = {}) {
+  const who = account.who;
+  $('accountBox').hidden = first || (!who && !anyWay());
+  $('accountState').textContent = who ? (who.email ? `Signed in as ${who.email}` : 'Signed in') : 'Not signed in';
+  $('accountNote').textContent = who ? 'Your profile and your runs are saved to your account, and stay on this phone too.' : 'Your runs are only on this phone. Sign in to back them up and to see them on your other devices.';
+  $('accountSignIn').hidden = !!who;
+  $('accountSignedRow').hidden = !who;
+  delete $('accountDelete').dataset.armed;
+  $('accountDelete').textContent = 'Delete my account';
+}
+$('accountSignIn').addEventListener('click', () => { $('profile').hidden = true; openWelcome(); });
+$('accountSignOut').addEventListener('click', async () => {
+  await account.signOut();
+  toast('Signed out. Your runs stay on this phone.');
+});
+$('accountDelete').addEventListener('click', async () => {
+  const btn = $('accountDelete');
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Tap again to delete your account';
+    $('accountNote').textContent = 'This deletes your account and the runs saved in it from our server. The runs on this phone stay.';
+    setTimeout(() => { if (btn.dataset.armed) refreshAccountBox(); }, 8000);
+    return;
+  }
+  try {
+    await account.deleteAccount();
+    toast('Your account was deleted. The runs on this phone are still here.');
+  } catch (err) {
+    refreshAccountBox();
+    toast(accountMessage(err));
+  }
+});
+// Signed in or out, or a sync brought a run or a new name from the runner's other phone:
+// whatever is on screen is drawn again.
+account.onChange = () => {
+  profile = loadProfile();
+  refreshRailUser();
+  refreshAccountBox({ first: !$('profileSkip').hidden });
+  if (!$('profile').hidden && !$('profileName').matches(':focus')) { $('profileName').value = profile?.name || $('profileName').value; }
+  if (!$('runs').hidden) openRuns();
+};
 
 const fmtWhen = (iso) => { const d = new Date(iso); return d.toLocaleDateString(isHebrew() ? 'he-IL' : undefined, { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) + ' · ' + d.toLocaleTimeString(isHebrew() ? 'he-IL' : undefined, { hour: '2-digit', minute: '2-digit' }); };
 async function openRuns() {
@@ -10935,6 +11473,15 @@ async function openRun(id) {
   const pic = $('runPic');
   $('runPicBtn').hidden = !r.picture;
   if (r.picture) pic.src = r.picture;
+  // A run that arrived from the account has no map picture (each phone draws its own), and
+  // a run saved with no connection may have none either: it is drawn now, once, and kept.
+  if (!r.picture && ((r.track?.length || 0) > 1 || (r.latlngs?.length || 0) > 1)) {
+    drawRunPicture(r, { snapshot: glSnapshot }).then(async (picture) => {
+      if (!picture) return;
+      await journal.save({ ...r, picture });
+      if (openRunId === id && !$('runPage').hidden) { pic.src = picture; $('runPicBtn').hidden = false; }
+    }).catch(() => {});
+  }
   $('runStats').innerHTML = `<div><b>${U.num(r.distance, 2)}</b><span>${U.unit}</span></div><div><b>${fmtTime(r.elapsed)}</b><span>time</span></div><div><b>${r.pace ? U.pace(r.pace) : '–:––'}</b><span>${U.paceLabel()}</span></div>`;
   const facts = [fmtWhen(r.time), r.start?.label ? `From ${r.start.label}` : null, r.dest ? `One way to ${r.dest.label || 'the finish'}` : null, r.planned ? `Planned ${U.len(r.planned)}${r.finished ? ', completed' : ', stopped early'}` : null,
     r.onPlan != null && r.onPlan < 0.9 ? `${Math.round(r.onPlan * 100)}% of the run on the planned line; the picture shows where you actually went` : null, r.place ? `${r.place.kind === 'track' ? 'Laps at' : 'Loop in'} ${r.place.name}` : null, r.rerouted ? 'Rerouted or turned around on the way' : null, r.country ? 'Country run (unpaved lanes and tracks)' : null].filter(Boolean);
@@ -10975,6 +11522,7 @@ $('runDelete').addEventListener('click', async () => {
   if (!openRunId) return;
   if (!$('runDelete').dataset.armed) { $('runDelete').dataset.armed = '1'; $('runDelete').textContent = 'Tap again to delete'; setTimeout(() => { delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run'; }, 3000); return; }
   await journal.remove(openRunId).catch(() => {});
+  account.runDeleted(openRunId); // signed in: the account forgets it too, and so does the runner's other phone
   delete $('runDelete').dataset.armed; $('runDelete').textContent = 'Delete this run';
   refreshRailUser();
   $('runPage').hidden = true;
@@ -11019,16 +11567,29 @@ $('runsExport').addEventListener('click', async () => {
   }
 });
 refreshRailUser();
-// First open of the app: the profile page, once (Skip is remembered too).
+// First open of the app, once: the sign-in page when the server offers a way to sign in
+// (with "Continue as a guest"), else straight to the profile page as before there were
+// accounts (Skip is remembered too). The server is given a moment to say; a slow or absent
+// answer never holds the runner up.
 openFromLink();
-if (!profile) setTimeout(() => openProfile({ first: true }), 400);
+const waysAsked = account.ways().then((ways) => { signWays = ways; });
+Promise.all([Promise.race([waysAsked, pause(1500)]), pause(400)]).then(() => {
+  if (!profile && !account.signedIn) { if (anyWay()) openWelcome({ first: true }); else openProfile({ first: true }); }
+});
+// A late answer still counts for the profile page's offer to sign in.
+waysAsked.then(() => refreshAccountBox({ first: !$('profile').hidden && !$('profileSkip').hidden }));
+// Signed in: the phone and the account are brought level when the app opens, when it comes
+// back to the front after a while, and when the connection returns.
+if (account.signedIn) setTimeout(() => account.sync(), 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && account.signedIn && Date.now() - account.state().last > 10 * 60000) account.sync(); });
+window.addEventListener('online', () => account.sync());
 
 // Expose for testing/debugging.
 applyUnits();
 // The page in the chosen language, and every text written from now on.
 applyLanguage();
 watchLanguage();
-window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, snapshot: glSnapshot, drawRunPicture, homeRoute };
+window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, account, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.
 if (!state.linkStart) locate({ quiet: true });

@@ -597,6 +597,33 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
 .field-label input { display: block; width: 100%; margin-top: 6px; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 12px; font: inherit; font-size: 16px; background: var(--bg-2); color: var(--ink); }
 .field-label input:focus { outline: none; border-color: var(--ink); background: var(--bg); }
 .profile .primary { width: 100%; margin: 6px 0 8px; }
+/* Signing in. The three ways in are one column of equal buttons: Apple's in its own black
+   with its mark (white in the dark theme), Google's as Google asks (white, its coloured
+   mark; on the website Google draws the button itself), e-mail in the app's own look.
+   "Continue as a guest" is a full button too, not small print: nobody has to sign in. */
+.welcome-lead { font-size: 16px; color: var(--ink); margin: 6px 0 18px; }
+.sign-ways { display: grid; gap: 10px; }
+.sign-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 50px; border-radius: 25px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+.sign-btn svg { width: 19px; height: 19px; flex: none; }
+.sign-apple { background: #000; border-color: #000; color: #fff; }
+.sign-apple svg { fill: #fff; margin-top: -3px; }
+.sign-google { background: #fff; border-color: #dadce0; color: #1f1f1f; }
+.sign-google-web { display: flex; justify-content: center; min-height: 44px; color-scheme: light; }
+html[data-theme='dark'] .sign-apple { background: #fff; border-color: #fff; color: #000; }
+html[data-theme='dark'] .sign-apple svg { fill: #000; }
+.sign-form { margin-top: 4px; }
+.sign-form .route-pop-foot { margin-top: 4px; }
+.code-input { letter-spacing: 0.4em; font-size: 24px !important; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.guest-btn { display: block; width: 100%; height: 50px; margin: 18px 0 10px; border-radius: 25px; border: 0; background: var(--bg-2); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+.welcome-small { font-size: 12.5px; color: var(--ink-3); text-align: center; }
+#welcome.busy .sign-ways, #welcome.busy .sign-form, #welcome.busy .guest-btn { opacity: 0.5; pointer-events: none; }
+.welcome #signMsg { text-align: center; min-height: 1.4em; margin-top: 10px; }
+#welcome.busy #signMsg { color: var(--ink-2); }
+/* The account on the profile page. */
+.account-box { margin-top: 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); }
+.account-box b { display: block; overflow-wrap: anywhere; }
+.account-box p { font-size: 13.5px; margin: 4px 0 10px; }
+.account-box .ghost { padding: 4px 0; color: var(--ink); font-size: 14.5px; }
 .profile-totals { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .profile-totals b { display: block; font-size: 20px; font-weight: 800; color: var(--ink); }
 .profile-totals span { font-size: 11.5px; color: var(--ink-3); }

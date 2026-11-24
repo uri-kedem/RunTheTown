@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=cf0c07df" />
+    <link rel="manifest" href="manifest.webmanifest?v=60c26a32" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=cf0c07df" />
+    <link rel="stylesheet" href="css/style.css?v=60c26a32" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -47,7 +47,7 @@
       <button type="button" class="rail-item" data-nav="settings">
         <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="cf0c07df">cf0c07df</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="60c26a32">60c26a32</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -115,9 +115,11 @@
         <h2>Run at your own risk</h2>
         <p>Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.</p>
         <h2>Your location</h2>
-        <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. It is never stored by us and never tied to a name or an account: there is no account. To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.</p>
-        <h2>Your profile and your runs stay on the device</h2>
-        <p>Your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device. None of it is sent to us, and there is no account. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
+        <p>Your position is used on your device to set the start point, to follow you along the route and to find running spots around you. While you run it is not sent to us. As a guest, nothing about where you run is stored by us; if you have signed in, the runs you save, with their GPS tracks, are kept in your account (see below). To fetch map data and look up places, the app sends the area you are looking at, and what you type in the search box, to the services below. Search, place lookups and the request for traffic lights go through RunTheTown's own relay, a small server on Cloudflare that passes them on to the public services and keeps no record of who asked.</p>
+        <h2>Your profile and your runs</h2>
+        <p>Signing in is optional, and the app works fully without it. As a guest, your name and photo, and every run in your journal (distance, time, the route, the GPS track and a picture of it) are stored only on this device, and none of it is sent to us. In the iPhone app a run you keep is also saved to Apple Health when you allow it, and shown on your Apple Watch when you use one. Delete a run from its page, export them all as a file, or delete the app to remove everything. Downloaded map pieces, elevation data and place details are cached for up to 14 days so a city loads faster the next time.</p>
+        <h2>If you sign in</h2>
+        <p>You can sign in with Apple, with Google, or with a code sent to your e-mail address; there is no password. Your account then keeps, on RunTheTown's own server at Cloudflare: your e-mail address, the name and photo of your profile, and the runs in your journal (distance, time, the route and the GPS track, without the map picture). It is kept so that your runs are backed up and appear on your other devices, and for nothing else: it is not shared, not sold and not used for advertising. When you sign in with Apple or Google we receive from them your e-mail address, your name and their identifier for you, and never your password. Settings and routes downloaded for later stay on the device. &quot;Delete my account&quot; on the profile page removes the account and everything in it from the server at once. Signing out leaves the account as it is and leaves your runs on the device.</p>
         <h2>No tracking</h2>
         <p>No analytics, no advertising and no tracking of any kind. "Report a problem" opens your own e-mail app with a message to us; it is only sent if you press send.</p>
         <h2>Services used</h2>
@@ -128,6 +130,7 @@
           <li><b>Photon (komoot)</b> and <b>Nominatim</b> for address search and for finding tracks, stadiums and parks.</li>
           <li><b>Wikidata</b> and <b>Wikipedia</b> for a place's website and article, and for the stories on an Explorer tour.</li>
           <li><b>Cloudflare</b> runs RunTheTown's relay, which stands between the app and Photon, Nominatim and Overpass. It keeps their answers for up to 30 days so the same question is not asked twice, and not who asked. Like any web server it handles your internet address to send the answer back.</li>
+          <li>Apple and Google confirm who you are when you sign in with them, and Resend delivers the sign-in code when you sign in by e-mail. They are used only if you sign in.</li>
         </ul>
         <p>Each of these has its own terms and privacy policy. Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database License.</p>
         <h2>Fair use</h2>
@@ -169,6 +172,39 @@
     </section>
 
     <!-- Profile: who runs (kept on the phone) -->
+    <!-- Signing in: offered once on the first open (with "Continue as a guest") and from the
+         profile page afterwards. Only the ways the server has switched on are shown; with
+         none, this page never opens. No password anywhere: Apple, Google, or a code by e-mail. -->
+    <section class="page" id="welcome" hidden>
+      <div class="page-bar">
+        <button type="button" class="back" id="welcomeBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
+        <div class="page-title" id="welcomeTitle">Welcome to RunTheTown</div>
+      </div>
+      <div class="page-body profile welcome">
+        <p class="welcome-lead" id="welcomeLead">Sign in to keep your runs safe: they are backed up and follow you to a new phone and to the website.</p>
+        <div class="sign-ways" id="signWays">
+          <button type="button" class="sign-btn sign-apple" id="signApple" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" /></svg><span>Sign in with Apple</span></button>
+          <button type="button" class="sign-btn sign-google" id="signGoogle" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" /><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" /><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" /><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" /></svg><span>Sign in with Google</span></button>
+          <div class="sign-google-web" id="signGoogleWeb" data-no-i18n hidden></div>
+          <button type="button" class="sign-btn sign-email" id="signEmail" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v11H3z M3 7l9 6.500L21 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg><span>Continue with e-mail</span></button>
+        </div>
+        <form class="sign-form" id="signEmailForm" hidden novalidate>
+          <label class="field-label">E-mail<input type="email" id="signEmailInput" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" /></label>
+          <button type="submit" class="primary" id="signEmailSend">Send me a code</button>
+          <div class="route-pop-foot"><button type="button" class="link" id="signEmailBack">Sign in another way</button></div>
+        </form>
+        <form class="sign-form" id="signCodeForm" hidden novalidate>
+          <p id="signCodeNote"></p>
+          <label class="field-label">Code<input type="text" id="signCodeInput" class="code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="000000" /></label>
+          <button type="submit" class="primary" id="signCodeOk">Sign in</button>
+          <div class="route-pop-foot"><button type="button" class="link" id="signCodeAgain">Send a new code</button><button type="button" class="link" id="signCodeBack">Use another address</button></div>
+        </form>
+        <div class="distance-msg error" id="signMsg" aria-live="polite"></div>
+        <button type="button" class="guest-btn" id="signGuest">Continue as a guest</button>
+        <p class="welcome-small" id="welcomeSmall">As a guest everything stays on this phone, and you can sign in later from your profile. No password is ever asked for.</p>
+      </div>
+    </section>
+
     <section class="page" id="profile" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="profileBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
@@ -186,6 +222,13 @@
         <button type="button" class="primary" id="profileSave">Save</button>
         <div class="route-pop-foot"><button type="button" class="link" id="profileSkip">Skip for now</button></div>
         <div class="profile-totals" id="profileTotals" hidden></div>
+        <!-- The account: shown when signing in is on offer or the runner is signed in. -->
+        <div class="account-box" id="accountBox" hidden>
+          <b id="accountState"></b>
+          <p id="accountNote"></p>
+          <button type="button" class="ghost" id="accountSignIn">Sign in</button>
+          <div class="route-pop-foot" id="accountSignedRow"><button type="button" class="link" id="accountSignOut">Sign out</button><button type="button" class="link danger-link" id="accountDelete">Delete my account</button></div>
+        </div>
       </div>
     </section>
 
@@ -577,6 +620,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=cf0c07df"></script>
+    <script src="js/bundle.js?v=60c26a32"></script>
   </body>
 </html>
