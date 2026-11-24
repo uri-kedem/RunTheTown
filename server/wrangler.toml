@@ -8,7 +8,9 @@ compatibility_date = "2026-10-01"
 # Uri chose this address on Nov 15, 2026.
 CONTACT_EMAIL = "uri.kedem1@gmail.com"
 # Who may call the proxy from a browser (comma-separated). Empty: anyone (testing).
-ALLOWED_ORIGINS = "https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"
+# The website (runthetown.app since Nov 24, 2026; the old github.io address forwards to it and
+# stays listed for a browser still on a cached page), the iPhone app, and a local test server.
+ALLOWED_ORIGINS = "https://runthetown.app,https://uri-kedem.github.io,capacitor://localhost,http://localhost:8080"
 # Sign in with Google (Google Cloud project "runthetown", created Nov 24, 2026). These ids are
 # public: they only say which app is asking. The website's client allows the origins
 # https://uri-kedem.github.io and http://localhost:8080; the iPhone one is tied to the bundle id.

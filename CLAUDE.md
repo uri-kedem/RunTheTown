@@ -3,7 +3,10 @@
 A running app: the runner gives a start, a distance and a landscape, the app plans routes on
 promenades, parks and quiet streets and guides the run by voice. One codebase, two shells:
 
-- a static web app / PWA, served by GitHub Pages from the repository root (branch `main`);
+- a static web app / PWA, served by GitHub Pages from the repository root (branch `main`) at
+  https://runthetown.app (the `CNAME` file names the domain; it is Uri's, registered and with
+  its DNS at Cloudflare, since Nov 24, 2026; the old address uri-kedem.github.io/RunTheTown
+  forwards to it);
 - an iPhone app: the same web app inside a Capacitor 7 shell (`ios/`, bundle id
   `com.urikedem.runthetown`, iOS 15+, version 1.0 build 1), installed from Xcode.
 
@@ -135,7 +138,10 @@ and `tour` (and "sightseeing"). Do not rename the code.
   the profile and the run journal; settings and routes downloaded for later stay on the
   phone. The profile page has Sign out and Delete my account (two taps; it removes
   everything from the server, the phone keeps its runs). Do not make sign-in compulsory and
-  do not add a password without asking him.
+  do not add a password without asking him. The page offers "Sign up" and "Log in" as two
+  separate choices (his request, Nov 24, 2026: a runner must see how to log in from another
+  device), although both are the same step for the server; the interface says "log in",
+  "log out" and "sign up", not "sign in".
 
 ## Conventions
 

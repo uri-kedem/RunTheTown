@@ -65,7 +65,9 @@ Apple (waits for the Apple Developer enrolment), and with it Google in the iPhon
 
 - Database: D1 `runthetown`, id `20d690ad-7c0f-4a86-a9f6-5215631c8ae3`, region WEUR.
 - Domain: `runthetown.app`, registered at Cloudflare Registrar on Nov 24, 2026 (renews yearly),
-  DNS at Cloudflare. It carries the mail records only; the website is still on github.io.
+  DNS at Cloudflare. It carries the mail records and, since the same day, the website: four A
+  and four AAAA records to GitHub Pages and `www` as a CNAME to `uri-kedem.github.io`, all
+  "DNS only" (GitHub issues the HTTPS certificate itself; a proxied record would stop that).
 - Mail: Resend (Uri's account), domain `runthetown.app` verified, region eu-west-1, sender
   `RunTheTown <signin@runthetown.app>`. DNS: TXT `resend._domainkey`, CNAME `rsend` and `send`
   (DNS only), TXT `_dmarc`. The key is the Worker secret `RESEND_API_KEY` (sending access
@@ -73,7 +75,7 @@ Apple (waits for the Apple Developer enrolment), and with it Google in the iPhon
   month, 100 a day.
 - Google: Cloud project `runthetown` in Uri's Google account, sign-in screen "In production"
   (no logo, basic scopes: no verification needed). Clients "RunTheTown website" (origins
-  `https://uri-kedem.github.io`, `http://localhost:8080`) and "RunTheTown iPhone app" (bundle
+  `https://runthetown.app`, `https://uri-kedem.github.io`, `http://localhost:8080`) and "RunTheTown iPhone app" (bundle
   id). If the website moves to another address, add it to the website client's origins and to
   `ALLOWED_ORIGINS`.
 - To switch a way off: remove its setting from `wrangler.toml` (or the secret, for e-mail) and

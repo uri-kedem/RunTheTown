@@ -161,35 +161,43 @@ const HE_TEXT = {
   'Start running': 'צא לרוץ',
   'Skip for now': 'דלג בינתיים',
   // The account (optional sign-in)
-  'Sign in': 'כניסה',
-  'Sign in to keep your runs safe: they are backed up and follow you to a new phone and to the website.': 'היכנס כדי לשמור על הריצות שלך: הן מגובות ועוברות איתך לטלפון חדש ולאתר.',
+  'Sign up': 'הרשמה',
+  'Log in': 'כניסה',
+  'Log out': 'יציאה',
+  'Create an account to keep your runs safe: they are backed up and follow you to a new phone and to the website.': 'צור חשבון כדי לשמור על הריצות שלך: הן מגובות ועוברות איתך לטלפון חדש ולאתר.',
+  'Welcome back. Log in the same way you signed up, and your runs appear on this device.': 'ברוך שובך. היכנס באותה דרך שבה נרשמת, והריצות שלך יופיעו במכשיר הזה.',
+  'Sign up with Apple': 'הרשמה עם Apple',
+  'Sign up with Google': 'הרשמה עם Google',
+  'Sign up with e-mail': 'הרשמה עם דוא"ל',
+  'Log in with e-mail': 'כניסה עם דוא"ל',
+  'Choose another way': 'בחר דרך אחרת',
+  'As a guest everything stays on this phone, and you can sign up or log in later from your profile. No password is ever asked for.': 'כאורח הכול נשאר בטלפון הזה, ואפשר להירשם או להיכנס מאוחר יותר מהפרופיל. אף פעם לא מבקשים סיסמה.',
+  'Logging you in…': 'מתחברים…',
+  'Account created. Your runs are backed up to your account.': 'החשבון נוצר. הריצות שלך מגובות בחשבון.',
+  'Logged in. Your runs are backed up to your account.': 'נכנסת. הריצות שלך מגובות בחשבון.',
+  'There was no account for this address yet, so a new one was created.': 'עדיין לא היה חשבון לכתובת הזאת, ולכן נוצר חשבון חדש.',
+  'You already have an account, so you are logged in to it.': 'כבר יש לך חשבון, ולכן נכנסת אליו.',
+  'Could not log in with {a}. Please try again.': 'הכניסה עם {a} לא הצליחה. נסה שוב.',
+  'Logged in as {a}': 'מחובר בתור {a}',
+  'Logged in': 'מחובר',
+  'Not logged in': 'לא מחובר',
+  'Your runs are only on this phone. Sign up to back them up and see them on your other devices, or log in if you already have an account.': 'הריצות שלך נמצאות רק בטלפון הזה. הירשם כדי לגבות אותן ולראות אותן במכשירים האחרים שלך, או היכנס אם כבר יש לך חשבון.',
+  'Logged out. Your runs stay on this phone.': 'יצאת מהחשבון. הריצות נשארות בטלפון הזה.',
   'Sign in with Apple': 'כניסה עם Apple',
   'Sign in with Google': 'כניסה עם Google',
-  'Continue with e-mail': 'המשך עם דוא"ל',
   'E-mail': 'דוא"ל',
   'Send me a code': 'שלח לי קוד',
-  'Sign in another way': 'כניסה בדרך אחרת',
   'Code': 'קוד',
   'Send a new code': 'שלח קוד חדש',
   'Use another address': 'כתובת אחרת',
   'Continue as a guest': 'המשך כאורח',
-  'As a guest everything stays on this phone, and you can sign in later from your profile. No password is ever asked for.': 'כאורח הכול נשאר בטלפון הזה, ואפשר להיכנס מאוחר יותר מהפרופיל. אף פעם לא מבקשים סיסמה.',
-  'Sign out': 'יציאה',
   'Delete my account': 'מחק את החשבון שלי',
   'We sent a 6-digit code to {a}. Type it here; it works for 10 minutes.': 'שלחנו קוד בן 6 ספרות אל {a}. הקלד אותו כאן; הוא תקף למשך 10 דקות.',
   'A new code is on its way.': 'קוד חדש בדרך אליך.',
   'Please type your e-mail address.': 'נא להקליד את כתובת הדוא"ל שלך.',
   'Please type the 6 digits of the code.': 'נא להקליד את 6 הספרות של הקוד.',
-  'Signing you in…': 'מתחברים…',
-  'Signed in. Your runs are backed up to your account.': 'נכנסת. הריצות שלך מגובות בחשבון.',
-  'Could not sign in with {a}. Please try again.': 'הכניסה עם {a} לא הצליחה. נסה שוב.',
-  'Signed in as {a}': 'מחובר בתור {a}',
-  'Signed in': 'מחובר',
-  'Not signed in': 'לא מחובר',
   'Your profile and your runs are saved to your account, and stay on this phone too.': 'הפרופיל והריצות שלך שמורים בחשבון, ונשארים גם בטלפון הזה.',
-  'Your runs are only on this phone. Sign in to back them up and to see them on your other devices.': 'הריצות שלך נמצאות רק בטלפון הזה. היכנס כדי לגבות אותן ולראות אותן במכשירים האחרים שלך.',
   'Tell RunTheTown who you are. Your name, your photo and your runs are saved to your account.': 'ספר ל-RunTheTown מי אתה. השם, התמונה והריצות שלך נשמרים בחשבון.',
-  'Signed out. Your runs stay on this phone.': 'יצאת מהחשבון. הריצות נשארות בטלפון הזה.',
   'Tap again to delete your account': 'הקש שוב כדי למחוק את החשבון',
   'This deletes your account and the runs saved in it from our server. The runs on this phone stay.': 'הפעולה מוחקת מהשרת שלנו את החשבון ואת הריצות השמורות בו. הריצות שבטלפון הזה נשארות.',
   'Your account was deleted. The runs on this phone are still here.': 'החשבון נמחק. הריצות שבטלפון הזה עדיין כאן.',
@@ -11267,22 +11275,40 @@ const googleWay = () => (isNative() ? (appleWay() && signWays.google?.ios) || nu
 const anyWay = () => !!(signWays.email || appleWay() || googleWay());
 let signEmailAddress = ''; // where the code was sent
 let welcomeFirst = false; // the first open of the app (a guest may go on) or from the profile page
+// "Sign up" or "Log in": what the runner said they came to do. Both are the same step for the
+// server (there is no password to tell them apart), so this decides the words on the page,
+// and what is said afterwards when it turns out the other way: an address with no account
+// yet, or one that already has an account.
+let signMode = 'signup';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function openWelcome({ first = false } = {}) {
+function openWelcome({ first = false, mode = 'signup' } = {}) {
   welcomeFirst = first;
   openDrawer(false);
   for (const id of ['terms', 'install', 'settings', 'runs', 'runPage', 'profile']) $(id).hidden = true;
   $('welcomeBack').hidden = first;
-  $('welcomeTitle').textContent = first ? 'Welcome to RunTheTown' : 'Sign in';
   $('signGuest').hidden = !first;
   $('welcomeSmall').hidden = !first;
-  showSignStep('ways');
+  setSignMode(mode);
   $('welcome').hidden = false;
   $('welcome').scrollTop = 0;
   highlightNav('profile');
 }
-// One step of signing in at a time: the ways in, the e-mail address, the code.
+// The words of the page for signing up or for logging in, and back to the first step.
+function setSignMode(mode) {
+  signMode = mode === 'login' ? 'login' : 'signup';
+  const login = signMode === 'login';
+  setSegment('signMode', signMode);
+  $('welcomeTitle').textContent = welcomeFirst ? 'Welcome to RunTheTown' : login ? 'Log in' : 'Sign up';
+  $('welcomeLead').textContent = login ? 'Welcome back. Log in the same way you signed up, and your runs appear on this device.' : 'Create an account to keep your runs safe: they are backed up and follow you to a new phone and to the website.';
+  $('signApple').querySelector('span').textContent = login ? 'Sign in with Apple' : 'Sign up with Apple';
+  $('signGoogle').querySelector('span').textContent = login ? 'Sign in with Google' : 'Sign up with Google';
+  $('signEmail').querySelector('span').textContent = login ? 'Log in with e-mail' : 'Sign up with e-mail';
+  $('signCodeOk').textContent = login ? 'Log in' : 'Sign up';
+  showSignStep('ways');
+}
+$('signMode').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !$('welcome').classList.contains('busy')) setSignMode(b.dataset.v); });
+// One step at a time: the ways in, the e-mail address, the code.
 function showSignStep(step) {
   $('signWays').hidden = step !== 'ways';
   $('signEmailForm').hidden = step !== 'email';
@@ -11326,7 +11352,7 @@ async function showGoogleOnWeb() {
   g.initialize({ client_id: clientId, ux_mode: 'popup', auto_select: false, callback: (answer) => finishSignIn(() => account.withGoogle(answer.credential), 'Google') });
   slot.textContent = '';
   slot.hidden = $('signWays').hidden;
-  g.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', logo_alignment: 'center', width: Math.max(200, Math.min(400, Math.round($('signWays').getBoundingClientRect().width) || 320)), locale: isHebrew() ? 'he' : 'en' });
+  g.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: signMode === 'login' ? 'signin_with' : 'signup_with', logo_alignment: 'center', width: Math.max(200, Math.min(400, Math.round($('signWays').getBoundingClientRect().width) || 320)), locale: isHebrew() ? 'he' : 'en' });
 }
 
 /**
@@ -11341,18 +11367,20 @@ async function finishSignIn(attempt, service = '') {
   try {
     const who = await attempt();
     if (!who) return;
-    $('signMsg').textContent = 'Signing you in…';
+    $('signMsg').textContent = 'Logging you in…';
     await Promise.race([account.sync(), pause(10000)]);
     profile = loadProfile();
     refreshRailUser();
     $('welcome').hidden = true;
     if (!profile?.name) openProfile({ first: true, name: who.givenName });
-    else {
-      highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
-      toast('Signed in. Your runs are backed up to your account.');
-    }
+    else highlightNav(document.body.dataset.view === 'app' ? state.mode : null);
+    // What happened, in the runner's terms. Said plainly when it is not what they asked
+    // for: they came to log in and had no account, or came to sign up and had one.
+    const said = who.isNew ? (signMode === 'login' ? 'There was no account for this address yet, so a new one was created.' : 'Account created. Your runs are backed up to your account.')
+      : signMode === 'login' ? 'Logged in. Your runs are backed up to your account.' : 'You already have an account, so you are logged in to it.';
+    if (profile?.name || (who.isNew && signMode === 'login') || (!who.isNew && signMode === 'signup')) toast(said);
   } catch (err) {
-    $('signMsg').textContent = err?.reason !== undefined ? accountMessage(err) : `Could not sign in with ${service}. Please try again.`;
+    $('signMsg').textContent = err?.reason !== undefined ? accountMessage(err) : `Could not log in with ${service}. Please try again.`;
   } finally {
     signBusy(false);
   }
@@ -11397,22 +11425,23 @@ $('signCodeInput').addEventListener('input', () => { if (typedCode().length === 
 $('signGuest').addEventListener('click', () => { $('welcome').hidden = true; openProfile({ first: true }); });
 $('welcomeBack').addEventListener('click', () => { $('welcome').hidden = true; openProfile(); });
 
-// The account on the profile page: who is signed in, or the offer to sign in; signing out;
-// deleting the account (asked twice, like deleting a run).
+// The account on the profile page: who is logged in, or the offer to sign up or log in;
+// logging out; deleting the account (asked twice, like deleting a run).
 function refreshAccountBox({ first = false } = {}) {
   const who = account.who;
   $('accountBox').hidden = first || (!who && !anyWay());
-  $('accountState').textContent = who ? (who.email ? `Signed in as ${who.email}` : 'Signed in') : 'Not signed in';
-  $('accountNote').textContent = who ? 'Your profile and your runs are saved to your account, and stay on this phone too.' : 'Your runs are only on this phone. Sign in to back them up and to see them on your other devices.';
-  $('accountSignIn').hidden = !!who;
+  $('accountState').textContent = who ? (who.email ? `Logged in as ${who.email}` : 'Logged in') : 'Not logged in';
+  $('accountNote').textContent = who ? 'Your profile and your runs are saved to your account, and stay on this phone too.' : 'Your runs are only on this phone. Sign up to back them up and see them on your other devices, or log in if you already have an account.';
+  $('accountWays').hidden = !!who;
   $('accountSignedRow').hidden = !who;
   delete $('accountDelete').dataset.armed;
   $('accountDelete').textContent = 'Delete my account';
 }
-$('accountSignIn').addEventListener('click', () => { $('profile').hidden = true; openWelcome(); });
+$('accountSignUp').addEventListener('click', () => { $('profile').hidden = true; openWelcome({ mode: 'signup' }); });
+$('accountSignIn').addEventListener('click', () => { $('profile').hidden = true; openWelcome({ mode: 'login' }); });
 $('accountSignOut').addEventListener('click', async () => {
   await account.signOut();
-  toast('Signed out. Your runs stay on this phone.');
+  toast('Logged out. Your runs stay on this phone.');
 });
 $('accountDelete').addEventListener('click', async () => {
   const btn = $('accountDelete');

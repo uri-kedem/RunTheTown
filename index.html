@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=fa6074b7" />
+    <link rel="manifest" href="manifest.webmanifest?v=2e857e53" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=fa6074b7" />
+    <link rel="stylesheet" href="css/style.css?v=2e857e53" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -47,7 +47,7 @@
       <button type="button" class="rail-item" data-nav="settings">
         <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="fa6074b7">fa6074b7</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="2e857e53">2e857e53</span></div>
     </nav>
 
     <!-- Cover page -->
@@ -111,7 +111,7 @@
         <div class="page-title">Terms &amp; policy</div>
       </div>
       <div class="page-body">
-        <p class="page-note">What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page: <a href="https://uri-kedem.github.io/RunTheTown/privacy.html" target="_blank" rel="noopener">privacy policy</a> · <a href="https://uri-kedem.github.io/RunTheTown/support.html" target="_blank" rel="noopener">support</a>.</p>
+        <p class="page-note">What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page: <a href="https://runthetown.app/privacy.html" target="_blank" rel="noopener">privacy policy</a> · <a href="https://runthetown.app/support.html" target="_blank" rel="noopener">support</a>.</p>
         <h2>Run at your own risk</h2>
         <p>Routes are drawn automatically from OpenStreetMap data, which can be wrong or out of date. A path may be closed, unlit, unsafe or private, and a track or stadium may not be open to the public. Check the route makes sense before you set off, obey traffic rules and signals, and use your own judgement at all times. Voice guidance is a convenience, not a substitute for looking where you are going. You use RunTheTown entirely at your own risk; it comes with no warranty of any kind.</p>
         <h2>Your location</h2>
@@ -172,36 +172,43 @@
     </section>
 
     <!-- Profile: who runs (kept on the phone) -->
-    <!-- Signing in: offered once on the first open (with "Continue as a guest") and from the
-         profile page afterwards. Only the ways the server has switched on are shown; with
-         none, this page never opens. No password anywhere: Apple, Google, or a code by e-mail. -->
+    <!-- Signing up and logging in: offered once on the first open (with "Continue as a guest")
+         and from the profile page afterwards. The two are separate choices on the page, so a
+         runner with an account sees at once how to get to it from another device; behind
+         them is the same step, since there is no password: Apple, Google, or a code by
+         e-mail. Only the ways the server has switched on are shown; with none, this page
+         never opens. -->
     <section class="page" id="welcome" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="welcomeBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
         <div class="page-title" id="welcomeTitle">Welcome to RunTheTown</div>
       </div>
       <div class="page-body profile welcome">
-        <p class="welcome-lead" id="welcomeLead">Sign in to keep your runs safe: they are backed up and follow you to a new phone and to the website.</p>
+        <div class="segmented two sign-mode" id="signMode" role="radiogroup">
+          <button type="button" data-v="signup" role="radio" aria-checked="true" class="on">Sign up</button>
+          <button type="button" data-v="login" role="radio" aria-checked="false">Log in</button>
+        </div>
+        <p class="welcome-lead" id="welcomeLead">Create an account to keep your runs safe: they are backed up and follow you to a new phone and to the website.</p>
         <div class="sign-ways" id="signWays">
-          <button type="button" class="sign-btn sign-apple" id="signApple" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" /></svg><span>Sign in with Apple</span></button>
-          <button type="button" class="sign-btn sign-google" id="signGoogle" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" /><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" /><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" /><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" /></svg><span>Sign in with Google</span></button>
+          <button type="button" class="sign-btn sign-apple" id="signApple" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" /></svg><span>Sign up with Apple</span></button>
+          <button type="button" class="sign-btn sign-google" id="signGoogle" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" /><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" /><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" /><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" /></svg><span>Sign up with Google</span></button>
           <div class="sign-google-web" id="signGoogleWeb" data-no-i18n hidden></div>
-          <button type="button" class="sign-btn sign-email" id="signEmail" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v11H3z M3 7l9 6.500L21 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg><span>Continue with e-mail</span></button>
+          <button type="button" class="sign-btn sign-email" id="signEmail" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h18v11H3z M3 7l9 6.500L21 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /></svg><span>Sign up with e-mail</span></button>
         </div>
         <form class="sign-form" id="signEmailForm" hidden novalidate>
           <label class="field-label">E-mail<input type="email" id="signEmailInput" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" /></label>
           <button type="submit" class="primary" id="signEmailSend">Send me a code</button>
-          <div class="route-pop-foot"><button type="button" class="link" id="signEmailBack">Sign in another way</button></div>
+          <div class="route-pop-foot"><button type="button" class="link" id="signEmailBack">Choose another way</button></div>
         </form>
         <form class="sign-form" id="signCodeForm" hidden novalidate>
           <p id="signCodeNote"></p>
           <label class="field-label">Code<input type="text" id="signCodeInput" class="code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="000000" /></label>
-          <button type="submit" class="primary" id="signCodeOk">Sign in</button>
+          <button type="submit" class="primary" id="signCodeOk">Sign up</button>
           <div class="route-pop-foot"><button type="button" class="link" id="signCodeAgain">Send a new code</button><button type="button" class="link" id="signCodeBack">Use another address</button></div>
         </form>
         <div class="distance-msg error" id="signMsg" aria-live="polite"></div>
         <button type="button" class="guest-btn" id="signGuest">Continue as a guest</button>
-        <p class="welcome-small" id="welcomeSmall">As a guest everything stays on this phone, and you can sign in later from your profile. No password is ever asked for.</p>
+        <p class="welcome-small" id="welcomeSmall">As a guest everything stays on this phone, and you can sign up or log in later from your profile. No password is ever asked for.</p>
       </div>
     </section>
 
@@ -226,8 +233,8 @@
         <div class="account-box" id="accountBox" hidden>
           <b id="accountState"></b>
           <p id="accountNote"></p>
-          <button type="button" class="ghost" id="accountSignIn">Sign in</button>
-          <div class="route-pop-foot" id="accountSignedRow"><button type="button" class="link" id="accountSignOut">Sign out</button><button type="button" class="link danger-link" id="accountDelete">Delete my account</button></div>
+          <div class="account-ways" id="accountWays"><button type="button" class="ghost" id="accountSignUp">Sign up</button><button type="button" class="ghost" id="accountSignIn">Log in</button></div>
+          <div class="route-pop-foot" id="accountSignedRow"><button type="button" class="link" id="accountSignOut">Log out</button><button type="button" class="link danger-link" id="accountDelete">Delete my account</button></div>
         </div>
       </div>
     </section>
@@ -620,6 +627,6 @@
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=fa6074b7"></script>
+    <script src="js/bundle.js?v=2e857e53"></script>
   </body>
 </html>

@@ -519,11 +519,16 @@ with sync_playwright() as p:
         g.click('#signGuest'); g.wait_for_timeout(300)
         assert g.is_visible('#profile') and g.is_visible('#profileSkip') and g.evaluate("document.getElementById('accountBox').hidden") and g.evaluate("localStorage.getItem('rtt-account')") is None, 'a guest goes on to the profile page as before, with no account'
         g.click('#profileSkip'); g.wait_for_timeout(200); g.evaluate("window.__rtt.navigate('profile')"); g.wait_for_timeout(300)
-        assert g.text_content('#accountState')=='Not signed in' and g.is_visible('#accountSignIn') and not g.is_visible('#accountSignOut'), 'later, the profile page offers the guest to sign in'
+        assert g.text_content('#accountState')=='Not logged in' and g.is_visible('#accountSignUp') and g.is_visible('#accountSignIn') and not g.is_visible('#accountSignOut'), 'later, the profile page offers the guest to sign up or to log in'
         print('ACCOUNT guest:', g.text_content('#accountState'), '|', g.text_content('#accountNote')[:50])
         cg.close()
         # E-mail and a code: a wrong address, a wrong code, then in.
         c1,p1=phone_page()
+        # Sign up and Log in are two choices on the page; the words follow the choice.
+        words=lambda q: q.evaluate("({ mode: document.querySelector('#signMode .on').textContent, lead: document.getElementById('welcomeLead').textContent.slice(0, 17), email: document.querySelector('#signEmail span').textContent, button: document.getElementById('signCodeOk').textContent })")
+        up=words(p1); p1.click('#signMode [data-v="login"]'); p1.wait_for_timeout(200); inn=words(p1); p1.screenshot(path=f'{S}/nav-9-login.png'); p1.click('#signMode [data-v="signup"]'); p1.wait_for_timeout(200)
+        print('ACCOUNT sign up / log in:', up, '|', inn)
+        assert up=={'mode':'Sign up','lead':'Create an account','email':'Sign up with e-mail','button':'Sign up'} and inn=={'mode':'Log in','lead':'Welcome back. Log','email':'Log in with e-mail','button':'Log in'}, 'the page says Sign up or Log in, whichever the runner chose'
         p1.click('#signEmail'); p1.fill('#signEmailInput','no address'); p1.click('#signEmailSend'); p1.wait_for_timeout(500)
         assert p1.text_content('#signMsg')=='That does not look like an e-mail address.'
         p1.fill('#signEmailInput','ruth@example.org'); p1.click('#signEmailSend'); p1.wait_for_selector('#signCodeForm:not([hidden])'); p1.wait_for_timeout(200)
@@ -539,18 +544,19 @@ with sync_playwright() as p:
         print('ACCOUNT signed in:', acct['account']['email'], '| profile on the server:', acct['profile']['name'], '| runs on the server:', len(runs))
         assert acct['profile']['name']=='Ruth' and len(runs)==1 and not runs[0]['deleted'], 'the name and the run are in the account'
         p1.evaluate("window.__rtt.navigate('profile')"); p1.wait_for_timeout(300)
-        assert p1.text_content('#accountState')=='Signed in as ruth@example.org' and p1.is_visible('#accountSignOut') and not p1.is_visible('#accountSignIn')
+        assert p1.text_content('#accountState')=='Logged in as ruth@example.org' and p1.is_visible('#accountSignOut') and not p1.is_visible('#accountSignIn') and not p1.is_visible('#accountSignUp')
         p1.evaluate("document.getElementById('accountBox').scrollIntoView()"); p1.screenshot(path=f'{S}/nav-9-account.png'); p1.click('#profileBack')
         # A second phone, the same address. A second code at once is refused in plain words; a minute later it is sent,
         # and the name and the run arrive on that phone.
         c2,p2=phone_page()
+        p2.click('#signMode [data-v="login"]'); p2.wait_for_timeout(200)
         p2.click('#signEmail'); p2.fill('#signEmailInput','ruth@example.org'); p2.click('#signEmailSend'); p2.wait_for_timeout(600)
         assert p2.text_content('#signMsg')=='Too many tries. Try again in a minute.', p2.text_content('#signMsg')
         urllib.request.urlopen(DEV+'/__test/clock?add=120000').read()
         p2.click('#signEmailSend'); p2.wait_for_selector('#signCodeForm:not([hidden])'); p2.wait_for_timeout(200)
         p2.fill('#signCodeInput', sent_code('ruth@example.org')); p2.wait_for_selector('#welcome', state='hidden', timeout=15000); p2.wait_for_timeout(600)
         got=p2.evaluate("(async () => ({ name: JSON.parse(localStorage.getItem('rtt-profile')).name, rail: document.getElementById('railName').textContent, runs: (await window.__rtt.journal.list()).map(r => r.name), profilePage: !document.getElementById('profile').hidden }))()")
-        print('ACCOUNT second phone:', got)
+        print('ACCOUNT second phone:', got, '| said:', p2.text_content('#toast') if p2.query_selector('#toast') else None)
         assert got['name']=='Ruth' and got['rail']=='Ruth' and got['runs']==['Sea loop'] and not got['profilePage'], 'the second phone has the name and the run, and is not asked for a name again'
         # The run deleted on the second phone goes from the first; a new name on the first reaches the second.
         p2.evaluate("(async () => { await window.__rtt.journal.remove('2026-11-20T06:00:00.000Z-ui0001'); await window.__rtt.account.runDeleted('2026-11-20T06:00:00.000Z-ui0001'); })()")
@@ -561,7 +567,7 @@ with sync_playwright() as p:
         assert both[0]=={'runs':0,'rail':'Ruth B'} and both[1]=={'runs':0,'rail':'Ruth B'}, 'the two phones agree: the run is gone from both and both show the new name'
         # Signing out: a guest again, the profile stays on the phone.
         p2.evaluate("window.__rtt.navigate('profile')"); p2.wait_for_timeout(300); p2.click('#accountSignOut'); p2.wait_for_timeout(600)
-        assert p2.text_content('#accountState')=='Not signed in' and p2.input_value('#profileName')=='Ruth B' and p2.evaluate("localStorage.getItem('rtt-account')") is None, 'signed out: a guest with the profile still on the phone'
+        assert p2.text_content('#accountState')=='Not logged in' and p2.input_value('#profileName')=='Ruth B' and p2.evaluate("localStorage.getItem('rtt-account')") is None, 'signed out: a guest with the profile still on the phone'
         # Deleting the account: asked twice, then gone from the server; the phone is a guest.
         p1.evaluate("window.__rtt.navigate('profile')"); p1.wait_for_timeout(300)
         token=p1.evaluate("JSON.parse(localStorage.getItem('rtt-account')).token")
@@ -570,10 +576,10 @@ with sync_playwright() as p:
         p1.click('#accountDelete'); p1.wait_for_timeout(900)
         gone=p1.evaluate("(a) => fetch(a[0], {headers: {Authorization: 'Bearer ' + a[1]}}).then(r => r.status)", [PROXY+'/account', token])
         print('ACCOUNT deleted:', p1.text_content('#accountState'), '| the old key on the server:', gone)
-        assert gone==401 and p1.text_content('#accountState')=='Not signed in' and p1.input_value('#profileName')=='Ruth B', 'the account is gone from the server; the phone is a guest and keeps its profile'
+        assert gone==401 and p1.text_content('#accountState')=='Not logged in' and p1.input_value('#profileName')=='Ruth B', 'the account is gone from the server; the phone is a guest and keeps its profile'
         # In Hebrew the sign-in page has no English left on it (the names of Apple and Google excepted).
         p1.click('#accountSignIn'); p1.wait_for_timeout(300)
-        assert shown(p1)==['signEmail','welcomeBack'] and p1.text_content('#welcomeTitle')=='Sign in', 'from the profile page the sign-in page has a way back and no guest button'
+        assert shown(p1)==['signEmail','welcomeBack'] and p1.text_content('#welcomeTitle')=='Log in' and p1.text_content('#signMode .on')=='Log in', 'from the profile page, Log in opens the page on Log in, with a way back and no guest button'
         p1.evaluate("window.__rtt.setLanguage('he'); window.__rtt.applyLanguage()"); p1.wait_for_timeout(300)
         english=p1.evaluate("[...document.querySelectorAll('#welcome *')].filter(e => e.children.length === 0 && e.offsetParent && /[A-Za-z]{3,}/.test(e.textContent) && !/Apple|Google|RunTheTown/.test(e.textContent)).map(e => e.textContent.trim())")
         print('ACCOUNT Hebrew sign-in page, left in English:', english)

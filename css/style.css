@@ -602,6 +602,10 @@ button.avatar.big { padding: 0; -webkit-appearance: none; appearance: none; }
    mark; on the website Google draws the button itself), e-mail in the app's own look.
    "Continue as a guest" is a full button too, not small print: nobody has to sign in. */
 .welcome-lead { font-size: 16px; color: var(--ink); margin: 6px 0 18px; }
+/* Sign up or Log in: two halves of one control, at the width of the buttons under it. */
+.segmented.two { grid-template-columns: repeat(2, 1fr); }
+.sign-mode { max-width: 400px; margin: 4px auto 16px; }
+.sign-mode button { padding: 11px 0; font-size: 15px; }
 /* Google draws its own button on the website and makes it 400px wide at most: the column of
    ways in and the guest button keep to that width, so the buttons line up on a wide screen. */
 .sign-ways { display: grid; gap: 10px; max-width: 400px; margin: 0 auto; }
@@ -626,6 +630,7 @@ html[data-theme='dark'] .sign-apple svg { fill: #000; }
 .account-box b { display: block; overflow-wrap: anywhere; }
 .account-box p { font-size: 13.5px; margin: 4px 0 10px; }
 .account-box .ghost { padding: 4px 0; color: var(--ink); font-size: 14.5px; }
+.account-ways { display: flex; gap: 22px; }
 .profile-totals { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .profile-totals b { display: block; font-size: 20px; font-weight: 800; color: var(--ink); }
 .profile-totals span { font-size: 11.5px; color: var(--ink-3); }
