@@ -286,7 +286,8 @@ const HE_TEXT = {
   'Miles': 'מיילים',
   'Announcements': 'הכרזות',
   'Splits': 'מקטעים',
-  'Every kilometer or mile: time, pace, distance to go': 'כל קילומטר או מייל: זמן, קצב, מרחק שנותר',
+  'Every kilometer or mile: the distance and your pace': 'כל קילומטר או מייל: המרחק והקצב',
+  'Running spots nearby': 'מקומות ריצה בסביבה',
   'Landmarks': 'ציוני דרך',
   'Sights called out as you pass them on a tour, with a line or two about each from Wikipedia': 'אתרים מוכרזים כשעוברים לידם בסיור, עם שורה או שתיים על כל אחד מוויקיפדיה',
   'Quiet mode': 'מצב שקט',
@@ -9150,7 +9151,7 @@ function renderOffline() {
 }
 $('offlineBtn').addEventListener('click', async () => {
   if (!state.start || busy) return;
-  if (navigator.onLine === false) return toast('You are offline. Download the area while you have a connection.');
+  if (navigator.onLine === false) return toast('You are offline. Download the area while you have a connection.', 'error');
   busy = true;
   updateGoButton();
   status('Getting ready…');
@@ -9160,7 +9161,7 @@ $('offlineBtn').addEventListener('click', async () => {
     toast(`Saved for offline use: the map and the streets within ${U.lenShort(pack.radius)} of your start, for 14 days.${pack.missing ? ' A few map pieces did not load; the rest is saved.' : ''}`);
   } catch (err) {
     console.error(err);
-    toast(err.message || 'The download did not finish. Try again on a better connection.');
+    toast(err.message || 'The download did not finish. Try again on a better connection.', 'error');
   } finally {
     busy = false;
     status(null);
@@ -9176,7 +9177,7 @@ function locate({ quiet = false } = {}) {
   };
   const failed = () => {
     $('locateBtn').classList.remove('busy');
-    if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.");
+    if (!quiet) toast("Couldn't get your location. Search for a place or tap the map instead.", 'error');
   };
   // In the iPhone app the phone itself is asked, so the permission question is the app's
   // ("Allow RunTheTown…") and not the web view's, which would say "localhost".
@@ -9185,7 +9186,7 @@ function locate({ quiet = false } = {}) {
     nativeLocateOnce().then((p) => found(p.lat, p.lon), failed);
     return;
   }
-  if (!navigator.geolocation) return quiet || toast('Location is not available in this browser.');
+  if (!navigator.geolocation) return quiet || toast('Location is not available in this browser.', 'error');
   $('locateBtn').classList.add('busy');
   navigator.geolocation.getCurrentPosition((pos) => found(pos.coords.latitude, pos.coords.longitude), failed, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
@@ -9391,14 +9392,14 @@ function attachSearch({ input, list, clearBtn, onPick, onClear = null, offerLoca
       const res = await fetch(nominatimUrl(`/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`), { signal: ctrl.signal });
       const [hit] = await res.json();
       status('');
-      if (!hit) return toast('No places found for that search.');
+      if (!hit) return toast('No places found for that search.', 'error');
       const it = { main: hit.display_name.split(', ')[0], lat: +hit.lat, lon: +hit.lon };
       input.value = it.main;
       clearBtn.hidden = false;
       onPick(it);
     } catch {
       status('');
-      toast('Search is unavailable right now. Tap the map instead.');
+      toast('Search is unavailable right now. Tap the map instead.', 'error');
     } finally {
       clearTimeout(limit);
     }
@@ -9602,7 +9603,7 @@ $('terrain').addEventListener('click', (e) => {
 $('goBtn').addEventListener('click', async () => {
   readDistance();
   if (!state.start || busy || !state.distanceValid) return;
-  if (state.runStyle === 'oneway' && !state.dest) return toast('Pick where the run should end: search a place or tap the map.');
+  if (state.runStyle === 'oneway' && !state.dest) return toast('Pick where the run should end: search a place or tap the map.', 'error');
   busy = true;
   $('goBtn').disabled = true;
   status('Getting ready…');
@@ -9621,13 +9622,13 @@ $('goBtn').addEventListener('click', async () => {
       : await engine.plan(ask);
     state.routes = routes;
     showRoutes(routes);
-    if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.');
+    if (routes.partialMap) toast('A few edge pieces of the map didn\u2019t load, so routes stay within the part that did.', 'error');
     if (routes.country) toast('Country run: there is no paved network here, so unpaved lanes and tracks are included. Watch your footing.');
   } catch (err) {
     console.error(err);
     // No connection and no saved area: say that, not "the servers are overloaded".
-    if (navigator.onLine === false && !offlinePackAt(state.start.lat, state.start.lon)) toast('You are offline, and this area is not saved on the phone. Download it while you have a connection.');
-    else toast(err.message || 'Something went wrong. Please try again.');
+    if (navigator.onLine === false && !offlinePackAt(state.start.lat, state.start.lon)) toast('You are offline, and this area is not saved on the phone. Download it while you have a connection.', 'error');
+    else toast(err.message || 'Something went wrong. Please try again.', 'error');
   } finally {
     busy = false;
     updateGoButton();
@@ -9701,6 +9702,8 @@ function drawPlaces(places, list = $('places')) {
   for (const el of [$('places'), $('spotsPrefs')]) { el.innerHTML = ''; el.hidden = true; }
   list.innerHTML = '';
   list.hidden = !places.length;
+  // The list's heading is text on the page (not a style), so it is translated like the rest.
+  if (places.length) list.insertAdjacentHTML('beforeend', '<div class="places-title">Running spots nearby</div>');
   places.forEach((p, i) => {
     const marker = glMarker(p.entry, {
       icon: glDivIcon({ className: '', html: `<div class="place-pin ${p.kind}">${PLACE_ICON[p.kind]}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] }),
@@ -9815,7 +9818,7 @@ async function planLaps() {
     await engine.loadArea(state.start.lat, state.start.lon, Math.max(toPlace + 600, 1500), status);
   } catch (err) {
     console.error(err);
-    toast(err.message || 'The map could not be loaded. Please try again.');
+    toast(err.message || 'The map could not be loaded. Please try again.', 'error');
     busy = false;
     status(null);
     return;
@@ -9823,7 +9826,7 @@ async function planLaps() {
   busy = false;
   status(null);
   const route = engine.routeAtPlace(place, { lat: state.start.lat, lon: state.start.lon, distanceKm: km, prefs: planPrefs() });
-  if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.');
+  if (!route) return toast('The map around this spot isn\u2019t loaded yet. Set your start closer to it and try again.', 'error');
   route.place.wantedKm = km;
   // The lap run is the one route on offer; the spots stay on the map.
   const routes = Object.assign([route], { places: drawnPlaces });
@@ -9968,14 +9971,26 @@ function profileSvg(profile) {
 
 function status(text) {
   $('status').hidden = !text;
-  if (text) $('statusText').textContent = text;
+  if (text) { $('statusText').textContent = text; sayAloud(text); }
+}
+// What the status box and the messages say, for a screen reader: written to a line that is
+// always on the page (a box that was hidden a moment ago is not reliably read out). Emptied
+// first, so the same message twice is read twice.
+function sayAloud(text) {
+  const line = $('liveSay');
+  line.textContent = '';
+  setTimeout(() => { line.textContent = text; }, 60);
 }
 
 let toastTimer;
-function toast(msg) {
+// A message at the top of the screen. kind 'error' for one that reports a problem (the red
+// box); anything else, good news included, is the plain dark box.
+function toast(msg, kind) {
   const t = $('toast');
   t.textContent = msg;
+  t.classList.toggle('error', kind === 'error');
   t.hidden = false;
+  sayAloud(msg);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.hidden = true), 6000);
 }
@@ -10096,7 +10111,7 @@ function renderSavedRoutes() {
 $('saveRouteBtn').addEventListener('click', async () => {
   const route = state.routes[state.selected];
   if (!route || busy || nav.active) return;
-  if (navigator.onLine === false) return toast('You are offline. Download the route while you have a connection.');
+  if (navigator.onLine === false) return toast('You are offline. Download the route while you have a connection.', 'error');
   busy = true;
   updateGoButton();
   status('Getting ready\u2026');
@@ -10106,7 +10121,7 @@ $('saveRouteBtn').addEventListener('click', async () => {
     toast(`Downloaded with its map, for 14 days. When you are ready to run, open it from Downloaded routes.${saved.missing ? ' A few map pieces did not load; the rest is saved.' : ''}`);
   } catch (err) {
     console.error(err);
-    toast(err.message || 'The download did not finish. Try again on a better connection.');
+    toast(err.message || 'The download did not finish. Try again on a better connection.', 'error');
   } finally {
     busy = false;
     status(null);
@@ -10120,7 +10135,7 @@ $('saveRouteBtn').addEventListener('click', async () => {
 async function openSavedRoute(id) {
   if (busy || nav.active) return;
   const rec = await loadSavedRoute(id);
-  if (!rec?.route?.latlngs?.length) { renderSavedRoutes(); return toast('This route is no longer on the phone.'); }
+  if (!rec?.route?.latlngs?.length) { renderSavedRoutes(); return toast('This route is no longer on the phone.', 'error'); }
   setMode(rec.mode === 'tour' ? 'tour' : 'run');
   setView('app');
   setStart(rec.start.lat, rec.start.lon, rec.start.label || 'Saved start');
@@ -10319,7 +10334,7 @@ $('setUpdate').addEventListener('click', async () => {
     if (live && live !== here) toast(`Version ${live} is out. It loads the next time you open the app (or reload now).`);
     else toast(`You have the latest version (${here}).`);
   } catch {
-    toast('Could not check right now.');
+    toast('Could not check right now.', 'error');
   }
 });
 function openSettings() {
@@ -10412,7 +10427,7 @@ function setRunStyle(style) {
   }
   showDestMarker(style === 'oneway');
   updateGoButton();
-  if (style === 'laps' && state.start && !state.spots.length && !$('spotsEmpty').hidden) toast('No running spots were found near this start.');
+  if (style === 'laps' && state.start && !state.spots.length && !$('spotsEmpty').hidden) toast('No running spots were found near this start.', 'error');
 }
 $('runStyle').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-style]');
@@ -10527,7 +10542,7 @@ async function startRun({ demo }) {
       if (nav.active !== n) return;
       if (err.code === 1) {
         closeRun();
-        toast('Location access is needed for live directions. Allow it in your browser settings, or try the demo run.');
+        toast('Location access is needed for live directions. Allow it in your browser settings, or try the demo run.', 'error');
       } else {
         showAlert('Waiting for GPS\u2026 Go outside with a clear view of the sky.');
       }
@@ -10597,7 +10612,7 @@ $('homeBtn').addEventListener('click', () => {
   if (!n.lastFix || !area) { toast('Waiting for your position…'); return; }
   let fresh = null;
   try { fresh = homeRoute(area.graph, area.proj, { lat: n.lastFix.lat, lon: n.lastFix.lon }, n.route, { start: n.origin }); } catch (err) { console.warn('Take me back failed:', err); }
-  if (!fresh) { toast('No way back was found from here. Keep following the route, or end the run.'); return; }
+  if (!fresh) { toast('No way back was found from here. Keep following the route, or end the run.', 'error'); return; }
   n.route = fresh;
   render(n.navigator.reroute(fresh, { say: false }));
   followNewLine(n, fresh);
@@ -10762,7 +10777,7 @@ async function shareRun(run) {
     a.click();
     setTimeout(() => a.remove(), 500);
   } catch (err) {
-    if (err?.name !== 'AbortError') toast('Could not share this run.');
+    if (err?.name !== 'AbortError') toast('Could not share this run.', 'error');
   }
 }
 
@@ -10786,7 +10801,7 @@ async function exportGpx(run) {
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   } catch (err) {
-    if (err?.name !== 'AbortError') toast('Could not export this run.');
+    if (err?.name !== 'AbortError') toast('Could not export this run.', 'error');
   }
 }
 
@@ -10814,7 +10829,7 @@ async function saveRun(n, { finished }) {
     refreshPace();
     toast(`Run saved to your journal${run.picture ? '' : ' (no map picture this time)'}.`);
   } catch {
-    toast('Could not save this run on the phone.');
+    toast('Could not save this run on the phone.', 'error');
   }
   // iPhone: the run also goes to Apple Health as a workout (the first time iOS asks the runner).
   if (isNative() && settings.health && run.distance >= 100) {
@@ -10948,6 +10963,8 @@ const rail = $('rail');
 function openDrawer(open) {
   rail.classList.toggle('open', open);
   $('drawerBackdrop').hidden = !open;
+  for (const id of ['appMenu', 'homeMenu']) $(id).setAttribute('aria-expanded', String(!!open));
+  syncLayers();
 }
 function setView(v) {
   document.body.dataset.view = v;
@@ -10971,7 +10988,61 @@ function setMode(mode) {
 }
 // The menu marks whatever is on screen: a mode, a page, or nothing on the cover.
 function highlightNav(target) {
-  for (const b of rail.querySelectorAll('.rail-item')) b.classList.toggle('on', b.dataset.nav === target);
+  for (const b of rail.querySelectorAll('.rail-item')) {
+    b.classList.toggle('on', b.dataset.nav === target);
+    if (b.dataset.nav === target) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+}
+
+// ---------- One layer at a time, for a keyboard and a screen reader ----------
+// The app is layers on top of each other: the map with its sheet, the cover, the run screen,
+// a page (Settings, My runs...), a pop-up. Sighted, only the top one can be touched. A screen
+// reader and the Tab key walk everything that is on the page, so they must be told: whatever
+// is under the top layer is made inert (not reachable, not read) until that layer closes.
+// One function decides it from what is showing; it runs whenever a layer opens or closes
+// (an observer on their `hidden`), so no opening or closing code has to remember to call it.
+const LAYERS_OVER_ALL = ['photoViewer', 'cropAsk', 'photoAsk']; // above the pages
+const LAYERS_PAGES = [...document.querySelectorAll('.page')].map((p) => p.id).reverse(); // two pages can be open at once (a run's map over the run); the later one in the page is drawn on top
+const LAYERS_ASKS = ['reportAsk', 'lapsAsk', 'routeAsk', 'navFinish']; // under a page, over everything else
+let topLayer = null;
+const layerBack = new Map(); // layer -> what had the focus before it opened
+function syncLayers() {
+  const wide = window.matchMedia('(min-width: 900px)').matches;
+  const showing = (id) => !$(id).hidden && (id !== 'navFinish' || !$('navView').hidden);
+  const drawer = !wide && rail.classList.contains('open');
+  const id = LAYERS_OVER_ALL.find(showing) || LAYERS_PAGES.find(showing) || LAYERS_ASKS.find(showing) || (drawer ? 'rail' : null);
+  const top = id ? $(id) : null;
+  const home = document.body.dataset.view === 'home';
+  for (const el of document.body.children) {
+    if (el.tagName === 'SCRIPT' || el.id === 'toast' || el.id === 'status' || el.id === 'liveSay') continue;
+    let off = !!top && el !== top && !el.contains(top);
+    if (el === rail) {
+      // A permanent rail on a wide screen stays in use beside a page; a closed drawer on a phone is off the screen.
+      if (wide) off = id === 'photoViewer';
+      else off = !drawer;
+    } else if (el.id === 'drawerBackdrop') off = !!top && id !== 'rail';
+    else if (!top && home && el.id !== 'home') off = true; // the cover hides the map screen behind it
+    el.inert = off;
+  }
+  // The finish card is part of the run screen: with it up, the rest of that screen is under it.
+  for (const el of $('navView').children) el.inert = id === 'navFinish' && el !== top;
+  if (top === topLayer) return;
+  const was = topLayer;
+  topLayer = top;
+  // Where the focus was before the layer that just closed opened (kept while another layer sits on top of it).
+  const back = was ? layerBack.get(was) : null;
+  if (was && (was === rail ? !drawer : was.hidden)) layerBack.delete(was);
+  if (top) {
+    if (!layerBack.has(top)) layerBack.set(top, document.activeElement);
+    // A screen reader starts at the new layer's name. A text box that asks for the focus itself, a moment later, still gets it.
+    if (!top.contains(document.activeElement)) (top.querySelector('.page-title') || (top.hasAttribute('tabindex') ? top : top.querySelector('button')))?.focus({ preventScroll: true });
+  } else if (back && back !== document.body && back.isConnected && !back.closest('[inert]') && !/^(INPUT|TEXTAREA)$/.test(back.tagName)) back.focus({ preventScroll: true }); // not back into a text box: on a phone that would bring the keyboard up
+}
+{
+  const watch = new MutationObserver(() => syncLayers());
+  for (const id of [...LAYERS_OVER_ALL, ...LAYERS_PAGES, ...LAYERS_ASKS, 'navView']) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  watch.observe(document.body, { attributes: true, attributeFilter: ['data-view'] });
+  window.matchMedia('(min-width: 900px)').addEventListener('change', syncLayers);
 }
 // Installed-app support (PWA): the service worker keeps the app shell on the phone;
 // the "Install on your phone" page shows the steps for this device, or the real
@@ -11457,7 +11528,7 @@ $('accountDelete').addEventListener('click', async () => {
     toast('Your account was deleted. The runs on this phone are still here.');
   } catch (err) {
     refreshAccountBox();
-    toast(accountMessage(err));
+    toast(accountMessage(err), 'error');
   }
 });
 // Signed in or out, or a sync brought a run or a new name from the runner's other phone:
@@ -11524,7 +11595,7 @@ $('runBack').addEventListener('click', () => { $('runPage').hidden = true; openR
 // planned afresh, so the map is current; the first option is the closest to the saved one).
 $('runAgain').addEventListener('click', async () => {
   const r = await journal.get(openRunId).catch(() => null);
-  if (!r?.start) { toast('This run has no start point saved.'); return; }
+  if (!r?.start) { toast('This run has no start point saved.', 'error'); return; }
   for (const id of ['runPage', 'runs']) $(id).hidden = true;
   setView('app');
   setMode(r.type === 'sightseeing' ? 'tour' : 'run');
@@ -11592,7 +11663,7 @@ $('runsExport').addEventListener('click', async () => {
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   } catch {
-    toast('Could not export the journal.');
+    toast('Could not export the journal.', 'error');
   }
 });
 refreshRailUser();
@@ -11618,6 +11689,7 @@ applyUnits();
 // The page in the chosen language, and every text written from now on.
 applyLanguage();
 watchLanguage();
+syncLayers(); // whatever opened first (the welcome page, the profile, the cover) is the only layer in reach
 window.__rtt = { tr, setLanguage, applyLanguage, state, engine, map, setStart, setDest, nav, voice, navigate, settings, journal, account, snapshot: glSnapshot, drawRunPicture, homeRoute };
 
 // Arriving somewhere new: try to find the runner right away.

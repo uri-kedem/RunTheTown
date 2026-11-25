@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f172a" />
     <title>RunTheTown</title>
     <link rel="icon" type="image/png" href="img/favicon.e34a6874.png" />
-    <link rel="manifest" href="manifest.webmanifest?v=2e857e53" />
+    <link rel="manifest" href="manifest.webmanifest?v=496f8c3a" />
     <!-- Installed-app (PWA) settings for iPhone: full screen, dark status bar, home-screen icon -->
     <link rel="apple-touch-icon" href="img/icon-180.1901e532.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="js/vendor/maplibre-gl.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/style.css?v=2e857e53" />
+    <link rel="stylesheet" href="css/style.css?v=496f8c3a" />
   </head>
   <body data-view="home">
     <!-- Artwork lives in img/: logo.png / logo-white.png (the full logo), mark.png / mark-white.png (the R with the runner: Running mode),
@@ -47,14 +47,14 @@
       <button type="button" class="rail-item" data-nav="settings">
         <img class="ic mark" src="img/settings-outline.275165ab.png" alt="" /><span>Settings</span>
       </button>
-      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="2e857e53">2e857e53</span></div>
+      <div class="rail-foot">Map data &copy; OpenStreetMap<br />Version <span id="buildTag" data-build="496f8c3a">496f8c3a</span></div>
     </nav>
 
     <!-- Cover page -->
     <section class="home" id="home">
       <div class="home-bar">
         <img class="logo" src="img/logo-white.0ef39459.png" alt="RunTheTown" />
-        <button type="button" class="menu-btn" id="homeMenu" aria-label="Menu"><span></span><span></span><span></span></button>
+        <button type="button" class="menu-btn" id="homeMenu" aria-label="Menu" aria-expanded="false" aria-controls="rail"><span></span><span></span><span></span></button>
       </div>
       <div class="hero">
         <div class="hero-photo" aria-hidden="true">
@@ -108,7 +108,7 @@
     <section class="page" id="terms" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="termsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title">Terms &amp; policy</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1">Terms &amp; policy</div>
       </div>
       <div class="page-body">
         <p class="page-note">What RunTheTown does with your data and what you agree to by using it. The full privacy policy and support page: <a href="https://runthetown.app/privacy.html" target="_blank" rel="noopener">privacy policy</a> · <a href="https://runthetown.app/support.html" target="_blank" rel="noopener">support</a>.</p>
@@ -144,7 +144,7 @@
     <section class="page" id="install" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="installBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title">Install on your phone</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1">Install on your phone</div>
       </div>
       <div class="page-body">
         <p class="page-note" id="installInstalled" hidden>You are running the installed app. Nothing more to do.</p>
@@ -181,10 +181,10 @@
     <section class="page" id="welcome" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="welcomeBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title" id="welcomeTitle">Welcome to RunTheTown</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1" id="welcomeTitle">Welcome to RunTheTown</div>
       </div>
       <div class="page-body profile welcome">
-        <div class="segmented two sign-mode" id="signMode" role="radiogroup">
+        <div class="segmented two sign-mode" id="signMode" role="radiogroup" aria-labelledby="welcomeTitle">
           <button type="button" data-v="signup" role="radio" aria-checked="true" class="on">Sign up</button>
           <button type="button" data-v="login" role="radio" aria-checked="false">Log in</button>
         </div>
@@ -215,7 +215,7 @@
     <section class="page" id="profile" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="profileBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title" id="profileTitle">Your profile</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1" id="profileTitle">Your profile</div>
       </div>
       <div class="page-body profile">
         <p class="page-note" id="profileIntro">Tell RunTheTown who you are. Everything stays on this phone: your runs are logged in your own journal, nothing is sent anywhere.</p>
@@ -243,7 +243,7 @@
     <section class="page" id="runs" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="runsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title">My runs</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1">My runs</div>
         <button type="button" class="ghost page-action" id="runsExport">Export</button>
       </div>
       <div class="page-body runs">
@@ -257,7 +257,7 @@
     <section class="page" id="runPage" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="runBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title" id="runTitle">Run</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1" id="runTitle">Run</div>
       </div>
       <div class="page-body run-detail">
         <button type="button" class="run-pic-btn" id="runPicBtn" hidden aria-label="See the route on the map"><img class="run-pic" id="runPic" alt="" /><span class="run-pic-hint">Tap to explore the route</span></button>
@@ -276,7 +276,7 @@
     <section class="page run-map-page" id="runMapPage" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="runMapBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title" id="runMapTitle">Route</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1" id="runMapTitle">Route</div>
       </div>
       <div class="run-map" id="runMap"></div>
       <div class="run-map-foot" id="runMapFoot"></div>
@@ -286,7 +286,7 @@
     <section class="page" id="settings" hidden>
       <div class="page-bar">
         <button type="button" class="back" id="settingsBack" aria-label="Back"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" /></svg></button>
-        <div class="page-title">Settings</div>
+        <div class="page-title" role="heading" aria-level="1" tabindex="-1">Settings</div>
       </div>
       <div class="page-body settings">
         <h2>Voice</h2>
@@ -296,32 +296,32 @@
         <p class="set-hint"><button type="button" class="link" id="voiceMore" hidden>More voices on this phone</button> <button type="button" class="link" id="voiceDiag">What this phone reports</button></p>
         <pre class="voice-diag" id="voiceDiagList" hidden></pre>
 
-        <h2>Units</h2>
-        <div class="segmented" id="setUnits" role="radiogroup">
+        <h2 id="setUnitsLabel">Units</h2>
+        <div class="segmented two" id="setUnits" role="radiogroup" aria-labelledby="setUnitsLabel">
           <button type="button" data-v="km" role="radio" aria-checked="true" class="on">Kilometers</button>
           <button type="button" data-v="mi" role="radio" aria-checked="false">Miles</button>
         </div>
 
         <h2>Announcements</h2>
-        <label class="set-row"><span><b>Splits</b><small>Every kilometer or mile: time, pace, distance to go</small></span><input type="checkbox" id="setSplits" class="switch" /></label>
+        <label class="set-row"><span><b>Splits</b><small>Every kilometer or mile: the distance and your pace</small></span><input type="checkbox" id="setSplits" class="switch" /></label>
         <label class="set-row"><span><b>Landmarks</b><small>Sights called out as you pass them on a tour, with a line or two about each from Wikipedia</small></span><input type="checkbox" id="setLandmarks" class="switch" /></label>
         <label class="set-row"><span><b>Quiet mode</b><small>Only turns and off-route warnings</small></span><input type="checkbox" id="setQuiet" class="switch" /></label>
-        <div class="set-row"><span><b>Warn before a turn</b><small>How far ahead the next turn is announced</small></span></div>
-        <div class="segmented" id="setWarn" role="radiogroup">
+        <div class="set-row with-control"><span><b id="setWarnLabel">Warn before a turn</b><small>How far ahead the next turn is announced</small></span></div>
+        <div class="segmented" id="setWarn" role="radiogroup" aria-labelledby="setWarnLabel">
           <button type="button" data-v="100" role="radio" aria-checked="false">100 m</button>
           <button type="button" data-v="200" role="radio" aria-checked="true" class="on">200 m</button>
           <button type="button" data-v="300" role="radio" aria-checked="false">300 m</button>
         </div>
 
-        <h2>Appearance</h2>
-        <div class="segmented" id="setTheme" role="radiogroup">
+        <h2 id="setThemeLabel">Appearance</h2>
+        <div class="segmented two" id="setTheme" role="radiogroup" aria-labelledby="setThemeLabel">
           <button type="button" data-v="light" role="radio" aria-checked="true" class="on">Bright</button>
           <button type="button" data-v="dark" role="radio" aria-checked="false">Dark</button>
         </div>
         <p class="set-hint">Dark keeps the map dark by day too.</p>
 
-        <h2>Language</h2>
-        <div class="segmented" id="setLang" role="radiogroup">
+        <h2 id="setLangLabel">Language</h2>
+        <div class="segmented two" id="setLang" role="radiogroup" aria-labelledby="setLangLabel">
           <button type="button" data-v="en" role="radio" aria-checked="true" class="on">English</button>
           <button type="button" data-v="he" role="radio" aria-checked="false">עברית</button>
         </div>
@@ -348,7 +348,7 @@
     <div id="map" aria-label="Map"></div>
 
     <header class="topbar">
-      <button type="button" class="brand" id="appMenu" aria-label="Menu">
+      <button type="button" class="brand" id="appMenu" aria-label="Menu" aria-expanded="false" aria-controls="rail">
         <img class="logo" src="img/logo-white.0ef39459.png" alt="RunTheTown" />
         <span class="mode-badge" id="modeBadge">Free-flow run</span>
         <span class="burger"><span></span><span></span><span></span></span>
@@ -388,8 +388,8 @@
 
         <!-- Running mode: streets (loops from here), laps (a track, stadium or park loop nearby) or one way (to a place) -->
         <div class="field" id="runStyleField">
-          <div class="field-head"><label>How do you want to run?</label></div>
-          <div class="run-styles" id="runStyle" role="radiogroup">
+          <div class="field-head"><label id="runStyleLabel">How do you want to run?</label></div>
+          <div class="run-styles" id="runStyle" role="radiogroup" aria-labelledby="runStyleLabel">
             <button type="button" data-style="streets" role="radio" aria-checked="true" class="on">
               <b>Run the streets</b><small>Loops from here on promenades, parks and quiet streets</small>
             </button>
@@ -436,7 +436,7 @@
         <!-- Running mode: the landscape options. Sightseeing tour: only the tour itself, as the mode. -->
         <div class="field streets-only" id="landscapeField">
           <div class="field-head"><label id="landscapeLabel">Landscape</label><span class="hint" id="landscapeHint">pick any</span></div>
-          <div class="chips" id="landscape">
+          <div class="chips" id="landscape" role="group" aria-labelledby="landscapeLabel">
             <button type="button" data-pref="green" aria-pressed="false"><i class="dot green"></i>Parks &amp; green</button>
             <button type="button" data-pref="water" aria-pressed="false"><i class="dot water"></i>Waterfront</button>
             <button type="button" data-pref="quiet" aria-pressed="false"><i class="dot quiet"></i>Quiet streets</button>
@@ -446,8 +446,8 @@
         </div>
 
         <div class="field streets-only">
-          <div class="field-head"><label>Terrain</label></div>
-          <div class="segmented" id="terrain" role="radiogroup">
+          <div class="field-head"><label id="terrainLabel">Terrain</label></div>
+          <div class="segmented" id="terrain" role="radiogroup" aria-labelledby="terrainLabel">
             <button type="button" data-terrain="flat" role="radio" aria-checked="false">Flat</button>
             <button type="button" data-terrain="any" role="radio" aria-checked="true" class="on">Any</button>
             <button type="button" data-terrain="hilly" role="radio" aria-checked="false">Hilly</button>
@@ -465,7 +465,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>
           </button>
           <div>
-            <div class="results-title">Your routes</div>
+            <div class="results-title" role="heading" aria-level="2">Your routes</div>
             <div class="results-sub" id="resultsSub"></div>
           </div>
         </div>
@@ -476,7 +476,7 @@
     </section>
 
     <!-- Tapping a route: its facts and the one button that matters -->
-    <div class="ask" id="routeAsk" hidden>
+    <div class="ask" id="routeAsk" role="dialog" aria-modal="true" aria-labelledby="routeAskName" tabindex="-1" hidden>
       <div class="ask-card route-card-pop">
         <div class="ask-title" id="routeAskName"></div>
         <div class="route-pop-dist"><b id="routeAskDist"></b> <span id="routeAskUnit">km</span></div>
@@ -519,10 +519,10 @@
       <div class="nav-bottom">
         <div class="nav-progress"><i id="navProgress"></i></div>
         <div class="nav-stats">
-          <div><b id="statTime">0:00</b><span>time</span></div>
-          <div><b id="statDist">0.00</b><span id="statDistLabel">km run</span></div>
-          <div><b id="statPace">–:––</b><span id="statPaceLabel">min/km</span></div>
-          <div><b id="statLeft">0.0</b><span id="statLeftLabel">km to go</span></div>
+          <div role="text"><b id="statTime">0:00</b><span>time</span></div>
+          <div role="text"><b id="statDist">0.00</b><span id="statDistLabel">km run</span></div>
+          <div role="text"><b id="statPace">–:––</b><span id="statPaceLabel">min/km</span></div>
+          <div role="text"><b id="statLeft">0.0</b><span id="statLeftLabel">km to go</span></div>
         </div>
         <div class="nav-buttons">
           <button type="button" id="muteBtn" aria-pressed="false">
@@ -536,7 +536,7 @@
         <div class="nav-note" id="navNote"></div>
         <div class="nav-foot"><button type="button" class="link" id="homeBtn">Take me back to the start</button><button type="button" class="link" id="reportRunBtn">Something wrong here? Report it</button></div>
       </div>
-      <div class="nav-finish" id="navFinish" hidden>
+      <div class="nav-finish" id="navFinish" role="dialog" aria-modal="true" aria-labelledby="finishTitle" tabindex="-1" hidden>
         <div class="finish-card">
           <div class="finish-title" id="finishTitle">Run complete</div>
           <div class="finish-stats" id="finishStats"></div>
@@ -550,7 +550,7 @@
     </div>
 
     <!-- Laps: how far? -->
-    <div class="ask" id="lapsAsk" hidden>
+    <div class="ask" id="lapsAsk" role="dialog" aria-modal="true" aria-labelledby="lapsAskTitle" tabindex="-1" hidden>
       <div class="ask-card">
         <div class="ask-title" id="lapsAskTitle">Laps</div>
         <div class="ask-sub">How many kilometers do you want to run?</div>
@@ -573,7 +573,7 @@
     </div>
 
     <!-- Photo: view, change or remove -->
-    <div class="ask" id="photoAsk" hidden>
+    <div class="ask" id="photoAsk" role="dialog" aria-modal="true" aria-label="Your photo" tabindex="-1" hidden>
       <div class="ask-card photo-menu">
         <button type="button" id="photoView">View photo</button>
         <button type="button" id="photoChange">Choose another photo</button>
@@ -581,12 +581,12 @@
         <button type="button" class="ghost" id="photoMenuCancel">Cancel</button>
       </div>
     </div>
-    <div class="photo-viewer" id="photoViewer" hidden><img id="photoViewerImg" alt="Your photo" /><div class="photo-viewer-hint">Tap to close</div></div>
+    <div class="photo-viewer" id="photoViewer" role="dialog" aria-modal="true" aria-label="Your photo" tabindex="-1" hidden><img id="photoViewerImg" alt="Your photo" /><div class="photo-viewer-hint">Tap to close</div></div>
 
     <!-- Photo: move and zoom inside the circle -->
-    <div class="ask" id="cropAsk" hidden>
+    <div class="ask" id="cropAsk" role="dialog" aria-modal="true" aria-labelledby="cropAskTitle" tabindex="-1" hidden>
       <div class="ask-card">
-        <div class="ask-title">Your photo</div>
+        <div class="ask-title" id="cropAskTitle">Your photo</div>
         <div class="ask-sub">Drag to move, slide to zoom. Only the circle is kept.</div>
         <div class="crop-stage" id="cropStage"><canvas id="cropCanvas" width="280" height="280"></canvas><div class="crop-ring"></div></div>
         <input type="range" id="cropZoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom" />
@@ -598,9 +598,9 @@
     </div>
 
     <!-- Report a problem with a route: what went wrong, where, sent by e-mail -->
-    <div class="ask" id="reportAsk" hidden>
+    <div class="ask" id="reportAsk" role="dialog" aria-modal="true" aria-labelledby="reportAskTitle" tabindex="-1" hidden>
       <div class="ask-card">
-        <div class="ask-title">Report a problem</div>
+        <div class="ask-title" id="reportAskTitle">Report a problem</div>
         <div class="ask-sub" id="reportSub">What went wrong with this route?</div>
         <div class="chips report-reasons" id="reportReasons">
           <button type="button" data-reason="closed">Closed or private</button>
@@ -610,7 +610,7 @@
           <button type="button" data-reason="landscape">Not the scenery promised</button>
           <button type="button" data-reason="other">Something else</button>
         </div>
-        <textarea id="reportNote" rows="3" maxlength="500" placeholder="Where exactly, and what did you see? (optional)"></textarea>
+        <textarea id="reportNote" rows="3" maxlength="500" aria-labelledby="reportSub" placeholder="Where exactly, and what did you see? (optional)"></textarea>
         <div class="ask-note">Opens your e-mail app with the report filled in. The route and your position go with it, nothing else.</div>
         <div class="ask-actions">
           <button type="button" class="ghost" id="reportCancel">Cancel</button>
@@ -624,9 +624,11 @@
       <span id="statusText">Working…</span>
     </div>
     <div class="toast" id="toast" hidden></div>
+    <!-- What the two boxes above say, for a screen reader: a line that is always there, so each new message is read out -->
+    <div class="sr-only" id="liveSay" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script src="js/vendor/maplibre-gl.js"></script>
     <script src="js/vendor/capacitor.js"></script>
-    <script src="js/bundle.js?v=2e857e53"></script>
+    <script src="js/bundle.js?v=496f8c3a"></script>
   </body>
 </html>

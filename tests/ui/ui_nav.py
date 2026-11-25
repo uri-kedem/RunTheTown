@@ -587,6 +587,86 @@ with sync_playwright() as p:
         c1.close(); c2.close()
     finally:
         dev.terminate()
+    # ACCESS: easy to read, easy to tap, and usable with a keyboard or a screen reader (Nov 25, 2026). A fresh phone,
+    # no account server: the first open is the profile page.
+    ca=b.new_context(viewport={'width':390,'height':844}, geolocation={'latitude':lat0,'longitude':lon0}, permissions=['geolocation'], device_scale_factor=2)
+    ca.add_init_script(INIT); a=ca.new_page(); a.route('**/*', route); a.on('pageerror', lambda e: logs.append(f'PAGEERROR (access): {e}'))
+    a.goto('http://127.0.0.1:8766/index.html'); a.wait_for_timeout(600)
+    # Contrast of a text against the first solid background behind it (WCAG), with its size and weight.
+    CONTRAST="""(sels) => { const parse = (c) => { const m = c.match(/[\d.]+/g).map(Number); return [m[0], m[1], m[2], m.length > 3 ? m[3] : 1]; };
+      const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+      const behind = (el) => { for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c[3] >= 1) return c; } return [255, 255, 255, 1]; };
+      return sels.map((s) => { const el = [...document.querySelectorAll(s)].find((e) => e.getClientRects().length); if (!el) return [s, null, 0, 0]; const cs = getComputedStyle(el), x = lum(parse(cs.color)), y = lum(behind(el));
+        return [s, Math.round((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) * 100) / 100, parseFloat(cs.fontSize), Number(cs.fontWeight)]; }); }"""
+    SIZES="(sels) => sels.map((s) => { const el = [...document.querySelectorAll(s)].find((e) => e.getClientRects().length); if (!el) return [s, null]; const r = el.getBoundingClientRect(); return [s, Math.round(Math.min(r.width, r.height))]; })"
+    def readable(sels, where):
+        got=a.evaluate(CONTRAST, sels); print(f'ACCESS contrast, {where}:', got)
+        for s,ratio,size,weight in got:
+            assert ratio is not None, f'{where}: {s} is not on the screen'
+            # Large bold writing (18.66px and up) may be 3 to 1; anything smaller needs 4.5 to 1.
+            assert ratio >= (3 if size >= 18.66 and weight >= 700 else 4.5), f'{where}: {s} is too faint to read: {ratio} to 1 at {size}px'
+    def tappable(sels, least, where):
+        got=a.evaluate(SIZES, sels); print(f'ACCESS sizes, {where}:', got)
+        for s,size in got: assert size is not None and size >= least, f'{where}: {s} is {size} points, too small for a thumb (at least {least})'
+    # Only the open layer can be reached: on first open that is the profile page, and its name has the focus.
+    reach=lambda: a.evaluate("[...document.body.children].filter(e => !e.inert && !e.hidden && !['SCRIPT'].includes(e.tagName) && !['toast','status','liveSay','drawerBackdrop'].includes(e.id) && getComputedStyle(e).display !== 'none').map(e => e.id)")
+    print('ACCESS first open, in reach:', reach(), '| focus on:', a.evaluate("document.activeElement.id"))
+    assert reach()==['profile'] and a.evaluate("document.activeElement.id")=='profileTitle' and a.get_attribute('#profileTitle','role')=='heading', 'with the profile page open, nothing behind it can be reached, and a screen reader starts at its name'
+    tappable(['#profileSave','#photoPick'], 44, 'profile'); readable(['.photo-row small','#profileSave'], 'profile')
+    a.fill('#profileName','Dana'); a.click('#profileSave'); a.wait_for_timeout(400)
+    # Good news is a dark box, and it is read out; red is for problems.
+    note=a.evaluate("(() => { const t = document.getElementById('toast'); return { text: t.textContent, error: t.classList.contains('error'), bg: getComputedStyle(t).backgroundColor, said: document.getElementById('liveSay').textContent }; })()")
+    print('ACCESS message:', note)
+    assert note['text'].startswith('Welcome, Dana') and not note['error'] and note['bg']=='rgb(15, 23, 42)' and note['said']==note['text'], 'a welcome is not shown as an error, and a screen reader hears it'
+    assert reach()==['home'] and a.evaluate("document.getElementById('rail').inert"), 'on the cover, the map screen behind it and the closed menu are out of reach'
+    a.click('#homeMenu'); a.wait_for_timeout(300)
+    assert reach()==['rail'] and a.get_attribute('#homeMenu','aria-expanded')=='true', 'with the menu open, only the menu is in reach, and its button says it is open'
+    a.keyboard.press('Escape'); a.wait_for_timeout(300); assert a.get_attribute('#homeMenu','aria-expanded')=='false'
+    a.click('.mode-card[data-nav="run"]'); a.wait_for_function("!!window.__rtt.state.start", timeout=10000); a.wait_for_timeout(500)
+    ca.set_offline(True); a.click('#offlineBtn'); a.wait_for_timeout(200); ca.set_offline(False)
+    bad=a.evaluate("(() => { const t = document.getElementById('toast'); return { text: t.textContent, error: t.classList.contains('error') }; })()"); print('ACCESS problem message:', bad)
+    assert bad['error'] and bad['text'].startswith('You are offline'), 'a message that reports a problem keeps the red box'
+    readable(['#distanceHint','#landscapeHint','#goBtn','#startLine'], 'planner')
+    tappable(['#appMenu','#mapBack','#landscape button','#terrain button','#goBtn','#runStyle button'], 44, 'planner'); tappable(['#planBy button'], 36, 'planner switch')
+    assert a.get_attribute('#terrain','aria-labelledby')=='terrainLabel' and a.get_attribute('#runStyle','aria-labelledby')=='runStyleLabel', 'a group of choices carries its question for a screen reader'
+    a.fill('#distanceInput','6'); a.click('#goBtn'); a.wait_for_selector('#resultsView:not([hidden]) .card', timeout=40000); a.wait_for_timeout(500)
+    tappable(['#backBtn'], 44, 'results')
+    a.click('.card:nth-child(1)'); a.wait_for_timeout(200); a.click('.card:nth-child(1)'); a.wait_for_timeout(300)
+    assert reach()==['routeAsk'] and a.get_attribute('#routeAsk','role')=='dialog', 'a pop-up is announced as one, and what is under it is out of reach'
+    readable(['#startRunBtn'], 'route pop-up'); a.click('#demoRunBtn'); a.wait_for_timeout(2500)
+    # The run screen: the buttons a runner presses on the move.
+    tappable(['#muteBtn','#pauseBtn','#endBtn'], 50, 'run screen'); tappable(['#homeBtn','#reportRunBtn'], 44, 'run screen'); readable(['#navNote','.nav-stats span','#homeBtn','#reportRunBtn'], 'run screen')
+    a.evaluate('window.__stubMap._drag()'); a.wait_for_timeout(100)
+    over=a.evaluate("(() => { const r = document.getElementById('recenterBtn').getBoundingClientRect(), p = document.querySelector('.nav-bottom').getBoundingClientRect(); return { gap: Math.round(p.top - r.bottom), right: Math.round(innerWidth - r.right) }; })()")
+    print('ACCESS re-center:', over); assert 0 <= over['gap'] <= 20 and over['right']==12, 'Re-center sits just above the bottom panel, at the right, and never on it'
+    a.click('#recenterBtn'); a.click('#endBtn'); a.click('#endBtn'); a.wait_for_timeout(400)
+    assert a.evaluate("[...document.getElementById('navView').children].filter(e => !e.inert && !e.hidden).map(e => e.id)")==['navFinish'], 'with the finish card up, the run screen under it is out of reach'
+    a.click('#finishDone'); a.wait_for_timeout(300)
+    # Settings: nothing behind the page answers the Tab key; the ring is plain to see; two choices fill their row.
+    a.evaluate("window.__rtt.navigate('settings')"); a.wait_for_timeout(400)
+    a.focus('#settingsBack'); stops=[]
+    for _ in range(80):
+        a.keyboard.press('Tab'); st=a.evaluate("(() => { const e = document.activeElement; return e === document.body ? null : { id: e.id, inside: !!e.closest('#settings'), ring: getComputedStyle(e).outlineStyle + ' ' + getComputedStyle(e).outlineWidth }; })()")
+        if st and st['id']=='settingsBack': break
+        if st: stops.append(st)
+    print('ACCESS Tab in Settings: stops', len(stops), '| outside the page', len([x for x in stops if not x['inside']]), '| rings', sorted(set(x['ring'] for x in stops)))
+    assert len(stops)>=15 and all(x['inside'] for x in stops), 'with Settings open, the Tab key stays in Settings'
+    assert all(x['ring']=='solid 3px' for x in stops), 'every control shows the keyboard ring'
+    fill=a.evaluate("['setUnits','setTheme','setLang'].map((id) => { const g = document.getElementById(id), w = [...g.children].reduce((t, b) => t + b.getBoundingClientRect().width, 0); return Math.round(w / g.clientWidth * 100); })")
+    print('ACCESS two choices fill their row (% of it):', fill); assert all(x>=95 for x in fill), fill
+    readable(['.set-row small','.set-hint','.set-sub'], 'settings'); tappable(['#settingsBack','.voice-row .play','#setUnits button','#setWarn button'], 44, 'settings')
+    assert a.evaluate("document.getElementById('setSplits').closest('label').querySelector('small').textContent")=='Every kilometer or mile: the distance and your pace', 'Settings says what a split says: distance and pace, never what is left'
+    off=a.evaluate("getComputedStyle(document.getElementById('setQuiet')).backgroundColor"); assert off=='rgb(148, 163, 184)', off
+    # "Reduce Motion" on the phone: the menu and the sheet appear in place.
+    a.emulate_media(reduced_motion='reduce'); calm=a.evaluate("[getComputedStyle(document.getElementById('rail')).transitionDuration, getComputedStyle(document.getElementById('sheet')).transitionDuration]"); a.emulate_media(reduced_motion='no-preference')
+    print('ACCESS reduce motion:', calm); assert calm==['0s','0s'], calm
+    # Hebrew: writing starts at the right inside a card, a number with its unit follows the page, and the list's heading is Hebrew.
+    a.click('#setLang [data-v="he"]'); a.wait_for_timeout(300); a.click('#settingsBack'); a.wait_for_timeout(300)
+    he=a.evaluate("(() => { const c = document.querySelector('.card'), d = c.querySelector('.card-dist'), n = d.firstChild, u = d.querySelector('small'); const rg = document.createRange(); rg.selectNode(n); const nr = rg.getBoundingClientRect(), ur = u.getBoundingClientRect(), cr = c.getBoundingClientRect(), f = c.querySelector('ul li'); const fr = document.createRange(); fr.selectNodeContents(f); const lr = fr.getBoundingClientRect(); return { align: getComputedStyle(c).textAlign, numberRightOfUnit: nr.left >= ur.right - 1, numberAtRight: Math.round(cr.right - nr.right), lineAtRight: Math.round(cr.right - lr.right), heading: (document.querySelector('#places .places-title') || {}).textContent, style: getComputedStyle(document.querySelector('#runStyle button')).textAlign }; })()")
+    print('ACCESS Hebrew card:', he)
+    assert he['align'] in ('start','right') and he['style'] in ('start','right') and he['numberRightOfUnit'] and he['numberAtRight']<=20 and he['lineAtRight']<=20, 'in Hebrew a card reads from its right edge, with the number before its unit'
+    assert he['heading']=='מקומות ריצה בסביבה', 'the heading of the running spots is Hebrew in Hebrew'
+    ca.close()
     b.close()
 srv.shutdown()
 print('\n'.join(logs) or 'no console errors')
