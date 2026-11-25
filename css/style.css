@@ -319,7 +319,9 @@ body.navigating .topbar, body.navigating .sheet { display: none; }
 body.navigating #map .maplibregl-ctrl-top-right { display: none; }
 .nav { position: fixed; inset: 0; z-index: 1060; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
 .nav > * { pointer-events: auto; }
-.nav-top { padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 0; display: grid; gap: 8px; pointer-events: none; }
+/* The one column may be narrower than its longest line: without minmax(0, …) the banner's street
+   line, which never wraps, widens the column past the screen ("Route complete" did, by 70 points). */
+.nav-top { padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; pointer-events: none; }
 .nav-top > * { pointer-events: auto; }
 .nav-banner {
   display: flex; align-items: center; gap: 14px; background: #065f46; color: #fff; border-radius: 18px;

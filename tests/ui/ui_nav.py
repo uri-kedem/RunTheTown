@@ -639,6 +639,10 @@ with sync_playwright() as p:
     a.evaluate('window.__stubMap._drag()'); a.wait_for_timeout(100)
     over=a.evaluate("(() => { const r = document.getElementById('recenterBtn').getBoundingClientRect(), p = document.querySelector('.nav-bottom').getBoundingClientRect(); return { gap: Math.round(p.top - r.bottom), right: Math.round(innerWidth - r.right) }; })()")
     print('ACCESS re-center:', over); assert 0 <= over['gap'] <= 20 and over['right']==12, 'Re-center sits just above the bottom panel, at the right, and never on it'
+    # The banner stays inside the screen whatever it says: "Route complete" carries a line that never wraps, and it
+    # used to push the banner and the caption under it 70 points past the right edge of a phone.
+    long_line=a.evaluate("(() => { const s = document.getElementById('navStreet'), c = document.getElementById('navCaption'), keep = [s.textContent, c.textContent]; s.textContent = 'Keep going if you like. End run when you\\u2019re done.'; c.textContent = 'Run finished. 8.1 kilometers in 42 minutes. Average pace 5 minutes 14 seconds per kilometer.'; const right = (e) => Math.round(innerWidth - e.getBoundingClientRect().right); const out = { banner: right(document.querySelector('.nav-banner')), caption: right(c) }; s.textContent = keep[0]; c.textContent = keep[1]; return out; })()")
+    print('ACCESS banner with a long line, room at the right:', long_line); assert long_line['banner']==12 and long_line['caption']>=12, 'the run banner and its caption stay inside the screen'
     a.click('#recenterBtn'); a.click('#endBtn'); a.click('#endBtn'); a.wait_for_timeout(400)
     assert a.evaluate("[...document.getElementById('navView').children].filter(e => !e.inert && !e.hidden).map(e => e.id)")==['navFinish'], 'with the finish card up, the run screen under it is out of reach'
     a.click('#finishDone'); a.wait_for_timeout(300)
